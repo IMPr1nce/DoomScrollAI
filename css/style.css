@@ -69,7 +69,7 @@ body {
 
 /* -------------------------------------------------------------- Title screen */
 
-#screen-title.screen--active, #screen-main.screen--active { justify-content: center; }
+#screen-title.screen--active { justify-content: center; }
 
 .title-card {
   background: var(--card);
@@ -229,6 +229,59 @@ body {
   border-style: dashed; /* a second, non-color clue that the button is off */
 }
 
+/* ------------------------------------------------------- Compact card (main game)
+   Six of these must fit on a 1366x768 laptop with no scrolling. A Chrome window on that
+   screen leaves only ~620px of page height, so every vertical size here is tight:
+   header 41 + bubble 42 + meter 45 + two button rows, all inside ~230px.
+   The card stretches to fill its grid cell and the button area soaks up any spare height,
+   so bigger screens just get bigger buttons. Font sizes never go below 16px. */
+
+.card--compact {
+  display: flex; flex-direction: column;
+  height: 100%; min-height: 0;
+  padding: 8px 12px 10px;
+  border-radius: 18px;
+}
+.card--compact .card__head { gap: 10px; }
+.card--compact .card__avatar {
+  width: 40px; height: 40px; font-size: 24px;
+  border-width: 2px; box-shadow: 0 0 0 2px var(--line);
+}
+.card--compact .card__name { font-size: 20px; }
+.card--compact .card__bio { line-height: 1.2; }
+/* One line, trimmed with "…" if a bio is ever too long; the name is the important part. */
+.card--compact .card__bio { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.card--compact .bubble {
+  min-height: 30px; margin: 8px 0 4px 8px; padding: 3px 12px;
+  line-height: 1.3; border-radius: 12px;
+}
+.card--compact .bubble::before { top: -7px; left: 16px; border-width: 7px; border-top-width: 0; }
+
+.card--compact .meter { padding-top: 0; }
+.card--compact .meter__label { align-items: center; margin-bottom: 1px; }
+.card--compact .meter__value { font-size: 20px; line-height: 1.1; }
+.card--compact .meter__track { height: 14px; }
+.card--compact .card__status { margin-left: auto; padding: 0 10px; line-height: 1.35; }
+.card--compact .watch { height: 5px; margin-top: 4px; }
+
+.card--compact .topics {
+  flex: 1; min-height: 0;
+  grid-template-rows: 1fr 1fr; gap: 6px; margin-top: 8px;
+}
+.card--compact .topic-btn {
+  min-height: 34px; padding: 2px 4px; gap: 6px;
+  font-size: 16px; border-width: 2px; border-radius: 12px;
+}
+.card--compact .topic-btn__emoji { font-size: 22px; }
+
+/* Someone is about to leave: a thick outline so the eye finds them across six cards. The
+   chip text changes too ("Needs a post!"), so this isn't color-only. */
+.card--low { box-shadow: 0 0 0 4px #ff6b6b, var(--shadow); }
+.card--low .card__status { background: #ffe0e0; color: var(--bad); }
+
+.card--compact .card__afk-label { font-size: 24px; }
+
 /* AFK cover */
 .card__afk {
   display: none;
@@ -245,6 +298,45 @@ body {
 /* Little reactions */
 .card--like { animation: pulse 0.35s ease-out; }
 .card--skip { animation: shake 0.3s ease-out; }
+
+/* ----------------------------------------------------------------- Main game */
+
+#screen-main.screen--active { padding: 6px 16px 8px; }
+
+/* Scoreboard bar: clock on the left, score in the middle, pause on the right. */
+.hud { width: 100%; max-width: 1500px; display: flex; align-items: center; gap: 16px; }
+.hud__timer {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 0 18px; min-width: 190px;
+  background: var(--card); border-radius: 16px; box-shadow: var(--shadow);
+}
+.hud__clock { font-size: 38px; font-weight: 900; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.hud__clock-label { font-weight: 700; color: var(--muted); }
+.hud__timer--urgent { background: #ffe6e6; animation: urgent 1s ease-in-out infinite; }
+.hud__timer--urgent .hud__clock { color: var(--bad); }
+
+.hud__stats { flex: 1; display: flex; justify-content: center; gap: 14px; }
+.hud__stat {
+  margin: 0; padding: 1px 18px; min-width: 190px;
+  display: flex; flex-direction: column; align-items: center; line-height: 1.15;
+  background: var(--card); border-radius: 14px; box-shadow: var(--shadow);
+}
+.hud__stat span { font-size: 16px; font-weight: 700; color: var(--muted); }
+.hud__stat strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+#btn-pause { padding: 6px 18px; font-size: 20px; }
+
+/* A thin bar that fills as the round runs out: you can feel the time without reading it. */
+.timebar { width: 100%; max-width: 1500px; height: 8px; margin: 6px 0 0; border-radius: 999px; background: #e0dcf3; overflow: hidden; }
+.timebar__fill { height: 100%; width: 0; background: var(--primary); }
+
+/* 3 columns x 2 rows. minmax(0, 1fr) lets cells shrink below their content, and flex: 1
+   makes the board take all the height left under the HUD, so the page never scrolls. */
+.board {
+  flex: 1; min-height: 0; width: 100%; max-width: 1500px; margin-top: 6px;
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
 
 /* ---------------------------------------------------------------- Pop-up */
 
@@ -278,6 +370,10 @@ body {
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
   45% { transform: scale(1.015); }
+}
+@keyframes urgent {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
 }
 
 /* People who ask their computer for less motion get none. */

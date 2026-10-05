@@ -20,7 +20,10 @@ DS.CONFIG = {
   POST_DURATION_SEC: 5,       // how long a VP watches a liked post
 
   // -------------------------------------------------------------------- Round
-  ROUND_SEC: 90,              // main game length (read by game.js in Phase 4)
+  ROUND_SEC: 90,              // main game length
+  ROUND_END_DELAY_SEC: 1.5,   // after the round ends, wait this long before the pop-up so the
+                              // player sees the final board (who left, who stayed)
+  TIMER_URGENT_SEC: 10,       // the clock turns red and pulses for the last N seconds
 
   // ----------------------------------------------------------------- Tutorial
   TUTORIAL_DRAIN_MULT: 0.5,   // idle drain is multiplied by this in the tutorials

@@ -65,6 +65,42 @@
     slot.appendChild(card.el);
   };
 
+  // ------------------------------------------------------------- Main-game board
+  // Fill the 3x2 grid. Order = the order of the array (left to right, top to bottom).
+  ui.mountCards = function (slotId, cards) {
+    var slot = $(slotId);
+    slot.innerHTML = '';
+    cards.forEach(function (c) { slot.appendChild(c.el); });
+  };
+
+  // The scoreboard bar. game.js calls this every frame, so each value is only written
+  // to the page when it changed. (Writing to the DOM 60 times a second is wasted work.)
+  // s: { remainingSec, totalSec, still, total, avg }
+  var hudLast = {};
+  ui.updateHud = function (s) {
+    // ceil so the clock shows 0:01 until time has truly run out (never "0:00" early).
+    // The 1e-6 forgives tiny floating-point crumbs from adding up many small frame steps.
+    var secs = Math.max(0, Math.ceil(s.remainingSec - 1e-6));
+    if (secs !== hudLast.secs) {
+      hudLast.secs = secs;
+      $('hud-time').textContent = Math.floor(secs / 60) + ':' + (secs % 60 < 10 ? '0' : '') + (secs % 60);
+      // Urgency is shown by color AND by the pulsing, and the number itself keeps counting.
+      $('hud-clock').classList.toggle('hud__timer--urgent', secs <= C.TIMER_URGENT_SEC && secs > 0);
+    }
+
+    var pct = Math.round(1000 * (1 - s.remainingSec / s.totalSec)) / 10;
+    if (pct !== hudLast.pct) {
+      hudLast.pct = pct;
+      $('hud-timebar').style.width = Math.min(100, Math.max(0, pct)) + '%';
+    }
+
+    var still = s.still + ' / ' + s.total;
+    if (still !== hudLast.still) { hudLast.still = still; $('hud-still').textContent = still; }
+
+    var avg = String(Math.round(s.avg));
+    if (avg !== hudLast.avg) { hudLast.avg = avg; $('hud-avg').textContent = avg; }
+  };
+
   // ------------------------------------------------------------ Attention color
   // Green when high, yellow in the middle, red when low. Hue 0 = red, 60 = yellow,
   // 120 = green, so one number gives the whole ramp. Color is only a bonus: the bar
@@ -74,16 +110,24 @@
     return 'hsl(' + Math.round(t * 120) + ', 78%, 42%)';
   }
 
-  var STATUS_TEXT = { idle: 'Waiting for a post', watching: 'Watching…', afk: 'Gone' };
+  // What the status chip says. In the 6-card game, an idle VP with low attention says so,
+  // because the player is juggling six cards and needs to spot who is about to leave.
+  // It's text, not just a red outline, so it doesn't depend on seeing color.
+  function statusText(vp, low) {
+    if (vp.state === 'afk') return 'Gone';
+    if (vp.state === 'watching') return 'Watching…';
+    return low ? 'Needs a post!' : 'Waiting for a post';
+  }
 
   // -------------------------------------------------------------- Profile card
-  // One VP's card. Same DOM for the big tutorial card and (Phase 4) the six small ones;
-  // only the CSS size class differs.
+  // One VP's card. Same DOM for the big tutorial card and the six small ones in the
+  // main game; only the CSS size class differs.
   //
   // opts: size ('large' | 'compact'), showHistory (bool), goalMarker (number | null),
   //       onPush(topicId)  — called when a topic button is clicked
   ui.createCard = function (vp, opts) {
     opts = opts || {};
+    var compact = opts.size === 'compact';
     var locked = false;          // game.js sets this while a pop-up is showing
     var bubbleTimer = null;
     var last = {};               // last values written, so we only touch the DOM when something changed
@@ -97,14 +141,16 @@
     who.appendChild(h('h3', 'card__name', vp.name));
     who.appendChild(h('p', 'card__bio', vp.bio));
     head.appendChild(who);
-    var status = h('div', 'card__status', STATUS_TEXT.idle);
-    head.appendChild(status);
+    var status = h('div', 'card__status', statusText(vp, false));
+    // Compact cards are short, so the chip sits in the meter row (added below) instead.
+    if (!compact) head.appendChild(status);
     root.appendChild(head);
 
     // Speech bubble. Its space is always reserved, so the card doesn't jump around
-    // when a message appears or fades.
+    // when a message appears or fades. Only the big tutorial card announces messages
+    // to screen readers: six cards all announcing at once would be noise.
     var bubble = h('div', 'bubble bubble--empty');
-    bubble.setAttribute('aria-live', 'polite');
+    if (!compact) bubble.setAttribute('aria-live', 'polite');
     root.appendChild(bubble);
 
     // Attention meter
@@ -113,6 +159,7 @@
     label.appendChild(h('span', null, 'Attention'));
     var value = h('strong', 'meter__value', String(Math.round(vp.attention)));
     label.appendChild(value);
+    if (compact) label.appendChild(status);
     meter.appendChild(label);
     var bar = h('div', 'meter__bar');
     var track = h('div', 'meter__track');
@@ -220,11 +267,15 @@
         value.textContent = String(Math.round(a));
       }
 
-      if (vp.state !== last.state) {
+      // "Low" only matters in the 6-card game, where the player has to choose who to help.
+      var low = compact && vp.state !== 'afk' && a < C.LOW_ATTENTION_THRESHOLD;
+      if (vp.state !== last.state || low !== last.low) {
         last.state = vp.state;
-        status.textContent = STATUS_TEXT[vp.state];
+        last.low = low;
+        status.textContent = statusText(vp, low);
         root.classList.toggle('card--watching', vp.state === 'watching');
         root.classList.toggle('card--gone', vp.state === 'afk');
+        root.classList.toggle('card--low', low);
       }
 
       var p = vp.watchProgress();

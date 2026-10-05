@@ -32,18 +32,26 @@
       <button id="btn-skip" class="link-btn" type="button">Skip tutorial</button>
     </section>
 
-    <!-- Placeholder until the 6-profile game exists (Phase 4). -->
+    <!-- The main game: a scoreboard bar on top, six profile cards (3 x 2) below. -->
     <section id="screen-main" class="screen">
-      <div class="title-card">
-        <h2>Main game</h2>
-        <p class="title-card__sub">The 6-profile game isn't built yet. It arrives in Phase 4.</p>
-        <button id="btn-replay-tutorial" class="btn btn--primary" type="button">Replay the tutorial</button>
-      </div>
+      <header class="hud">
+        <div id="hud-clock" class="hud__timer" role="timer" aria-label="Time left">
+          <span id="hud-time" class="hud__clock">1:30</span>
+          <span class="hud__clock-label">left</span>
+        </div>
+        <div class="hud__stats">
+          <p class="hud__stat"><span>still scrolling</span><strong id="hud-still">6 / 6</strong></p>
+          <p class="hud__stat"><span>average attention</span><strong id="hud-avg">60</strong></p>
+        </div>
+        <button id="btn-pause" class="btn btn--ghost btn--big" type="button">⏸ Pause</button>
+      </header>
+      <div class="timebar" aria-hidden="true"><div id="hud-timebar" class="timebar__fill"></div></div>
+      <div id="main-grid" class="board"></div>
     </section>
 
   </main>
 
-  <!-- One shared pop-up for tutorial results (and later: pause, round over). -->
+  <!-- One shared pop-up for tutorial results, the "ready?" card, pause, and round over. -->
   <div id="overlay" class="overlay" hidden>
     <div class="overlay__panel" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
       <h2 id="overlay-title"></h2>
