@@ -4,20 +4,42 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Doomscroll AI</title>
+  <meta name="description" content="You ARE the algorithm. A classroom game about how recommender systems work.">
+  <!-- An emoji as the tab icon, inline, so there is nothing extra to load (works from file://). -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📱%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <noscript>
+    <p class="noscript">Doomscroll AI needs JavaScript. Please turn it on in your browser, then reload this page.</p>
+  </noscript>
+
   <main id="app">
 
     <!-- Only one .screen is visible at a time. ui.showScreen('name') shows #screen-name. -->
 
     <section id="screen-title" class="screen">
+      <!-- Decoration only: the six topics drift around behind the card. -->
+      <div class="title-bg" aria-hidden="true">
+        <span style="--x: 7%;  --y: 14%; --d: 0s">⚽</span>
+        <span style="--x: 84%; --y: 10%; --d: -1.5s">💃</span>
+        <span style="--x: 14%; --y: 70%; --d: -3s">🎵</span>
+        <span style="--x: 88%; --y: 66%; --d: -4.5s">💥</span>
+        <span style="--x: 42%; --y: 6%;  --d: -2.2s">🎬</span>
+        <span style="--x: 60%; --y: 84%; --d: -0.8s">🍕</span>
+      </div>
       <div class="title-card">
         <div class="title-card__emoji" aria-hidden="true">📱</div>
         <h1>Doomscroll AI</h1>
         <p class="title-card__pitch">You ARE the algorithm.</p>
         <p class="title-card__sub">Pick posts. Keep people scrolling. See what happens.</p>
+        <ol class="how">
+          <li><span class="how__icon" aria-hidden="true">👆</span>Show people posts</li>
+          <li><span class="how__icon" aria-hidden="true">👀</span>Watch how they react</li>
+          <li><span class="how__icon" aria-hidden="true">⏱️</span>Don't let anyone leave</li>
+        </ol>
         <button id="btn-start" class="btn btn--primary btn--big" type="button">Start</button>
+        <p class="title-card__fine">About 5 minutes. No sign-in. No names.</p>
       </div>
     </section>
 
@@ -49,9 +71,23 @@
       <div id="main-grid" class="board"></div>
     </section>
 
+    <!-- The results: a score first, then one step per person, then the big picture (reveal.js). -->
+    <section id="screen-reveal" class="screen">
+      <nav id="reveal-steps" class="steps" aria-label="Results steps"></nav>
+      <div id="reveal-stage" class="stage" tabindex="-1"></div>
+      <footer class="stage-nav">
+        <button id="reveal-back" class="btn btn--ghost" type="button">← Back</button>
+        <span id="reveal-progress" class="stage-nav__progress"></span>
+        <button id="reveal-next" class="btn btn--primary" type="button">Next →</button>
+      </footer>
+    </section>
+
   </main>
 
-  <!-- One shared pop-up for tutorial results, the "ready?" card, pause, and round over. -->
+  <!-- A big message over the board, e.g. "Time's up!" -->
+  <div id="banner" class="banner" hidden><span id="banner-text"></span></div>
+
+  <!-- One shared pop-up: tutorial results, the "ready?" card, and pause. -->
   <div id="overlay" class="overlay" hidden>
     <div class="overlay__panel" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
       <h2 id="overlay-title"></h2>
@@ -62,14 +98,16 @@
 
   <!--
     Classic scripts, in dependency order. No ES modules, so this works when you double-click
-    the file (file://). Model first (no DOM), then the screen code, then the game that wires
-    them together.
+    the file (file://). Model first (no DOM), then the logger, then the screen code, and last
+    the game that wires them together.
   -->
   <script src="js/config.js"></script>
   <script src="js/content.js"></script>
   <script src="js/vp.js"></script>
   <script src="js/metrics.js"></script>
+  <script src="js/logger.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/reveal.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

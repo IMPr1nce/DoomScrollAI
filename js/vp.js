@@ -97,7 +97,10 @@
     this.watchRate = 0;           // attention gained per second during the watch
     this.watchStartAttention = 0; // for the watch_end log record
 
+    this.afkAt = null;            // clock time (seconds) when they left; the reveal says "left at 0:41"
+
     this.lastMessage = null;      // so we never say the same line twice in a row
+    this.recentLines = [];        // the last few lines, so a VP also avoids repeating them soon
     this._lowShown = false;       // so the low-attention line fires once per dip, not every tick
     this._listeners = [];
   }
@@ -125,7 +128,8 @@
       fatigueMult: null,
       tastes: Object.assign({}, this.tastes), // a copy, so later drift can't rewrite the log
       message: null,
-      category: null
+      category: null,
+      reason: null    // only on 'afk': 'skip' (a disliked post emptied the bar) or 'idle' (neglected)
     }, extra);
     this._listeners.forEach(function (fn) { fn(rec); });
   };
@@ -169,12 +173,29 @@
   };
 
   // ---- messages -----------------------------------------------------------
+  // Two rules: (1) never the same line twice in a row (a hard rule), and (2) avoid the last
+  // MESSAGE_NO_REPEAT lines (a softer one, just for variety). Liked/disliked reactions are
+  // sometimes "flavored" by the topic ("What a play!" for Sports).
   VP.prototype._pickMessage = function (category, topicId) {
-    var lines = DS.MESSAGES[category];
-    var pool = lines.filter(function (l) { return l !== this.lastMessage; }, this);
-    if (!pool.length) pool = lines; // only happens if a category has a single line
+    var self = this;
+    var generic = DS.MESSAGES[category];
+    var byTopic = topicId && DS.TOPIC_MESSAGES[topicId];
+    var flavored = (byTopic && byTopic[category]) || [];
+    function notRecent(l) { return self.recentLines.indexOf(l) === -1; }
+
+    // Only roll the dice when a flavored list exists, so categories without one (afk,
+    // lowAttention, ...) use exactly one random number, as before.
+    var source = (flavored.length && DS.rng.random() < C.TOPIC_MESSAGE_CHANCE) ? flavored : generic;
+    var pool = source.filter(notRecent);
+    if (!pool.length) pool = generic.filter(notRecent);          // every flavored line was just used
+    if (!pool.length) pool = generic.filter(function (l) { return l !== self.lastMessage; }); // tiny category
+    if (!pool.length) pool = generic;                            // a category with a single line
+
     var line = pool[Math.floor(DS.rng.random() * pool.length)];
-    this.lastMessage = line; // remember the template, so the same line can't repeat
+    this.lastMessage = line;     // remember the TEMPLATE (before {topic} is filled in)
+    this.recentLines.push(line);
+    while (this.recentLines.length > C.MESSAGE_NO_REPEAT) this.recentLines.shift();
+
     var label = topicId ? DS.TOPIC_BY_ID[topicId].label : 'this';
     return line.replace(/\{topic\}/g, label);
   };
@@ -234,7 +255,7 @@
       fatigueMult: fatigueMult, message: message, category: category
     };
     this._emit('push', info);
-    if (wentAfk) this._emit('afk', { message: message, category: 'afk',
+    if (wentAfk) this._emit('afk', { message: message, category: 'afk', reason: 'skip',
                                      attentionBefore: attentionBefore, attentionAfter: 0 });
 
     return Object.assign({ ok: true, likeChance: likeChance, fatigueCount: fatigueCount, wentAfk: wentAfk }, info);
@@ -257,6 +278,7 @@
     this.attention = 0;
     this.state = 'afk';       // permanent for the rest of the round
     this.watchRemaining = 0;
+    this.afkAt = this.clock;
   };
 
   VP.prototype._endWatch = function (reason) {
@@ -295,7 +317,7 @@
         if (this.attention <= 0) {
           this._enterAfk();
           var msg = this._pickMessage('afk', null);
-          this._emit('afk', { message: msg, category: 'afk',
+          this._emit('afk', { message: msg, category: 'afk', reason: 'idle',
                               attentionBefore: attentionAtStart, attentionAfter: 0 });
         }
       }

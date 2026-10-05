@@ -1,5 +1,206 @@
-<<<<<<< HEAD
-# DoomScrollAI
-=======
-# DoonScrollAI
->>>>>>> 738a8d1 (Initial commit)
+# Doomscroll AI
+
+**You ARE the algorithm.** A short browser game for 8th graders (AI4K12) about how recommender
+systems work.
+
+The student plays the algorithm. Six pretend people ("Virtual Profiles") are scrolling, and the
+student pushes posts to each one to keep their attention up. It is fun to play. Then the results
+screen shows what the student actually did: they kept everyone's attention by showing each person
+more and more of the same thing, and the people's tastes narrowed. That is a filter bubble, and the
+student made it by chasing attention. The class then talks about whether that was good for those
+people.
+
+No installs. No server. No accounts. No names collected.
+
+---
+
+## How to run it
+
+1. Open the project folder.
+2. **Double-click `index.html`.** Use Chrome if you can.
+
+That's all. It runs straight from the file, offline. You can put the folder on a USB stick, a
+shared drive, or any web host that serves static files.
+
+**Screen size:** built for a 1366 × 768 school laptop (about 600 px of page height once Chrome's
+toolbars are counted). All six people fit on screen without scrolling. Smaller windows still work,
+the page just scrolls.
+
+## What the student does (about 5 minutes)
+
+1. **Title screen** → Start.
+2. **Tutorial 1, "Hook them":** one person, Alex. Find the posts Alex likes and get their attention
+   up to 90. This is what a recommender does: it learns from what you click.
+3. **Tutorial 2, "Lose them":** do the opposite and make Alex leave. For a platform, that's the worst
+   outcome.
+4. **The game:** six people, 90 seconds. Everyone's attention drains when you ignore them. Show each
+   person posts they like. At 0 they leave for good ("AFK"). The score is *still scrolling* and
+   *average attention*.
+5. **Results:** the score first (the win), then one screen per person (what you showed them, how
+   their tastes changed, how much variety they saw), then the big picture and three questions
+   for the class.
+
+Teacher tips:
+
+- **Pause** with the button or the **Esc** key. Nothing changes until you resume.
+- On a projector, the results screen moves with the **← →** arrow keys.
+- After the first round, try **Play again** with a rule: "never show the same topic twice in a row".
+  Compare the score and the variety numbers.
+- Switching to another tab pauses the game automatically.
+
+---
+
+## Changing the game: `js/config.js`
+
+Every number that affects the game lives in `js/config.js`. Nothing is hard-coded anywhere else.
+Edit the file, save it, reload the page.
+
+| I want… | Change |
+|---|---|
+| An **easier** game | raise `ATTENTION_START` or `LIKE_GAIN`; lower `IDLE_DRAIN_PER_SEC` or `DISLIKE_PENALTY` |
+| A **harder** game | the opposite |
+| A **longer or shorter** round | `ROUND_SEC` (90) |
+| A **stronger filter bubble** on the results screen | raise `DRIFT_UP` (how fast a liked topic is learned) or `DRIFT_DOWN` (how fast other topics fade). Above about 0.06, even a player who mixes topics gets squeezed. |
+| Spamming one topic to be **less rewarding** | lower `FATIGUE_MULTIPLIERS`. Careful: too harsh and mixing topics beats spamming, which flips the lesson. The simulator warns you. |
+| Buttons to **stay live** while someone watches | `LIKED_LOCKS_BUTTONS: false` (a new post then cuts the current watch short) |
+| A **longer or easier tutorial** | `TUTORIAL1_GOAL`, `TUTORIAL_DRAIN_MULT` |
+| The **same game every time** (for a demo) | `RNG_SEED: 42` (any number; `null` = different every time) |
+| The results screen to be **more or less strict** about calling a change real | `REVEAL_TREND_DELTA`, `REVEAL_LOW_VARIETY` |
+
+**After you change numbers, check the balance.** Open `sim.html`. It plays hundreds of rounds with
+robot players and tells you whether the game still teaches the lesson:
+
+- random play should **lose** people,
+- spamming a favorite should **score well but crush variety**,
+- mixing topics should **keep variety**.
+
+(The same thing from a terminal: `node tests/run-node.js sim`.) The simulator also lets you try
+changes without editing any file.
+
+To change the **words and people**, edit `js/content.js`: the six topics (emoji and color), the six
+people (name, animal avatar, bio, and which topics they love or find "meh"), and every speech-bubble
+line. Keep lines under 40 characters so they fit on one line of a small card. `tests.html` checks this,
+and checks that every topic is loved by at least one person.
+
+---
+
+## The data it records
+
+Everything the game does is written to a log in the browser's memory: every post pushed, whether it
+was liked, attention before and after, each person's hidden tastes, who left and why, pauses, and the
+start and end of each round.
+
+On the last results step, **Download data (CSV)** saves `doomscroll_<session_id>.csv`. (The log holds
+the people's hidden tastes, so it can't be read or downloaded in the middle of a game, only from the
+results screen.)
+
+**Privacy:** the session id is a random code like `20261004-153012-a3f9c1`. Nothing about the player
+is collected: no name, no account, no device information. The log describes what the six pretend
+people did. Closing the tab without downloading discards it.
+
+| Column | Meaning |
+|---|---|
+| `session_id` | random id for this sitting (page load). Several rounds can share one session. |
+| `timestamp_ms` | wall-clock time, in milliseconds. It keeps running while the game is paused. |
+| `phase` | `tutorial1`, `tutorial2`, `main` |
+| `vp_id` | which person (blank for pause/resume) |
+| `event` | `push`, `watch_end`, `afk`, `round_start`, `round_end`, `pause`, `resume` |
+| `topic` | topic pushed (push events) |
+| `liked` | `1` liked, `0` skipped (push events) |
+| `attention_before`, `attention_after` | the person's attention (0–100) around the event |
+| `fatigue_mult` | how much "same topic again" reduced the gain (1 = no penalty) |
+| `tastes_json` | the person's hidden like-chances for the 6 topics, right after the event |
+| `round_no` | 1, 2, 3… for each main round (0 in the tutorials) |
+| `round_time_sec` | seconds of play since the round started. Unlike `timestamp_ms`, it does not run during a pause. |
+| `detail` | extra word: the reaction type on `push`; `complete`/`interrupted` on `watch_end`; `skip`/`idle` on `afk` (why they left); `time_up`/`all_afk` on `round_end`; `button`/`key`/`tab_hidden` on `pause` |
+
+The first 11 columns are the agreed set. The last three make the data usable (rounds, a pause-proof
+clock, and the extra word).
+
+### Adding the Flask server later
+
+Everything that leaves the logger goes through **one function**, `logger.flush(records)`, in
+`js/logger.js`. Today it files the records away for the CSV download. The game calls it at the end of
+each round, and when the page closes. To also send the data to a server, add one `fetch` inside that
+function (the code is written out in the comment right above it):
+
+```js
+fetch('http://localhost:5000/api/log', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(records)     // an array of objects, one per CSV row, same column names
+}).catch(function () { /* the game must never break because the network did */ });
+```
+
+Keep the line that stores the records (the CSV download needs it). The Flask side needs CORS turned
+on, because `index.html` is opened from a file, not from the server.
+
+---
+
+## Project layout
+
+```
+index.html            the page (all screens live here, one visible at a time)
+css/style.css         all styling. Colors are variables at the top.
+js/config.js          every tunable number and flag
+js/content.js         topics, the six people, every message
+js/vp.js              the person model: tastes, attention, like/skip, drift, fatigue (NO page code)
+js/metrics.js         diversity, scores, and every number on the results screen (NO page code)
+js/logger.js          event log, CSV download, and flush(), the one exit for data
+js/ui.js              screens, pop-up, scoreboard, profile cards
+js/reveal.js          the results screen: the wording (pure, tested) + the drawing
+js/game.js            the conductor: clock, phases, pause, round end, logging hooks
+tests.html            open in Chrome: the model, logger and results-wording tests
+sim.html              open in Chrome: the balance simulator
+tests/                tests.js, plus optional tools: run-node.js (terminal runner), e2e.js (real-Chrome check),
+                      dev-helpers.js (dev mode only)
+sim/sim.js            the simulator's engine (also page-free)
+CLAUDE.md             notes for future AI-assisted sessions
+```
+
+Rules the code follows: plain HTML + CSS + vanilla JS; no modules, frameworks, build step or backend;
+classic `<script>` tags in dependency order sharing one global, `window.DS`; the model files never touch
+the page, so the tests and the simulator can run them without a browser.
+
+## Checking your work
+
+- **`tests.html`**: open in Chrome. Everything should be green. The tests pin their own settings, so
+  tuning `config.js` never breaks them.
+- **`sim.html`**: the balance report described above.
+- **Terminal (optional, needs Node):** `node tests/run-node.js` and `node tests/run-node.js sim`.
+- **Real-browser check (optional, needs Node 22+ and Chrome):** `node tests/e2e.js`. It opens the actual
+  game from `file://` in a headless Chrome, plays whole rounds with robot players, and checks about 35
+  things: every screen fits a short laptop window, the results text is sane (no "undefined"), the CSV is
+  well-formed, the console doors are closed, and the frantic-click and pause loopholes stay closed. Run it
+  after tuning `config.js` or editing `content.js`. It takes about a minute.
+- **Developer mode:** open `index.html?dev` (add `?dev` to the file's address). This leaves the
+  console handles open and loads `tests/dev-helpers.js`. In the console (F12):
+  - `DS.dev.play()` skips the tutorials, plays a whole round with a robot in an instant, and lands
+    on the results screen. Great for demos. `DS.dev.play({ bot: 'spam' })` shows the sharpest filter bubble.
+  - `DS.dev.measureReveal()` checks that every results step fits the current window height.
+
+## Things to know
+
+- **The console is closed in play mode, but only as a speed bump.** Students get "play mode": the live
+  tastes can't be read from the console (the data log that records them is sealed until the results
+  screen), and the settings and the dice are frozen while the game runs. This stops casual poking. It is
+  not real security: the answer key (who likes what) is written in `content.js`, and anything that runs in
+  a browser can be changed by someone determined. So don't use scores for grades.
+- **A fast clicker is protected from themselves.** After any pop-up or new screen appears, its buttons
+  ignore clicks for half a second (`CLICK_GUARD_MS`), so the last frantic clicks of a round can't skip the
+  results screen or dismiss a pop-up.
+- **The results text only says what happened.** "Variety dropped" appears only if it dropped; a feed that
+  was narrow from the first post gets its own wording; people who left early are shown as "too few
+  watched posts" instead of a made-up number. All of this is tested.
+- **The six people use animal avatars and the words "they/their"**, on purpose, so nobody is assigned a
+  gender or a look.
+- No sound. Works best in a current Chrome (it uses the `inert` attribute, Chrome 102+).
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| The page is blank, or you see "needs JavaScript" | turn JavaScript on, then reload |
+| Download data does nothing | the browser or the school's settings may block downloads. Allow downloads for this page. |
+| The six cards need scrolling | the window is smaller than about 1000 px wide or 560 px tall. Maximize the window, or press Ctrl + minus to zoom out. |
+| Everything is too easy or too hard | see the tuning table above, then check `sim.html` |

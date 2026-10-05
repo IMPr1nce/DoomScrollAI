@@ -57,8 +57,10 @@ DS.VP_DEFS = [
 
 // ----------------------------------------------------------------- Messages
 // Speech-bubble lines. {topic} is replaced with the topic's label ("Sports").
-// vp.js picks one at random and never shows the same line twice in a row for
-// the same VP. Keep everything friendly and 13-year-old appropriate.
+// vp.js picks one at random and never repeats a VP's last few lines (MESSAGE_NO_REPEAT in
+// config.js), so with ~14 lines per category a VP rarely sounds the same twice.
+// Keep everything friendly and 13-year-old appropriate, and SHORT: a line must fit on one
+// line of a small profile card (tests.html checks the length), or the card would jump.
 //
 //   liked / disliked : normal reaction to a post
 //   fatigued         : the same topic keeps coming
@@ -76,7 +78,11 @@ DS.MESSAGES = {
     'Okay, you get me.',
     'I\'m sending this to my friends.',
     'Love it!',
-    'Ha! Can\'t look away.'
+    'Ha! Can\'t look away.',
+    'Okay, I could watch this all day.',
+    'Now THIS is a good feed.',
+    'Save this one for later!',
+    'Wow, that was actually good.'
   ],
   disliked: [
     'Nah, skip.',
@@ -88,7 +94,11 @@ DS.MESSAGES = {
     'Why am I seeing this?',
     'I don\'t care about {topic}.',
     'Hard pass.',
-    'Meh.'
+    'Meh.',
+    'Nope. Next one, please.',
+    'Skipping that one.',
+    'Not for me.',
+    'Yawn. Pass.'
   ],
   fatigued: [
     '{topic} again? Okay…',
@@ -100,7 +110,11 @@ DS.MESSAGES = {
     'Okay, that\'s a lot of {topic}.',
     'Can we change it up?',
     'Again? Really?',
-    'Feels like déjà vu…'
+    'Feels like déjà vu…',
+    'Wait, more {topic}?',
+    'Okay, I get it. {topic}!',
+    'My feed is stuck on {topic}.',
+    'Same thing, different post.'
   ],
   lowAttention: [
     'Hello? Anything good?',
@@ -112,7 +126,11 @@ DS.MESSAGES = {
     'I might go do my homework… maybe.',
     'Zzz… wake me up.',
     'Show me something good!',
-    'I\'m about to close this.'
+    'I\'m about to close this.',
+    'Is this thing on?',
+    'Can I get something good?',
+    'My feed is so boring now.',
+    'I\'m about to check my messages.'
   ],
   afk: [
     'Okay, I\'m out. Bye!',
@@ -124,7 +142,11 @@ DS.MESSAGES = {
     'I\'m logging off.',
     'Nope, I\'m done.',
     'Going to find my friends.',
-    'Phone down. See ya.'
+    'Phone down. See ya.',
+    'Okay, bye. For real this time.',
+    'I\'m off to play a game.',
+    'Logging off. See ya!',
+    'That\'s enough scrolling.'
   ],
   hooked: [
     'Ok, one more…',
@@ -136,6 +158,41 @@ DS.MESSAGES = {
     'I only opened the app for a sec…',
     'Okay, last one. For real.',
     'I should stop. But… one more.',
-    'Whoa, how long have I been on here?'
+    'Whoa, how long have I been on here?',
+    'Just five more minutes…',
+    'My thumb keeps scrolling.',
+    'I meant to stop an hour ago.',
+    'Why is this so hard to put down?'
   ]
+};
+
+// Topic-flavored reactions, for the two most common categories. A liked or disliked reaction
+// uses one of these about TOPIC_MESSAGE_CHANCE of the time, so Sports sounds like Sports.
+// They only repeat what the player already learned from the like/skip itself, so they don't
+// give away anything about the hidden tastes.
+DS.TOPIC_MESSAGES = {
+  sports: {
+    liked:    ['What a play!', 'That goal was unreal.', 'I need to try that move.', 'Great game highlights!'],
+    disliked: ['Not really a sports fan.', 'I\'ll skip the game.', 'No sports for me.', 'Can\'t follow the score.']
+  },
+  dance: {
+    liked:    ['Those moves are so smooth!', 'I\'m learning this dance.', 'Okay, that routine!', 'I\'m dancing at my desk now.'],
+    disliked: ['I have two left feet.', 'Not into dance videos.', 'Dance? Skip.', 'I\'ll sit this one out.']
+  },
+  music: {
+    liked:    ['This song is stuck in my head!', 'Adding this to my playlist.', 'Great beat!', 'Turn it up!'],
+    disliked: ['Not my kind of music.', 'Too loud for me.', 'Skip this song.', 'Not feeling this track.']
+  },
+  comics: {
+    liked:    ['Ha! That panel is so good.', 'I love this art style.', 'Okay, that plot twist!', 'Is there a next issue?'],
+    disliked: ['Comics aren\'t my thing.', 'Can\'t get into comics.', 'Not into comics.', 'I\'ll skip the comic.']
+  },
+  movies: {
+    liked:    ['I need to watch this movie.', 'Okay, great trailer!', 'That ending though!', 'Movie night idea!'],
+    disliked: ['Not a movie person today.', 'No trailers, please.', 'Movies take too long.', 'Pass on this movie.']
+  },
+  food: {
+    liked:    ['Now I\'m hungry.', 'That looks so tasty!', 'I need to make that.', 'Snack time!'],
+    disliked: ['Not hungry right now.', 'I don\'t like that dish.', 'Not my kind of food.', 'Skip the recipe.']
+  }
 };

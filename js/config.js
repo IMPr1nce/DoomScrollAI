@@ -21,8 +21,9 @@ DS.CONFIG = {
 
   // -------------------------------------------------------------------- Round
   ROUND_SEC: 90,              // main game length
-  ROUND_END_DELAY_SEC: 1.5,   // after the round ends, wait this long before the pop-up so the
-                              // player sees the final board (who left, who stayed)
+  ROUND_END_DELAY_SEC: 1.5,   // after the round ends, the final board stays up this long (with a
+                              // "Time's up!" banner) before the results screen, so the player sees
+                              // who left and who stayed
   TIMER_URGENT_SEC: 10,       // the clock turns red and pulses for the last N seconds
 
   // ----------------------------------------------------------------- Tutorial
@@ -60,9 +61,22 @@ DS.CONFIG = {
   HOOKED_WINDOW: 6,               // look at the VP's last N liked posts...
   HOOKED_SHARE: 0.8,              // ...if this share are one topic, the VP is "hooked"
   HOOKED_MESSAGE_CHANCE: 0.6,     // how often a hooked VP says a hooked line (else normal)
+  MESSAGE_NO_REPEAT: 4,           // a VP won't repeat any of its last N lines (so never the same line twice in a row)
+  TOPIC_MESSAGE_CHANCE: 0.4,      // how often a liked/disliked reaction is flavored by the topic ("What a play!")
 
   // ------------------------------------------------------------------ Metrics
   ENJOY_THRESHOLD: 0.45,      // a topic counts as "still enjoys it" at/above this taste
+
+  // ------------------------------------------------------------------- Reveal
+  // The reveal screen only claims "variety dropped" if it really did. A change smaller than
+  // this (on the 0..1 diversity scale) is reported as "about the same". Applies to each VP and
+  // to the average across all six.
+  REVEAL_TREND_DELTA: 0.15,
+  // A feed whose variety is at or below this is "narrow", even if it didn't drop. Without this, a
+  // player who spams one topic from the very first post (variety 0.00 in BOTH halves) would be told
+  // their feeds "stayed mixed", which would be false.
+  REVEAL_LOW_VARIETY: 0.25,
+  REVEAL_FEED_MAX: 160,       // most emoji drawn in one person's feed row (a safety cap; a normal round is far below it)
 
   // --------------------------------------------------------- Game loop / screen
   MAX_FRAME_DT_SEC: 0.25,     // longest step the game loop will take at once. If the tab was
@@ -73,6 +87,11 @@ DS.CONFIG = {
   TUTORIAL_RESULT_DELAY_SEC: 1.2, // pause before the tutorial pop-up, so the player SEES the moment
                               // (the bar hitting the goal, or the AFK cover) before the text covers it
 
+  // Frantic clicking is normal in this game. After any pop-up or new screen appears, buttons
+  // ignore clicks for this long, so a click meant for the game can't accidentally dismiss
+  // "Time's up" or skip the results. 0 turns the guard off.
+  CLICK_GUARD_MS: 500,
+
   // -------------------------------------------------------------- Feature flags
   // true  = a VP's buttons are disabled while they watch a liked post.
   // false = buttons stay live; a new push cuts the current watch short
@@ -81,6 +100,12 @@ DS.CONFIG = {
 
   // --------------------------------------------------------------------- Dev
   RNG_SEED: null,             // null = different every play. A number = same game every time.
+
+  // false = "play mode" (what students get): the hidden tastes aren't reachable from the browser
+  // console, and the settings can't be changed while the game runs. true (or open index.html?dev)
+  // keeps everything open for debugging. This is a speed bump for curious kids, not real
+  // security: anything that runs in the browser can be changed by someone determined.
+  DEV_MODE: false,
 
   // ------------------------------------------------- Balance simulator (sim.html)
   // These describe the simulated PLAYER, not the game. The real game ignores them.

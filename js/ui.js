@@ -1,5 +1,6 @@
 /*
- * ui.js — everything that touches the page: screens, the pop-up, and the profile card.
+ * ui.js — everything that touches the page: screens, the pop-up, the scoreboard, banner and
+ * the profile card. (The results screen is in reveal.js.)
  *
  * It only DISPLAYS the model (vp.js) and reports clicks upward. It never decides
  * game rules. The card asks the model "can I push?" and "what's the attention?" every
@@ -24,12 +25,38 @@
   function $(id) { return document.getElementById(id); }
 
   var ui = {};
+  ui.h = h;          // reveal.js builds its elements with the same helper
+  ui.$ = $;
+
+  // ------------------------------------------------------------ Click guard
+  // Frantic clicking is the normal way to play this game, so when a pop-up or the results
+  // screen appears, a click that was aimed at a topic button can land on whatever just
+  // appeared (a double-click on "Play again" would hit "Go!" and skip the instructions; the
+  // last clicks of a round could skip the whole results screen). So: for CLICK_GUARD_MS after
+  // something appears, guarded buttons ignore clicks. We check in the click handler rather than
+  // disabling the buttons, because that also stops key-repeat from Enter/Space.
+  var guardUntil = 0;
+  ui.armGuard = function () {
+    if (!C.CLICK_GUARD_MS) return;
+    guardUntil = performance.now() + C.CLICK_GUARD_MS;
+    document.body.classList.add('guarded');       // buttons look slightly faded: "not ready yet"
+    setTimeout(function () {
+      if (performance.now() >= guardUntil) document.body.classList.remove('guarded');
+    }, C.CLICK_GUARD_MS + 20);
+  };
+  ui.guardActive = function () { return performance.now() < guardUntil; };
+  // Wrap a click handler so it is ignored while the guard is up.
+  ui.guarded = function (fn) {
+    return function (e) { if (!ui.guardActive()) fn(e); };
+  };
 
   // ------------------------------------------------------------------ Screens
   ui.showScreen = function (name) {
     var screens = document.querySelectorAll('.screen');
     for (var i = 0; i < screens.length; i++) screens[i].classList.remove('screen--active');
     $('screen-' + name).classList.add('screen--active');
+    document.body.setAttribute('data-screen', name);   // lets CSS tweak the page per screen
+    window.scrollTo(0, 0);
   };
 
   // ------------------------------------------------------------------ Pop-up
@@ -42,15 +69,35 @@
     (opts.buttons || []).forEach(function (b) {
       var btn = h('button', 'btn btn--big ' + (b.primary ? 'btn--primary' : 'btn--ghost'), b.label);
       btn.type = 'button';
-      btn.addEventListener('click', function () { ui.hideOverlay(); if (b.onClick) b.onClick(); });
+      btn.addEventListener('click', ui.guarded(function () { ui.hideOverlay(); if (b.onClick) b.onClick(); }));
       box.appendChild(btn);
     });
     $('overlay').hidden = false;
+    // Make the page behind the pop-up "inert": Tab can't reach it and clicks can't hit it.
+    // Without this, a keyboard user could Tab behind the pop-up and press Pause or Skip.
+    $('app').inert = true;
+    ui.armGuard();
     // Keyboard users: put focus on the main button so Enter/Space continues.
     var first = box.querySelector('button');
     if (first) first.focus();
   };
-  ui.hideOverlay = function () { $('overlay').hidden = true; };
+  ui.hideOverlay = function () {
+    $('overlay').hidden = true;
+    $('app').inert = false;
+  };
+  ui.overlayShown = function () { return !$('overlay').hidden; };
+
+  // ------------------------------------------------------------------ Banner
+  // A big message over the board ("Time's up!") while the final board is still visible.
+  ui.showBanner = function (text) {
+    var b = $('banner');
+    $('banner-text').textContent = text;
+    b.hidden = false;
+    b.classList.remove('banner--pop');
+    void b.offsetWidth;                  // restart the animation
+    b.classList.add('banner--pop');
+  };
+  ui.hideBanner = function () { $('banner').hidden = true; };
 
   // ---------------------------------------------------------------- Tutorial
   ui.setTutorialHeader = function (o) {
@@ -70,7 +117,11 @@
   ui.mountCards = function (slotId, cards) {
     var slot = $(slotId);
     slot.innerHTML = '';
-    cards.forEach(function (c) { slot.appendChild(c.el); });
+    cards.forEach(function (c, i) {
+      c.el.style.setProperty('--i', i);            // CSS delays each card a little, so they pop in one by one
+      c.el.classList.add('card--enter');
+      slot.appendChild(c.el);
+    });
   };
 
   // The scoreboard bar. game.js calls this every frame, so each value is only written
@@ -231,6 +282,21 @@
       }
     }
 
+    // A little "+17" / "−12" that floats up beside the attention number. A liked post's gain
+    // arrives slowly over the watch, so this tells the player what that post is worth; a skip's
+    // penalty lands at once. The sign is part of the text, so it isn't color-only.
+    var deltaTimers = [];
+    function showDelta(amount) {
+      if (!amount) return;
+      var pill = h('span', 'delta ' + (amount > 0 ? 'delta--up' : 'delta--down'),
+                   (amount > 0 ? '+' : '−') + Math.abs(amount));
+      pill.setAttribute('aria-hidden', 'true');
+      pill.style.left = (value.offsetLeft + value.offsetWidth + 10) + 'px';
+      label.appendChild(pill);
+      // Remove it ourselves (not on animationend) so it also goes away when animations are off.
+      deltaTimers.push(setTimeout(function () { if (pill.parentNode) pill.parentNode.removeChild(pill); }, 1100));
+    }
+
     function addHistory(topicId, liked) {
       var t = DS.TOPIC_BY_ID[topicId];
       var chip = h('span', 'history__chip history__chip--' + (liked ? 'yes' : 'no'),
@@ -247,6 +313,9 @@
         say(e.message, e.category);
         flash(e.liked ? 'card--like' : 'card--skip');
         if (history) addHistory(e.topic, e.liked);
+        showDelta(e.liked
+          ? Math.min(Math.round(C.LIKE_GAIN * e.fatigueMult), Math.round(C.ATTENTION_MAX - e.attentionBefore))
+          : Math.round(e.attentionAfter - e.attentionBefore));
       } else if (e.event === 'message') {
         say(e.message, e.category);          // a low-attention nudge while idle
       } else if (e.event === 'afk') {
@@ -309,6 +378,7 @@
       setLocked: function (v) { locked = v; update(); },
       destroy: function () {
         clearTimeout(bubbleTimer);
+        deltaTimers.forEach(clearTimeout);
         vp.offEvent(onVPEvent);
         if (root.parentNode) root.parentNode.removeChild(root);
       }
