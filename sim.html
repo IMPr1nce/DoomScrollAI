@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Doomscroll AI — balance simulator</title>
+  <style>
+    /* Force a light page: with no explicit background, a dark-mode browser paints the page dark */
+    html { color-scheme: light; }
+    body { background: #fff; color: #1c1c28; font: 16px/1.5 system-ui, sans-serif; max-width: 1240px; margin: 20px auto; padding: 0 16px }
+    h1 { margin: 0 0 4px; }
+    h2 { margin: 28px 0 8px; font-size: 20px; }
+    .muted { color: #5b5b6b; }
+    .controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-end; margin: 14px 0; padding: 14px; background: #f3f4f9; border-radius: 10px; }
+    label { display: flex; flex-direction: column; font-size: 14px; font-weight: 600; gap: 4px; }
+    input, select, textarea { font: inherit; padding: 6px 8px; border: 1px solid #b9bccb; border-radius: 6px; }
+    input[type=number] { width: 90px; }
+    textarea { width: 380px; height: 76px; font: 13px/1.4 ui-monospace, monospace; }
+    button { font: inherit; font-weight: 600; padding: 8px 16px; border: 0; border-radius: 8px; background: #4c3de0; color: #fff; cursor: pointer; }
+    button.secondary { background: #e2e4f0; color: #1c1c28; }
+    button:disabled { opacity: .5; cursor: wait; }
+    table { border-collapse: collapse; width: 100%; font-size: 15px; }
+    th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid #e4e5ee; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; white-space: normal; min-width: 230px; }
+    th { font-size: 13px; background: #f3f4f9; vertical-align: bottom; }
+    tr.extra td { color: #5b5b6b; }
+    tr.core td:first-child { font-weight: 700; }
+    ul.goals { list-style: none; padding: 0; margin: 8px 0; }
+    ul.goals li { padding: 3px 0; }
+    .ok { color: #1a7f37; font-weight: 700; }
+    .fail { color: #c62828; font-weight: 700; }
+    .err { color: #c62828; font-weight: 600; }
+    details { margin-top: 8px; }
+    summary { cursor: pointer; font-weight: 600; }
+    .small td, .small th { font-size: 13px; padding: 3px 8px; }
+  </style>
+</head>
+<body>
+  <h1>Balance simulator</h1>
+  <p class="muted">
+    Robot players play whole 90-second rounds with no real timers, using the same model as the game.
+    Bots marked “extra” are diagnostics. Smart bots peek at the hidden tastes, so read the numbers as
+    “a player who has already learned each VP”. Only “Explore, then stick” plays blind.
+  </p>
+
+  <div class="controls">
+    <label>Rounds per strategy <input id="runs" type="number" min="10" step="10"></label>
+    <label>Seconds per click <input id="click" type="number" min="0.2" step="0.1"></label>
+    <label>Buttons lock while watching
+      <select id="lock">
+        <option value="config">Use config.js</option>
+        <option value="true">On</option>
+        <option value="false">Off</option>
+        <option value="both">Compare both</option>
+      </select>
+    </label>
+    <label>Config overrides (JSON, optional)
+      <textarea id="overrides" spellcheck="false" placeholder='{"DRIFT_DOWN": 0.08, "LIKE_GAIN": 18}'></textarea>
+    </label>
+    <div id="presets"></div>
+    <button id="run">Run</button>
+  </div>
+  <div id="status" class="muted"></div>
+  <div id="output"></div>
+
+  <!-- Classic scripts, in dependency order (no modules, so this works from file://) -->
+  <script src="js/config.js"></script>
+  <script src="js/content.js"></script>
+  <script src="js/vp.js"></script>
+  <script src="js/metrics.js"></script>
+  <script src="sim/sim.js"></script>
+  <script>
+    (function () {
+      var C = DS.CONFIG;
+      var $ = function (id) { return document.getElementById(id); };
+
+      $('runs').value = C.SIM_RUNS;
+      $('click').value = C.SIM_CLICK_INTERVAL_SEC;
+
+      // One button per preset; clicking it just fills the overrides box.
+      Object.keys(DS.sim.PRESETS).forEach(function (name) {
+        var b = document.createElement('button');
+        b.className = 'secondary';
+        b.textContent = 'Load ' + name;
+        b.style.marginRight = '8px';
+        b.onclick = function () { $('overrides').value = JSON.stringify(DS.sim.PRESETS[name]); };
+        $('presets').appendChild(b);
+      });
+      var clear = document.createElement('button');
+      clear.className = 'secondary';
+      clear.textContent = 'Clear overrides';
+      clear.onclick = function () { $('overrides').value = ''; };
+      $('presets').appendChild(clear);
+
+      function f(x, d) { return x === null ? '–' : x.toFixed(d); }
+
+      function table(out, title) {
+        var rows = out.results.map(function (r) {
+          var core = ['random', 'spam', 'mix'].indexOf(r.id) !== -1;
+          return '<tr class="' + (core ? 'core' : 'extra') + '"><td>' + r.label + '</td>' +
+            '<td>' + f(r.avgAttention.mean, 1) + ' <span class="muted">±' + f(r.avgAttention.sd, 1) + '</span></td>' +
+            '<td>' + f(r.afk.mean, 2) + '</td>' +
+            '<td>' + f(r.allLostPct, 0) + '%</td>' +
+            '<td>' + f(r.diversity.first, 2) + '</td>' +
+            '<td>' + f(r.diversity.second, 2) + '</td>' +
+            '<td>' + f(r.diversity.overall, 2) + '</td>' +
+            '<td>' + f(100 * r.topShare, 0) + '%</td>' +
+            '<td>' + f(r.enjoyedStart, 1) + ' → ' + f(r.enjoyedEnd, 1) + '</td>' +
+            '<td>' + f(100 * r.likeRate, 0) + '%</td>' +
+            '<td>' + f(r.pushesPerVP, 1) + '</td></tr>';
+        }).join('');
+
+        var ranks = out.results.map(function (r) {
+          var cells = function (xs) { return xs.map(function (x) { return '<td>' + x.toFixed(2) + '</td>'; }).join(''); };
+          return '<tr><td>' + r.label + ' (start)</td>' + cells(r.ranksStart) + '</tr>' +
+                 '<tr><td>' + r.label + ' (end)</td>' + cells(r.ranksEnd) + '</tr>';
+        }).join('');
+
+        var goals = out.goals.map(function (g) {
+          return '<li><span class="' + (g.pass ? 'ok' : 'fail') + '">' + (g.pass ? '✔' : '✘') + '</span> ' +
+                 g.text + ' <span class="muted">— ' + g.detail + '</span></li>';
+        }).join('');
+
+        return '<h2>' + title + '</h2>' +
+          '<table><thead><tr><th>Strategy</th><th>Avg attention (±sd)</th><th>VPs AFK (of 6)</th>' +
+          '<th>Everyone lost</th><th>Variety 1st half</th><th>Variety 2nd half</th><th>Variety whole round</th>' +
+          '<th>Top topic share of feed</th><th>Topics enjoyed (start → end)</th><th>Like rate</th><th>Posts per VP</th>' +
+          '</tr></thead><tbody>' + rows + '</tbody></table>' +
+          '<ul class="goals">' + goals + '</ul>' +
+          '<details><summary>Average taste by rank, favorite → least liked</summary>' +
+          '<table class="small"><thead><tr><th></th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th><th>5th</th><th>6th</th></tr></thead><tbody>' +
+          ranks + '</tbody></table></details>';
+      }
+
+      function run() {
+        var overrides = {};
+        var text = $('overrides').value.trim();
+        if (text) {
+          try { overrides = JSON.parse(text); }
+          catch (e) { $('status').innerHTML = '<span class="err">Overrides are not valid JSON: ' + e.message + '</span>'; return; }
+        }
+        var base = { runs: Number($('runs').value), clickIntervalSec: Number($('click').value), overrides: overrides };
+        var lock = $('lock').value;
+        var modes = lock === 'both' ? [true, false] : lock === 'config' ? [undefined] : [lock === 'true'];
+
+        $('run').disabled = true;
+        $('status').textContent = 'Running…';
+        // Let the browser paint "Running…" first. The sim itself is synchronous and takes about a second.
+        setTimeout(function () {
+          var t0 = performance.now();
+          var html = modes.map(function (m) {
+            var opts = Object.assign({}, base);
+            if (m !== undefined) opts.lockButtons = m;
+            var out = DS.sim.runAll(opts);
+            var s = out.settings;
+            return table(out, 'Buttons lock while watching: ' + (s.lockButtons ? 'ON' : 'OFF') +
+              ' · ' + s.runs + ' rounds each · ' + s.clickIntervalSec + ' s per click' +
+              (text ? ' · with overrides' : ' · config.js as is'));
+          }).join('');
+          $('output').innerHTML = html;
+          $('status').textContent = 'Done in ' + Math.round(performance.now() - t0) + ' ms.';
+          $('run').disabled = false;
+        }, 20);
+      }
+
+      $('run').onclick = run;
+      run(); // show the current config.js results straight away
+    })();
+  </script>
+</body>
+</html>

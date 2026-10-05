@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doomscroll AI</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main id="app">
+
+    <!-- Only one .screen is visible at a time. ui.showScreen('name') shows #screen-name. -->
+
+    <section id="screen-title" class="screen">
+      <div class="title-card">
+        <div class="title-card__emoji" aria-hidden="true">📱</div>
+        <h1>Doomscroll AI</h1>
+        <p class="title-card__pitch">You ARE the algorithm.</p>
+        <p class="title-card__sub">Pick posts. Keep people scrolling. See what happens.</p>
+        <button id="btn-start" class="btn btn--primary btn--big" type="button">Start</button>
+      </div>
+    </section>
+
+    <section id="screen-tutorial" class="screen">
+      <header class="tut-header">
+        <p id="tut-step" class="tut-header__step"></p>
+        <h2 id="tut-title" class="tut-header__title"></h2>
+        <p id="tut-text" class="tut-header__text"></p>
+        <p id="tut-goal" class="goal-pill"></p>
+      </header>
+      <div id="tut-card-slot" class="tut-slot"></div>
+      <button id="btn-skip" class="link-btn" type="button">Skip tutorial</button>
+    </section>
+
+    <!-- Placeholder until the 6-profile game exists (Phase 4). -->
+    <section id="screen-main" class="screen">
+      <div class="title-card">
+        <h2>Main game</h2>
+        <p class="title-card__sub">The 6-profile game isn't built yet. It arrives in Phase 4.</p>
+        <button id="btn-replay-tutorial" class="btn btn--primary" type="button">Replay the tutorial</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- One shared pop-up for tutorial results (and later: pause, round over). -->
+  <div id="overlay" class="overlay" hidden>
+    <div class="overlay__panel" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
+      <h2 id="overlay-title"></h2>
+      <p id="overlay-text"></p>
+      <div id="overlay-buttons" class="overlay__buttons"></div>
+    </div>
+  </div>
+
+  <!--
+    Classic scripts, in dependency order. No ES modules, so this works when you double-click
+    the file (file://). Model first (no DOM), then the screen code, then the game that wires
+    them together.
+  -->
+  <script src="js/config.js"></script>
+  <script src="js/content.js"></script>
+  <script src="js/vp.js"></script>
+  <script src="js/metrics.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,286 @@
+/*
+ * style.css — bright, friendly, "social app" feel, but not a copy of any real app.
+ *
+ * Layout target: 1366x768 school laptop, no scrolling. Body text is 18px; nothing is
+ * smaller than 16px. Colors live in the variables below so they're easy to change.
+ */
+
+:root {
+  --ink: #1f1b3a;
+  --muted: #5b5877;
+  --bg-1: #fdf0ff;
+  --bg-2: #ecf3ff;
+  --bg-3: #fff4e8;
+  --primary: #5b3df5;
+  --primary-dark: #4526d4;
+  --pink: #ff4f8b;
+  --card: #ffffff;
+  --line: #e4e0f5;
+  --good: #1a8a4a;
+  --bad: #d23a3a;
+  --radius: 22px;
+  --shadow: 0 10px 30px rgba(70, 40, 160, 0.16);
+}
+
+/* Always light: the game has its own colors, so a dark-mode browser shouldn't repaint them. */
+html { color-scheme: light; }
+
+* { box-sizing: border-box; }
+
+/* The HTML "hidden" attribute must beat any display rule we set below. */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  font: 18px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  background: linear-gradient(135deg, var(--bg-1) 0%, var(--bg-2) 55%, var(--bg-3) 100%);
+  background-attachment: fixed;
+}
+
+#app { min-height: 100%; display: flex; flex-direction: column; }
+
+.screen { display: none; flex: 1; padding: 16px 24px; }
+.screen--active { display: flex; flex-direction: column; align-items: center; }
+
+/* ------------------------------------------------------------------ Buttons */
+
+.btn {
+  font: inherit; font-weight: 700;
+  border: 0; border-radius: 14px;
+  padding: 10px 22px;
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.btn--big { font-size: 20px; padding: 14px 34px; }
+.btn--primary { background: var(--primary); color: #fff; box-shadow: 0 6px 16px rgba(91, 61, 245, 0.35); }
+.btn--primary:hover { background: var(--primary-dark); }
+.btn--ghost { background: #ece9fb; color: var(--ink); }
+.btn:active { transform: translateY(2px) scale(0.98); }
+
+.link-btn {
+  margin-top: 8px;
+  background: none; border: 0; color: var(--muted);
+  font: inherit; font-size: 16px; text-decoration: underline; cursor: pointer;
+}
+
+:focus-visible { outline: 4px solid #ffb703; outline-offset: 2px; }
+
+/* -------------------------------------------------------------- Title screen */
+
+#screen-title.screen--active, #screen-main.screen--active { justify-content: center; }
+
+.title-card {
+  background: var(--card);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+  padding: 40px 56px;
+  text-align: center;
+  max-width: 560px;
+}
+.title-card__emoji { font-size: 64px; line-height: 1; }
+.title-card h1 {
+  margin: 8px 0 0; font-size: 52px; letter-spacing: -1px;
+  background: linear-gradient(90deg, var(--primary), var(--pink));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.title-card__pitch { font-size: 26px; font-weight: 800; margin: 6px 0 4px; }
+.title-card__sub { color: var(--muted); margin: 0 0 24px; }
+
+/* ----------------------------------------------------------------- Tutorial */
+
+.tut-header { text-align: center; max-width: 780px; }
+.tut-header__step {
+  margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--primary);
+}
+.tut-header__title { margin: 2px 0 4px; font-size: 36px; }
+.tut-header__text { margin: 0 0 10px; }
+.goal-pill {
+  display: inline-block; margin: 0 0 14px;
+  padding: 6px 18px; border-radius: 999px;
+  background: #fff3c4; border: 2px solid #ffd54a;
+  font-weight: 800;
+}
+.tut-slot { width: 100%; display: flex; justify-content: center; }
+
+/* ------------------------------------------------------------ Profile card */
+
+.card {
+  position: relative;
+  width: 100%;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px 22px 20px;
+  overflow: hidden;
+}
+.card--large { max-width: 660px; }
+
+.card__head { display: flex; align-items: center; gap: 14px; }
+.card__avatar {
+  flex: none; width: 64px; height: 64px;
+  display: grid; place-items: center;
+  font-size: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffe0f0, #e0e4ff);
+  border: 3px solid #fff; box-shadow: 0 0 0 3px var(--line);
+}
+.card__who { flex: 1; min-width: 0; }
+.card__name { margin: 0; font-size: 24px; line-height: 1.1; }
+.card__bio { margin: 2px 0 0; font-size: 16px; color: var(--muted); }
+.card__status {
+  flex: none;
+  padding: 4px 12px; border-radius: 999px;
+  background: #eef0fb; color: var(--muted);
+  font-size: 16px; font-weight: 700;
+}
+.card--watching .card__status { background: #dff6e8; color: var(--good); }
+
+/* Speech bubble: tail points up toward the avatar. */
+.bubble {
+  position: relative;
+  min-height: 52px;
+  margin: 14px 0 8px 12px;
+  padding: 10px 16px;
+  border-radius: 16px;
+  background: #f1efff;
+  font-weight: 600;
+  transform-origin: 20px 0;
+}
+.bubble::before {
+  content: ""; position: absolute; top: -9px; left: 22px;
+  border: 9px solid transparent; border-top: 0; border-bottom-color: #f1efff;
+}
+.bubble--empty { visibility: hidden; }
+.bubble--liked, .bubble--hooked { background: #dff6e8; }
+.bubble--liked::before, .bubble--hooked::before { border-bottom-color: #dff6e8; }
+.bubble--disliked, .bubble--lowAttention { background: #ffe6e6; }
+.bubble--disliked::before, .bubble--lowAttention::before { border-bottom-color: #ffe6e6; }
+.bubble--fatigued { background: #fff3c4; }
+.bubble--fatigued::before { border-bottom-color: #fff3c4; }
+.bubble--afk { background: #e6e6ee; color: var(--muted); }
+.bubble--afk::before { border-bottom-color: #e6e6ee; }
+.bubble--pop { animation: pop 0.28s ease-out; }
+.bubble--fading { opacity: 0; transition: opacity 0.6s ease; }
+
+/* Attention meter */
+/* "Attention 60" sits on the left so it can't be confused with the Goal label on the right. */
+.meter__label { display: flex; align-items: baseline; gap: 10px; font-weight: 700; margin-bottom: 4px; }
+.meter__value { font-size: 22px; font-variant-numeric: tabular-nums; }
+.meter__bar { position: relative; }
+.meter__track {
+  height: 22px; border-radius: 999px; overflow: hidden;
+  background: #e9e7f5;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.meter__fill { height: 100%; width: 0; border-radius: 999px; transition: width 0.2s linear; }
+.meter__goal {
+  position: absolute; top: -6px; bottom: -6px; width: 0;
+  border-left: 3px dashed var(--ink);
+}
+.meter__goal span {
+  position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+  font-size: 16px; font-weight: 800; background: var(--card); padding: 0 4px;
+}
+.meter { padding-top: 14px; } /* room for the goal label above the bar */
+
+/* Thin bar that fills while the VP watches a liked post. */
+.watch {
+  height: 8px; margin-top: 8px; border-radius: 999px;
+  background: transparent; overflow: hidden;
+}
+.watch--on { background: #e3f4ea; }
+.watch__fill { height: 100%; width: 0; background: var(--good); border-radius: 999px; }
+
+/* Recent reactions */
+.history {
+  display: flex; flex-wrap: nowrap; align-items: center; gap: 6px;
+  margin-top: 10px; min-height: 34px; overflow: hidden;
+}
+.history__title { flex: none; font-size: 16px; font-weight: 700; color: var(--muted); }
+.history__chip {
+  flex: none; padding: 2px 8px; border-radius: 999px;
+  font-size: 18px; white-space: nowrap; border: 2px solid transparent;
+}
+.history__chip--yes { background: #dff6e8; border-color: #9bd9b4; }
+.history__chip--no  { background: #f0eef6; border-color: #d3cfe2; }
+
+/* Topic buttons: 3 across x 2 rows. Emoji + label, with a colored border as decoration only. */
+.topics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.topic-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 58px; padding: 6px 8px;
+  font: inherit; font-size: 18px; font-weight: 700; color: var(--ink);
+  background: #fff;
+  border: 3px solid var(--topic-color);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+@supports (background: color-mix(in srgb, red 10%, white)) {
+  .topic-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--topic-color) 16%, white); }
+}
+.topic-btn:active:not(:disabled) { transform: scale(0.95); }
+.topic-btn__emoji { font-size: 28px; line-height: 1; }
+.topic-btn:disabled {
+  cursor: not-allowed; opacity: 0.45; filter: grayscale(0.7);
+  border-style: dashed; /* a second, non-color clue that the button is off */
+}
+
+/* AFK cover */
+.card__afk {
+  display: none;
+  position: absolute; inset: 0;
+  flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(60, 58, 80, 0.78);
+  color: #fff; text-align: center;
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+.card--gone .card__afk { display: flex; animation: pop 0.35s ease-out; }
+.card__afk-label { font-size: 34px; font-weight: 900; line-height: 1.15; padding: 0 24px; }
+
+/* Little reactions */
+.card--like { animation: pulse 0.35s ease-out; }
+.card--skip { animation: shake 0.3s ease-out; }
+
+/* ---------------------------------------------------------------- Pop-up */
+
+.overlay {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(31, 27, 58, 0.55);
+}
+.overlay__panel {
+  width: min(560px, 92vw);
+  background: var(--card); border-radius: 26px; box-shadow: var(--shadow);
+  padding: 30px 34px; text-align: center;
+  animation: pop 0.3s ease-out;
+}
+.overlay__panel h2 { margin: 0 0 8px; font-size: 32px; }
+.overlay__panel p { margin: 0 0 22px; font-size: 20px; }
+.overlay__buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+/* --------------------------------------------------------------- Animations */
+
+@keyframes pop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  65%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  45% { transform: scale(1.015); }
+}
+
+/* People who ask their computer for less motion get none. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

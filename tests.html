@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Doomscroll AI — model tests</title>
+  <style>
+    html { color-scheme: light; }
+    body { background: #fff; color: #1c1c28; font: 16px/1.5 system-ui, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px; }
+    #summary { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+    #summary.good { color: #1a7f37; }
+    #summary.bad  { color: #c62828; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 4px 0; border-bottom: 1px solid #eee; }
+    li.pass { color: #1a7f37; }
+    li.fail { color: #c62828; font-weight: 600; }
+    .err { font: 14px/1.4 ui-monospace, monospace; color: #444; font-weight: 400; margin: 2px 0 4px 20px; }
+  </style>
+</head>
+<body>
+  <h1>Model tests</h1>
+  <p>Runs <code>vp.js</code> and <code>metrics.js</code> with no UI. Reload the page to re-run.</p>
+  <div id="summary">Running…</div>
+  <ul id="results"></ul>
+
+  <!-- Classic scripts, in dependency order (no modules, so this works from file://) -->
+  <script src="js/config.js"></script>
+  <script src="js/content.js"></script>
+  <script src="js/vp.js"></script>
+  <script src="js/metrics.js"></script>
+  <script src="sim/sim.js"></script>
+  <script src="tests/tests.js"></script>
+</body>
+</html>
