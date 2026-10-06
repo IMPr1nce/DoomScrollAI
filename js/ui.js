@@ -6,7 +6,9 @@
  * game rules. The card asks the model "can I push?" and "what's the attention?" every
  * frame, and the game (game.js) decides what a click means.
  *
- * Important: the card must NEVER show vp.tastes. Those are hidden until the reveal.
+ * Important: the card must NEVER show vp.tastes, the person's CURRENT tastes. They drift with every liked
+ * post, and that change stays hidden until the reveal. With RADAR_SHOWS 'interests' the card shows the
+ * snapshot taken at the start of the round (vp.tasteSnapshotStart), and nothing newer.
  */
 (function () {
   'use strict';
@@ -113,10 +115,13 @@
   };
 
   // ------------------------------------------------------------- Main-game board
-  // Fill the 3x2 grid. Order = the order of the array (left to right, top to bottom).
+  // Fill the grid: 2 columns for up to 4 people (2x2), 3 for more (3x2). Order = the order of the
+  // array (left to right, top to bottom).
   ui.mountCards = function (slotId, cards) {
     var slot = $(slotId);
     slot.innerHTML = '';
+    slot.style.setProperty('--cols', cards.length <= 4 ? 2 : 3);
+    slot.classList.toggle('board--radar', cards.length > 0 && cards[0].el.classList.contains('card--radar'));
     cards.forEach(function (c, i) {
       c.el.style.setProperty('--i', i);            // CSS delays each card a little, so they pop in one by one
       c.el.classList.add('card--enter');
@@ -164,26 +169,51 @@
   // What the status chip says. In the 6-card game, an idle VP with low attention says so,
   // because the player is juggling six cards and needs to spot who is about to leave.
   // It's text, not just a red outline, so it doesn't depend on seeing color.
-  function statusText(vp, low) {
+  function statusText(vp, low, compact) {
     if (vp.state === 'afk') return 'Gone';
     if (vp.state === 'watching') return 'Watching…';
-    return low ? 'Needs a post!' : 'Waiting for a post';
+    if (low) return 'Needs a post!';
+    return compact ? 'Waiting' : 'Waiting for a post';     // short on the small cards: the row is narrow
+  }
+
+  // Does each card's radar show the person's interests (RADAR_SHOWS 'interests')? If not, the cards show
+  // only what the player has seen so far. The grid layout always does that. game.js and reveal.js ask
+  // this too, so the tutorial text and the results screen match the cards.
+  ui.showsInterests = function () { return C.TOPIC_LAYOUT === 'radar' && C.RADAR_SHOWS === 'interests'; };
+
+  // "about 9 times in 10", for screen readers: the radar is a picture, so its buttons say it in words.
+  function chanceWords(p) {
+    var n = Math.min(9, Math.max(1, Math.round(p * 10)));
+    return 'about ' + n + (n === 1 ? ' time' : ' times') + ' in 10';
   }
 
   // -------------------------------------------------------------- Profile card
-  // One VP's card. Same DOM for the big tutorial card and the six small ones in the
-  // main game; only the CSS size class differs.
+  // One VP's card. Same DOM for the big tutorial card and the small ones in the main game;
+  // only the CSS size class differs. The six topic buttons come in two layouts (TOPIC_LAYOUT):
+  //   'grid'   3x2 buttons under the meter (the original)
+  //   'radar'  the buttons sit at the corners of a radar, to the right of the person's info, with a
+  //            spike pointing at each one, so "the longest spike" points straight at a good choice.
+  //            What the spikes show is RADAR_SHOWS:
+  //              'interests'  the person's tastes at the START of the round, drawn once and never
+  //                           updated: the player sees what to show them, not how it changes them
+  //              'learned'    only what the player has SEEN them like so far (never their tastes)
+  // Unless the radar shows interests, the buttons carry what the player has seen, the same way in both
+  // layouts so a playtest that compares them compares only the layout: a "liked 4 of 5" count (or "?"
+  // if never tried) and a star on the topic the bio hints at.
   //
   // opts: size ('large' | 'compact'), showHistory (bool), goalMarker (number | null),
   //       onPush(topicId)  — called when a topic button is clicked
   ui.createCard = function (vp, opts) {
     opts = opts || {};
     var compact = opts.size === 'compact';
+    var radar = C.TOPIC_LAYOUT === 'radar';
+    var interests = ui.showsInterests();
     var locked = false;          // game.js sets this while a pop-up is showing
     var bubbleTimer = null;
     var last = {};               // last values written, so we only touch the DOM when something changed
 
-    var root = h('article', 'card card--' + (opts.size || 'large'));
+    var root = h('article', 'card card--' + (opts.size || 'large') + (radar ? ' card--radar' : '') +
+                            (interests ? ' card--interests' : ''));
 
     // Header: avatar, name + bio, status pill
     var head = h('header', 'card__head');
@@ -192,7 +222,7 @@
     who.appendChild(h('h3', 'card__name', vp.name));
     who.appendChild(h('p', 'card__bio', vp.bio));
     head.appendChild(who);
-    var status = h('div', 'card__status', statusText(vp, false));
+    var status = h('div', 'card__status', statusText(vp, false, compact));
     // Compact cards are short, so the chip sits in the meter row (added below) instead.
     if (!compact) head.appendChild(status);
     root.appendChild(head);
@@ -236,15 +266,44 @@
     }
 
     // Topic buttons: emoji + word, so color is never the only clue.
-    var buttonsBox = h('div', 'topics');
-    var buttons = [];
-    DS.TOPICS.forEach(function (t) {
-      var b = h('button', 'topic-btn');
+    var buttonsBox = h('div', radar ? 'radar' : 'topics');
+    var buttons = [], counts = [], spokes = [], spikeLayer = null;
+    var colors = DS.TOPICS.map(function (t) { return t.color; });
+    if (radar) {
+      var frame = DS.radar.frame(DS.TOPICS.length);
+      spokes = frame.spokes;
+      spikeLayer = DS.radar.group('radar__learned-layer');
+      frame.svg.appendChild(spikeLayer);
+      buttonsBox.appendChild(frame.svg);
+    }
+    DS.TOPICS.forEach(function (t, i) {
+      var b = h('button', 'topic-btn' + (radar ? ' topic-btn--radar' : ''));
       b.type = 'button';
       b.style.setProperty('--topic-color', t.color);
-      b.setAttribute('aria-label', 'Show ' + t.label + ' to ' + vp.name);
+      if (radar) {
+        // Sit at corner i of the radar (CSS turns this direction into a position, see .topic-btn--radar).
+        var d = DS.radar.direction(i, DS.TOPICS.length);
+        b.style.setProperty('--dx', d.x.toFixed(4));
+        b.style.setProperty('--dy', d.y.toFixed(4));
+      }
       b.appendChild(h('span', 'topic-btn__emoji', t.emoji));
       b.appendChild(h('span', 'topic-btn__label', t.label));
+      if (interests) {
+        // The radar already shows how much they like it, so no count and no bio star. Same in words:
+        b.setAttribute('aria-label', 'Show ' + t.label + ' to ' + vp.name + '. They like it ' +
+                                     chanceWords(vp.tasteSnapshotStart[t.id]) + '.');
+      } else {
+        var count = h('span', 'topic-btn__count', '?');
+        count.setAttribute('aria-hidden', 'true');     // the button's aria-label says it in words
+        b.appendChild(count);
+        counts.push(count);
+        if (vp.clue === t.id) {
+          b.classList.add('topic-btn--clue');
+          var star = h('span', 'topic-btn__clue', '★');
+          star.setAttribute('aria-hidden', 'true');
+          b.appendChild(star);
+        }
+      }
       b.addEventListener('click', function () {
         if (locked || !opts.onPush) return;
         opts.onPush(t.id);
@@ -254,6 +313,32 @@
       buttonsBox.appendChild(b);
     });
     root.appendChild(buttonsBox);
+
+    // Interests: drawn once, from the snapshot taken when this person was made (the start of the round).
+    // Never redrawn: their tastes move with every liked post, and the player only sees that at the end.
+    if (interests) {
+      DS.radar.spikes(spikeLayer, DS.TOPICS.map(function (t) { return vp.tasteSnapshotStart[t.id]; }), colors);
+    }
+
+    // Otherwise: what the player has seen so far, on the buttons (and as spikes on the radar). Called
+    // after every push, not every frame: it only changes when a post is shown.
+    function refreshLearned() {
+      if (interests) return;
+      var seen = DS.metrics.observed(vp.history);
+      var estimates = [];
+      DS.TOPICS.forEach(function (t, i) {
+        var o = seen[t.id];
+        counts[i].textContent = o.tries ? o.likes + '/' + o.tries : '?';
+        buttons[i].classList.toggle('topic-btn--untried', !o.tries);
+        buttons[i].setAttribute('aria-label', 'Show ' + t.label + ' to ' + vp.name + '. ' +
+          (o.tries ? 'Liked ' + o.likes + ' of ' + o.tries + ' so far.' : 'Not tried yet.') +
+          (vp.clue === t.id ? ' Their bio hints at this one.' : ''));
+        if (radar) spokes[i].classList.toggle('radar__spoke--untried', !o.tries);
+        estimates.push(o.estimate);
+      });
+      if (radar) DS.radar.spikes(spikeLayer, estimates, colors);
+    }
+    refreshLearned();
 
     // "AFK" cover, shown over the whole card once the VP has left.
     var afk = h('div', 'card__afk');
@@ -282,17 +367,21 @@
       }
     }
 
-    // A little "+17" / "−12" that floats up beside the attention number. A liked post's gain
+    // A little "+17" / "−12" that floats up from the end of the attention bar. A liked post's gain
     // arrives slowly over the watch, so this tells the player what that post is worth; a skip's
     // penalty lands at once. The sign is part of the text, so it isn't color-only.
     var deltaTimers = [];
+    var lastPill = null;
     function showDelta(amount) {
       if (!amount) return;
-      var pill = h('span', 'delta ' + (amount > 0 ? 'delta--up' : 'delta--down'),
+      // One pill per card: quick skips would otherwise stack "−12 −12 −12" into an unreadable pile.
+      if (lastPill && lastPill.parentNode) lastPill.parentNode.removeChild(lastPill);
+      var pill = lastPill = h('span', 'delta ' + (amount > 0 ? 'delta--up' : 'delta--down'),
                    (amount > 0 ? '+' : '−') + Math.abs(amount));
       pill.setAttribute('aria-hidden', 'true');
-      pill.style.left = (value.offsetLeft + value.offsetWidth + 10) + 'px';
-      label.appendChild(pill);
+      // Start at the end of the bar's fill, but never past the right edge of the bar.
+      pill.style.left = 'min(calc(' + (100 * vp.attention / C.ATTENTION_MAX).toFixed(1) + '% + 4px), calc(100% - 52px))';
+      bar.appendChild(pill);
       // Remove it ourselves (not on animationend) so it also goes away when animations are off.
       deltaTimers.push(setTimeout(function () { if (pill.parentNode) pill.parentNode.removeChild(pill); }, 1100));
     }
@@ -313,6 +402,7 @@
         say(e.message, e.category);
         flash(e.liked ? 'card--like' : 'card--skip');
         if (history) addHistory(e.topic, e.liked);
+        refreshLearned();
         showDelta(e.liked
           ? Math.min(Math.round(C.LIKE_GAIN * e.fatigueMult), Math.round(C.ATTENTION_MAX - e.attentionBefore))
           : Math.round(e.attentionAfter - e.attentionBefore));
@@ -341,7 +431,7 @@
       if (vp.state !== last.state || low !== last.low) {
         last.state = vp.state;
         last.low = low;
-        status.textContent = statusText(vp, low);
+        status.textContent = statusText(vp, low, compact);
         root.classList.toggle('card--watching', vp.state === 'watching');
         root.classList.toggle('card--gone', vp.state === 'afk');
         root.classList.toggle('card--low', low);

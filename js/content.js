@@ -26,7 +26,10 @@ DS.TOPICS.forEach(function (t) { DS.TOPIC_BY_ID[t.id] = t; });
 // ---------------------------------------------------------------------- VPs
 // A VP definition only says who they are and which topics they like. The
 // actual probabilities are built in vp.js from config (TASTE_FAVORITE, etc.).
-//   favorites: ~0.85 like chance    meh: ~0.5    everything else: ~0.15
+//   favorites: ~0.92 like chance    meh: ~0.5    everything else: ~0.08
+// `clue` is the topic their bio hints at. It's always one of their favorites, and the radar marks it
+// with a star, so a player who reads the bio doesn't have to make a blind first guess. (Alex, the
+// tutorial person, has no clue on purpose: tutorial 1 is about learning from clicks alone.)
 // Avatars are animals on purpose: they look like profile pics and don't
 // imply any gender, skin tone, or look.
 // Each VP has a different mix, so players have to learn each one separately.
@@ -39,20 +42,21 @@ DS.TUTORIAL_VP_DEF = {
   // sports + comics are disliked: easy to find, and easy to use in tutorial 2
 };
 
-// The six VPs in the main game.
+// The cast for the main game. ORDER MATTERS: with PROFILE_COUNT = 4 only the first four play, and those
+// four (Maya, Jordan, Sam, Riley) must love all six topics between them (tests.html checks this).
 DS.VP_DEFS = [
   { id: 'maya',   name: 'Maya',   avatar: '🐼', bio: '13, plays soccer every weekend',
-    favorites: ['sports'],            meh: ['food', 'movies'] },
+    favorites: ['sports'],            meh: ['food', 'movies'],   clue: 'sports' },
   { id: 'jordan', name: 'Jordan', avatar: '🐙', bio: '14, always dancing in the kitchen',
-    favorites: ['dance', 'music'],    meh: ['food', 'movies'] },
+    favorites: ['dance', 'music'],    meh: ['food', 'movies'],   clue: 'dance' },
   { id: 'sam',    name: 'Sam',    avatar: '🐸', bio: '13, draws comics at lunch',
-    favorites: ['comics'],            meh: ['movies', 'music'] },
+    favorites: ['comics'],            meh: ['movies', 'music'],  clue: 'comics' },
   { id: 'riley',  name: 'Riley',  avatar: '🦄', bio: '13, movie night every Friday',
-    favorites: ['movies', 'food'],    meh: ['music', 'comics'] },
+    favorites: ['movies', 'food'],    meh: ['music', 'comics'],  clue: 'movies' },
   { id: 'devon',  name: 'Devon',  avatar: '🐯', bio: '14, loves trying new snacks',
-    favorites: ['food'],              meh: ['sports', 'dance'] },
+    favorites: ['food'],              meh: ['sports', 'dance'],  clue: 'food' },
   { id: 'priya',  name: 'Priya',  avatar: '🐱', bio: '13, makes a playlist for everything',
-    favorites: ['music', 'comics'],   meh: ['dance', 'sports'] }
+    favorites: ['music', 'comics'],   meh: ['dance', 'sports'],  clue: 'music' }
 ];
 
 // ----------------------------------------------------------------- Messages

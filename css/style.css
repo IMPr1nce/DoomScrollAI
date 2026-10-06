@@ -211,9 +211,10 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 /* "Attention 60" sits on the left so it can't be confused with the Goal label on the right. */
 .meter__label { position: relative; display: flex; align-items: baseline; gap: 10px; font-weight: 700; margin-bottom: 4px; }
 
-/* "+17" / "−12" that floats up beside the attention number after each post. */
+/* "+17" / "−12" that floats up from the end of the attention bar after each post: that is where the
+   bar will grow or shrink. (ui.js sets left.) */
 .delta {
-  position: absolute; top: -2px;
+  position: absolute; top: -6px; z-index: 1;
   padding: 0 9px; border-radius: 999px;
   font-size: 16px; font-weight: 800; line-height: 1.5;
   pointer-events: none;
@@ -335,6 +336,85 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 
 .card--compact .card__afk-label { font-size: 24px; }
 
+/* ---------------------------------------------------- Learned counts and the bio-clue star
+   Every topic button shows what the player has seen that person do with it ("4/5" = liked 4 of the 5
+   times it was shown), and the topic their bio hints at wears a star. Words and shapes, not color. */
+.topic-btn { position: relative; }
+.topic-btn__count { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; pointer-events: none; }
+.topic-btn__clue {
+  position: absolute; top: -11px; left: -7px;
+  font-size: 20px; line-height: 1; color: #d99a00;
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff;
+  pointer-events: none;
+}
+/* Grid layout: the count is a small badge on the corner, so the buttons don't get taller. Untried
+   topics show no badge here (on the radar they show "?"). */
+.topics .topic-btn__count {
+  position: absolute; top: -10px; right: -5px;
+  padding: 0 6px; border-radius: 999px; line-height: 1.15;
+  background: #fff; border: 2px solid var(--topic-color); color: var(--ink);
+}
+.topics .topic-btn--untried .topic-btn__count { display: none; }
+
+/* ----------------------------------------------------- Radar layout (TOPIC_LAYOUT 'radar')
+   The person's info on the left, the radar on the right with the six buttons at its corners.
+   Two radii in pixels (cqw/cqh are % of the radar box's width/height):
+     --ry (down) from the height: a flat-topped hexagon is 1.73 ry + one button tall.
+     --rx (across) from the width: 2 rx + one button wide. It never goes below --rx-min (about one
+          button width), because the two buttons in the top row (and the bottom row) are rx apart.
+   So a short window makes the hexagon a little wider than tall instead of piling buttons together,
+   and a big screen gets a regular hexagon (down is capped at across).
+   The SVG and the buttons both use --rx/--ry, so they always line up. */
+.card--radar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  grid-template-rows: auto auto auto 1fr;
+  column-gap: 14px;
+}
+.card--radar > * { grid-column: 1; min-width: 0; }
+.card--radar > .radar { grid-column: 2; grid-row: 1 / -1; }
+.card--large.card--radar { max-width: 760px; }
+.card--large .radar { min-height: 236px; }
+
+.radar {
+  position: relative; container-type: size; min-height: 0;
+  /* The room one button needs: --btn-w across (its width + a little air), --btn-h down, and --rx-min,
+     the smallest across-radius that keeps the top two buttons apart. The narrow-window layout below
+     swaps in smaller numbers for its narrower buttons. */
+  --btn-w: 108px; --btn-h: 50px; --rx-min: 104px;
+  /* down: fits the height, but never more than across (no tall, skinny hexagons on big screens) */
+  --ry: min((100cqh - var(--btn-h)) / 1.75, max((100cqw - var(--btn-w)) / 2, var(--rx-min)));
+  /* across: fits the width, at most 1.35x down, at least --rx-min */
+  --rx: max(min((100cqw - var(--btn-w)) / 2, (100cqh - var(--btn-h)) / 1.75 * 1.35), var(--rx-min));
+}
+.radar__svg {
+  position: absolute; left: 50%; top: 50%;
+  width: calc(var(--rx) * 2); height: calc(var(--ry) * 2);            /* the viewBox (-R..R) stretches to fit */
+  transform: translate(-50%, -50%); overflow: visible;
+}
+.radar__svg * { vector-effect: non-scaling-stroke; }                   /* lines keep their width when stretched */
+.radar__ring, .radar__spoke { fill: none; stroke: #e2def2; stroke-width: 1.5; }
+.radar__spoke--untried { stroke: #cdc7e3; stroke-dasharray: 3 4; }
+.radar__learned { fill: rgba(91, 61, 245, 0.12); stroke: rgba(91, 61, 245, 0.45); stroke-width: 1.5; stroke-linejoin: round; }
+.radar__spike { stroke-width: 7; stroke-linecap: round; }
+.radar__halo { stroke: #fff; stroke-width: 15; stroke-linecap: round; }
+.radar__dot  { stroke-width: 10; stroke-linecap: round; }
+
+.card--radar .topic-btn--radar {
+  position: absolute; z-index: 1;
+  left: calc(50% + var(--dx) * var(--rx));
+  top: calc(50% + var(--dy) * var(--ry));
+  transform: translate(-50%, -50%);
+  display: grid; grid-template-columns: auto auto; column-gap: 5px;
+  justify-items: center; align-items: center;
+  min-width: 96px; min-height: 0; padding: 3px 8px 4px;
+  font-size: 16px; line-height: 1.15;
+  border-width: 2px; border-radius: 14px;
+}
+.card--radar .topic-btn--radar .topic-btn__emoji { font-size: 22px; }
+.card--radar .topic-btn--radar .topic-btn__count { grid-column: 1 / -1; color: var(--muted); }
+.card--radar .topic-btn--radar:active:not(:disabled) { transform: translate(-50%, -50%) scale(0.95); }
+
 /* AFK cover */
 .card__afk {
   display: none;
@@ -382,12 +462,13 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 .timebar { width: 100%; max-width: 1500px; height: 8px; margin: 6px 0 0; border-radius: 999px; background: #e0dcf3; overflow: hidden; }
 .timebar__fill { height: 100%; width: 0; background: var(--primary); }
 
-/* 3 columns x 2 rows. minmax(0, 1fr) lets cells shrink below their content, and flex: 1
-   makes the board take all the height left under the HUD, so the page never scrolls. */
+/* --cols columns x 2 rows (ui.mountCards sets --cols: 2 for four people, 3 for six). minmax(0, 1fr)
+   lets cells shrink below their content, and flex: 1 makes the board take all the height left under
+   the HUD, so the page never scrolls. */
 .board {
   flex: 1; min-height: 0; width: 100%; max-width: 1500px; margin-top: 6px;
   display: grid; gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
 }
 
@@ -405,7 +486,7 @@ body.guarded .big__actions .btn { opacity: 0.55; }
   animation: pop 0.3s ease-out;
 }
 .overlay__panel h2 { margin: 0 0 8px; font-size: 32px; }
-.overlay__panel p { margin: 0 0 22px; font-size: 20px; }
+.overlay__panel p { margin: 0 0 22px; font-size: 20px; white-space: pre-line; }   /* keeps "\n" line breaks */
 .overlay__buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
 /* ------------------------------------------------------------------ Banner */
@@ -539,34 +620,47 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 .feed__item--no { font-size: 20px; opacity: 0.32; filter: grayscale(1); }
 .feed__more, .feed__none { font-size: 16px; color: var(--muted); align-self: center; }
 
-/* The tastes chart: two bars per topic, side by side. */
+/* The tastes radar: real tastes at the start (dashed) and the end (filled) of the round, and, beside
+   it, what the player learned (the same picture as on the card during play). With the interests radar
+   (--pair) it is two radars drawn like the card's instead: the start (the radar the player used) and
+   the end. */
 .tastebox { flex: 1; display: flex; flex-direction: column; }
-.chart { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 8px; }
-.chart__group {
-  min-width: 0; padding: 6px 2px 4px;
+.tastes__row { flex: 1; min-height: 228px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 8px; }
+.tastes__row--pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.rchart-wrap { display: flex; flex-direction: column; min-height: 0; }
+.rchart {
+  flex: 1; position: relative; container-type: size; min-height: 0;
+  /* a regular hexagon here (labels are small): labels sit at 1.24 r; they are ~80px wide, ~46px tall */
+  --r: min((100cqh - 50px) / 2.15, (100cqw - 84px) / 2.48);
+  --rx: var(--r); --ry: var(--r);
+}
+/* in the pair, each corner label is only a number under the emoji (~44px wide), so the radar can be bigger */
+.tastes__row--pair .rchart { --r: min((100cqh - 50px) / 2.15, (100cqw - 50px) / 2.48); }
+.rchart__caption { margin: 0; text-align: center; font-size: 16px; font-weight: 700; color: var(--muted); }
+.rchart__label {
+  position: absolute; z-index: 1;
+  left: calc(50% + var(--dx) * var(--r) * 1.24); top: calc(50% + var(--dy) * var(--r) * 1.24);
+  transform: translate(-50%, -50%);
   display: flex; flex-direction: column; align-items: center;
-  border: 2px solid transparent; border-radius: 12px;
+  padding: 0 5px; border: 2px solid transparent; border-radius: 10px;
+  line-height: 1.1; white-space: nowrap;
 }
-.chart__group--top { background: #fff8dc; border-color: #ffd54a; }   /* the topic you showed most */
-.chart__bars { width: 100%; height: 150px; display: flex; align-items: flex-end; justify-content: center; gap: 4px; }
-.bar {
-  width: 22px; min-height: 3px;
-  height: calc(var(--v, 0) * 100%);
-  border: 2px solid var(--color); border-radius: 6px 6px 0 0;
-  transition: height 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+.rchart__label--top { background: #fff8dc; border-color: #ffd54a; }   /* the topic you showed most */
+.rchart__emoji { font-size: 22px; }
+.rchart__nums { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.radar__start { fill: none; stroke: #7a7891; stroke-width: 2; stroke-dasharray: 5 4; stroke-linejoin: round; }
+.radar__end {
+  fill: rgba(91, 61, 245, 0.2); stroke: var(--primary); stroke-width: 2.5; stroke-linejoin: round;
+  animation: radarIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;            /* grows out from the middle */
 }
-.bar--start { background: repeating-linear-gradient(135deg, var(--color) 0 3px, #fff 3px 7px); }  /* striped = before */
-.bar--end   { background: var(--color); }                                                        /* solid = after  */
-.chart__emoji { margin-top: 4px; font-size: 24px; line-height: 1.2; }
-.chart__nums { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .legend { margin: 8px 0 4px; font-size: 16px; color: var(--muted); }
 .legend__swatch {
   display: inline-block; width: 18px; height: 14px; vertical-align: -2px;
   border: 2px solid #555; border-radius: 3px;
 }
-.legend__swatch--start { background: repeating-linear-gradient(135deg, #555 0 3px, #fff 3px 7px); }
-.legend__swatch--end   { background: #555; }
+.legend__swatch--start { background: transparent; border: 2px dashed #7a7891; }
+.legend__swatch--end   { background: rgba(91, 61, 245, 0.2); border-color: var(--primary); }
 
 /* Variety: two horizontal bars, first half vs second half. */
 .vrow { display: grid; grid-template-columns: 104px 1fr 44px 138px; align-items: center; gap: 8px; margin: 4px 0; font-size: 16px; }
@@ -621,6 +715,26 @@ body.guarded .big__actions .btn { opacity: 0.55; }
   #btn-skip { margin-top: 2px; }
 }
 
+/* ------------------------------------------------ Narrower windows, radar layout
+   Between ~1000 and 1180px wide (a small laptop, a split screen, a preview pane) the usual buttons don't
+   fit around a radar beside the person's info. So each button stacks its emoji over its word, which is
+   narrow enough, and the board still fits without scrolling. (1280px and wider, including the 1366px
+   target, never get here.) Below 1000px the radar goes under the info and the page scrolls a little. */
+@media (min-width: 1001px) and (max-width: 1180px) {
+  .board--radar .card--radar { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); column-gap: 10px; }
+  .board--radar .radar { --btn-w: 84px; --btn-h: 72px; --rx-min: 80px; }
+  .board--radar .card--interests .radar { --btn-h: 56px; }          /* no "4/5" row: shorter buttons */
+  .board--radar .topic-btn--radar { grid-template-columns: auto; row-gap: 0; min-width: 74px; padding: 2px 6px 3px; line-height: 1.1; }
+  .board--radar .topic-btn--radar .topic-btn__emoji { font-size: 20px; }
+  /* the info column is narrow: a message may take two lines, and the status chip its own line */
+  .board--radar .bubble { min-height: 48px; font-size: 16px; }
+  .board--radar .meter__label { flex-wrap: wrap; }
+}
+@media (max-width: 1000px) {
+  .board--radar .card--radar { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 240px; }
+  .board--radar .card--radar > .radar { grid-column: 1; grid-row: 4; }
+}
+
 /* ---------------------------------------------------- Narrow windows (fallback)
    The game is built for 1366px wide, but a smaller window (a split screen, a small laptop,
    browser zoom) shouldn't break. Below ~1000px the board becomes 2 columns and the page scrolls. */
@@ -639,6 +753,13 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 @media (max-width: 640px) {
   .board { grid-template-columns: 1fr; }
   .banner span { font-size: 40px; padding: 10px 24px; }
+}
+
+/* Browsers without container units (Chrome before 105) get fixed radar sizes instead. This block must
+   stay below every rule that sets --rx, --ry or --r, so it wins over them. */
+@supports not (width: 1cqh) {
+  .radar  { --rx: 108px; --ry: 92px; }
+  .rchart, .tastes__row--pair .rchart { --r: 84px; }
 }
 
 /* --------------------------------------------------------------- Animations */
@@ -677,6 +798,9 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 @keyframes stageIn {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: none; }
+}
+@keyframes radarIn {
+  from { transform: scale(0); }        /* SVG transforms start at the viewBox origin: the radar's middle */
 }
 @keyframes growX {
   from { width: 0; }

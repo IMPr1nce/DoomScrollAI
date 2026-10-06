@@ -117,7 +117,7 @@ async function main() {
     await b.goto(ROOT + 'sim.html');
     await b.eval("document.getElementById('runs').value = 60; document.getElementById('run').click(); new Promise(function (r) { setTimeout(r, 4500); })");
     var goals = await b.eval("[].slice.call(document.querySelectorAll('ul.goals li')).map(function (l) { return l.textContent.trim(); })");
-    check('sim.html: all balance goals pass', goals.length === 6 && goals.every(function (g) { return g.charAt(0) === '✔'; }), goals.join(' | '));
+    check('sim.html: all balance goals pass', goals.length >= 6 && goals.every(function (g) { return g.charAt(0) === '✔'; }), goals.join(' | '));
 
     // ---- 2. PLAY mode (what students get): the easy console doors are closed, and the game starts
     b.problems.length = 0;
@@ -136,16 +136,74 @@ async function main() {
     check('play mode: the game still starts', play.tutorial === 'tutorial', JSON.stringify(play));
     check('play mode: no console errors', b.problems.length === 0, b.problems.join(' | '));
 
-    // ---- 3. DEV mode: whole rounds with different robot players, through every results step
+    // ---- 3. The radar board (the default: 4 people, radars showing each person's interests)
+    // In three steps: skip the tutorials and measure the board; measure it again in a 1024x768 window
+    // (a small laptop, or the preview pane); then start the round and push one liked post on the first
+    // card. The round keeps running for the dev checks below.
+    async function runBoard() {
+      var out = await b.eval("(async function () {" +
+        "var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+        "document.getElementById('btn-start').click(); await sleep(150); document.getElementById('btn-skip').click(); await sleep(900);" +
+        "var cards = [].slice.call(document.querySelectorAll('#main-grid .card'));" +
+        "var rect = function (e) { return e.getBoundingClientRect(); };" +
+        // kept on window so the later steps can call them again
+        "window.__measure = function () { var overlaps = 0, outside = 0;" +
+        "  cards.forEach(function (c) { var cr = rect(c); var bs = [].slice.call(c.querySelectorAll('.topic-btn')).map(rect);" +
+        "    bs.forEach(function (r, i) { if (r.left < cr.left - 1 || r.right > cr.right + 1 || r.top < cr.top - 1 || r.bottom > cr.bottom + 1) outside++;" +
+        "      bs.slice(i + 1).forEach(function (q) { var w = Math.min(r.right, q.right) - Math.max(r.left, q.left), h = Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top); if (w > 2 && h > 2) overlaps++; }); }); });" +
+        "  return { overlaps: overlaps, outside: outside, fits: document.documentElement.scrollHeight <= innerHeight }; };" +
+        // where the first card's spikes end (the radar's drawing), so we can tell whether it ever changes
+        "window.__tips = function () { return [].slice.call(cards[0].querySelectorAll('.radar__spike')).map(function (l) { return l.getAttribute('x2') + ',' + l.getAttribute('y2'); }).join(' '); };" +
+        "var out = { cards: cards.length, radarCards: document.querySelectorAll('#main-grid .card--radar').length, buttons: document.querySelectorAll('#main-grid .topic-btn').length," +
+        "  stars: document.querySelectorAll('#main-grid .topic-btn__clue').length, counts: document.querySelectorAll('#main-grid .topic-btn__count').length," +
+        "  allUnknown: [].slice.call(document.querySelectorAll('#main-grid .topic-btn__count')).every(function (c) { return c.textContent === '?'; })," +
+        "  spikesAtStart: cards.map(function (c) { return c.querySelectorAll('.radar__spike').length; }), big: window.__measure() };" +
+        // with all six topics known, spike k is topic k: each must be as long as that starting taste,
+        // and the longest must point at one of the person's favorites
+        "out.spikesMatchInterests = cards.every(function (c, i) { var vp = DS.game.current().vps[i];" +
+        "  var lens = [].slice.call(c.querySelectorAll('.radar__spike')).map(function (l) { return Math.hypot(+l.getAttribute('x2'), +l.getAttribute('y2')) / DS.radar.R; });" +
+        "  var top = DS.TOPIC_IDS[lens.indexOf(Math.max.apply(null, lens))];" +
+        "  return lens.length === 6 && DS.VP_DEFS[i].favorites.indexOf(top) !== -1 &&" +
+        "    lens.every(function (len, k) { return Math.abs(len - vp.tasteSnapshotStart[DS.TOPIC_IDS[k]]) < 0.01; }); });" +
+        "out.aria = cards[0].querySelector('.topic-btn').getAttribute('aria-label');" +
+        "return out; })()");
+      await b.viewport(1024, 768); await sleep(300);
+      out.small = await b.eval("window.__measure()");
+      await b.viewport(1366, 600); await sleep(300);
+      var after = await b.eval("(async function () {" +
+        "var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+        "await sleep(300); [].slice.call(document.querySelectorAll('button')).filter(function (x) { return x.textContent.trim() === 'Go!'; })[0].click(); await sleep(100);" +
+        "var card = DS.game.current().cards[0].el, vp = DS.game.current().vps[0];" +
+        "var before = window.__tips(); DS.rng.use(function () { return 0; }); card.querySelector('.topic-btn').click(); DS.rng.reset(); await sleep(50);" +
+        "return { tastesMoved: JSON.stringify(vp.tastes) !== JSON.stringify(vp.tasteSnapshotStart), radarUnchanged: window.__tips() === before," +
+        "  countAfterPush: card.querySelector('.topic-btn__count') ? card.querySelector('.topic-btn__count').textContent : null," +
+        "  spikesAfterPush: card.querySelectorAll('.radar__spike').length }; })()");
+      Object.keys(after).forEach(function (k) { out[k] = after[k]; });
+      return out;
+    }
     b.problems.length = 0;
     await b.goto(ROOT + 'index.html?dev=1'); await sleep(400);
+    var radar = await runBoard();
+    check('radar board: 4 people, each with a radar of 6 buttons, in a 2x2 grid that fits the window',
+          radar.cards === 4 && radar.radarCards === 4 && radar.buttons === 24 && radar.big.fits, JSON.stringify(radar));
+    check('radar board: no button overlaps another or sticks out of its card', radar.big.overlaps === 0 && radar.big.outside === 0, JSON.stringify(radar.big));
+    check('radar board: a 1024x768 window fits too, with no overlaps (the narrow-button layout)',
+          radar.small.fits && radar.small.overlaps === 0 && radar.small.outside === 0, JSON.stringify(radar.small));
+    check('radar board: every radar shows its person\'s interests from the start, longest spike on a favorite (no stars, no counts)',
+          radar.spikesAtStart.every(function (n) { return n === 6; }) && radar.spikesMatchInterests && radar.stars === 0 && radar.counts === 0, JSON.stringify(radar));
+    check('radar board: screen readers get the interests in words', /^Show Sports to Maya\. They like it about \d times? in 10\.$/.test(radar.aria), radar.aria);
+    check('radar board: the radar never changes during the round, though tastes drift (the narrowing stays hidden)',
+          radar.tastesMoved && radar.radarUnchanged && radar.spikesAfterPush === 6, JSON.stringify(radar));
+
+    // ---- 4. DEV mode: whole rounds with different robot players, through every results step
     var bots = ['learner', 'spam', 'none'];                       // 'none' = never click: the empty-data case
     for (var i = 0; i < bots.length; i++) {
       var bot = bots[i];
       var phase = await b.eval("DS.dev.play({ bot: '" + bot + "' })");
       check('round with the "' + bot + '" bot ends on the results screen', phase === 'reveal', phase);
       var steps = await b.eval("DS.dev.measureReveal()");
-      check('  all 8 results steps fit a 600px-tall window (' + bot + ')', steps.length === 8 && steps.every(function (s) { return /fits$/.test(s); }), steps.join(' | '));
+      check('  every results step (score, each person, big picture) fits a 600px-tall window (' + bot + ')',
+            steps.length === radar.cards + 2 && steps.every(function (s) { return /fits$/.test(s); }), steps.join(' | '));
       // Every sentence on every step must be real text: no "undefined", "NaN", "null" or "[object".
       var texts = await b.eval("(async function () { var out = []; var st = [].slice.call(document.querySelectorAll('#reveal-steps .step'));" +
         "for (var k = 0; k < st.length; k++) { st[k].click(); await new Promise(function (r) { setTimeout(r, 250); }); out.push(document.getElementById('reveal-stage').innerText); } return out; })()");
@@ -158,7 +216,7 @@ async function main() {
       }
     }
 
-    // ---- 4. The CSV that the real Download button produces
+    // ---- 5. The CSV that the real Download button produces
     var csv = await b.eval("(async function () {" +
       "var name = null, blob = null, oc = URL.createObjectURL, ok = HTMLAnchorElement.prototype.click;" +
       "URL.createObjectURL = function (x) { blob = x; return oc.call(URL, x); }; HTMLAnchorElement.prototype.click = function () { name = this.download; };" +
@@ -171,8 +229,11 @@ async function main() {
     check('CSV: header is the agreed columns', lines[0] === csv.columns.join(','), lines[0]);
     check('CSV: has rows for pushes, round starts and round ends', ['push', 'round_start', 'round_end'].every(function (e) { return lines.some(function (l) { return l.split(',')[4] === e; }); }), 'missing an event type');
     check('CSV: one session id on every row', lines.slice(1).every(function (l) { return l.split(',')[0] === csv.session; }), 'mixed session ids');
+    var starts = lines.filter(function (l) { return l.split(',')[4] === 'round_start'; });
+    check('CSV: round_start rows say which version was played ("radar-interests/4")',
+          starts.length > 0 && starts.every(function (l) { return /,radar-interests\/4$/.test(l); }), starts.slice(0, 2).join(' | '));
 
-    // ---- 5. Loopholes: frantic clicks, the pause state machine, stale timers
+    // ---- 6. Loopholes: frantic clicks, the pause state machine, stale timers
     var loop = await b.eval("(async function () {" +
       "var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
       "var btn = function (t) { return [].slice.call(document.querySelectorAll('button')).filter(function (x) { return x.textContent.trim() === t; })[0]; };" +
@@ -203,11 +264,41 @@ async function main() {
       "out.staleTimerDropped = document.body.dataset.screen === 'main' && title() === 'Keep everyone scrolling';" +
       // results screen: an early click is ignored, a later one works
       "await DS.dev.play({ bot: 'learner' }); DS.ui.armGuard(); press('See what happened →'); await sleep(30);" +
-      "out.earlyResultsClickIgnored = document.getElementById('reveal-progress').textContent === '1 of 8';" +
-      "await sleep(600); press('See what happened →'); await sleep(60); out.laterResultsClickWorks = document.getElementById('reveal-progress').textContent === '2 of 8';" +
+      "out.earlyResultsClickIgnored = /^1 of /.test(document.getElementById('reveal-progress').textContent);" +
+      "await sleep(600); press('See what happened →'); await sleep(60); out.laterResultsClickWorks = /^2 of /.test(document.getElementById('reveal-progress').textContent);" +
       "return out; })()");
     Object.keys(loop).forEach(function (k) { check('loophole: ' + k, loop[k] === true, k + ' was ' + loop[k]); });
     check('no console errors in the whole dev run', b.problems.length === 0, b.problems.join(' | '));
+
+    // ---- 7. The other versions a playtest might use. First: radars that only show what the player has
+    // seen (?radar=learned): a star from the bio, "?" until tried, and a spike only after a push.
+    b.problems.length = 0;
+    await b.goto(ROOT + 'index.html?dev=1&radar=learned'); await sleep(400);
+    var learned = await runBoard();
+    check('learned radar: fits the window (and a 1024x768 one), with no overlapping buttons',
+          learned.cards === 4 && learned.big.fits && learned.big.overlaps === 0 && learned.big.outside === 0 &&
+          learned.small.fits && learned.small.overlaps === 0 && learned.small.outside === 0, JSON.stringify(learned));
+    check('learned radar: every person has a bio-clue star, every count starts as "?", and no spikes yet',
+          learned.stars === 4 && learned.counts === 24 && learned.allUnknown && learned.spikesAtStart.every(function (n) { return n === 0; }), JSON.stringify(learned));
+    check('learned radar: a push updates that topic\'s count and draws its spike', learned.countAfterPush === '1/1' && learned.spikesAfterPush === 1, JSON.stringify(learned));
+    var learnedEnd = await b.eval("(async function () { var out = {}; out.phase = await DS.dev.play({ bot: 'learner' }); out.steps = await DS.dev.measureReveal(); return out; })()");
+    check('learned radar: the round ends on a results screen whose steps all fit',
+          learnedEnd.phase === 'reveal' && learnedEnd.steps.length === 6 && learnedEnd.steps.every(function (s) { return /fits$/.test(s); }), JSON.stringify(learnedEnd));
+    check('learned radar: no console errors', b.problems.length === 0, b.problems.join(' | '));
+
+    // Then: six people, grid buttons (?profiles=6&layout=grid)
+    b.problems.length = 0;
+    await b.goto(ROOT + 'index.html?dev=1&profiles=6&layout=grid'); await sleep(400);
+    var six = await b.eval("(async function () {" +
+      "document.getElementById('btn-start').click(); await new Promise(function (r) { setTimeout(r, 150); }); document.getElementById('btn-skip').click(); await new Promise(function (r) { setTimeout(r, 900); });" +
+      "var out = { cards: document.querySelectorAll('#main-grid .card').length, radarCards: document.querySelectorAll('#main-grid .card--radar').length, stars: document.querySelectorAll('#main-grid .topic-btn__clue').length," +
+      "  fits: document.documentElement.scrollHeight <= innerHeight, clipped: [].slice.call(document.querySelectorAll('#main-grid .card')).filter(function (c) { return c.scrollHeight > c.clientHeight + 1; }).length };" +
+      "out.phase = await DS.dev.play({ bot: 'learner' }); out.steps = await DS.dev.measureReveal(); return out; })()");
+    check('six-person grid: 6 cards, grid buttons with stars, fits the window, nothing clipped',
+          six.cards === 6 && six.radarCards === 0 && six.stars === 6 && six.fits && six.clipped === 0, JSON.stringify(six));
+    check('six-person grid: the round ends on a results screen whose 8 steps all fit',
+          six.phase === 'reveal' && six.steps.length === 8 && six.steps.every(function (s) { return /fits$/.test(s); }), JSON.stringify(six.steps));
+    check('six-person grid: no console errors', b.problems.length === 0, b.problems.join(' | '));
   } catch (e) {
     failures++;
     console.log('FAIL  the check run itself broke: ' + (e && e.stack || e));

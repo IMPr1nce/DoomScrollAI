@@ -5,8 +5,8 @@
  *   node tests/run-node.js sim      run the balance simulator (same output as sim.html, as text)
  *
  * Optional. The game itself needs no Node and no install: you only need this if you like a
- * terminal. It works because the model files (config, content, vp, metrics, logger and the
- * wording half of reveal.js) never touch the page. They only need a global called `window`,
+ * terminal. It works because the model files (config, content, vp, metrics, logger, the geometry in
+ * radar.js and the wording half of reveal.js) never touch the page. They only need a global called `window`,
  * so we point that at Node's global object, then run the same files the browser runs, in the
  * same order as tests.html.
  */
@@ -23,7 +23,7 @@ function load(file) {
   vm.runInThisContext(fs.readFileSync(path.join(ROOT, file), 'utf8'), { filename: file });
 }
 
-['js/config.js', 'js/content.js', 'js/vp.js', 'js/metrics.js', 'js/logger.js', 'js/reveal.js', 'sim/sim.js'].forEach(load);
+['js/config.js', 'js/content.js', 'js/vp.js', 'js/metrics.js', 'js/logger.js', 'js/radar.js', 'js/reveal.js', 'sim/sim.js'].forEach(load);
 
 if (process.argv[2] === 'sim') {
   var out = global.DS.sim.runAll({ runs: global.DS.CONFIG.SIM_RUNS });

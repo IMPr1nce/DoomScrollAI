@@ -232,40 +232,114 @@
     return box;
   }
 
+  // A radar's corner labels: HTML placed around the SVG with the same cqmin rule (see style.css).
+  function cornerLabel(i, n, top, emoji, text) {
+    var d = DS.radar.direction(i, n);
+    var lab = h('div', 'rchart__label' + (top ? ' rchart__label--top' : ''));
+    lab.style.setProperty('--dx', d.x.toFixed(4));
+    lab.style.setProperty('--dy', d.y.toFixed(4));
+    lab.appendChild(h('span', 'rchart__emoji', emoji));
+    lab.appendChild(h('span', 'rchart__nums', text));
+    return lab;
+  }
+
+  // One radar drawn like the radar on the card: a spike per topic, and the % at each corner.
+  function spikeChart(tastes, caption, highlight, ariaLabel) {
+    var n = DS.TOPICS.length;
+    var wrap = h('div', 'rchart-wrap');
+    var chart = h('div', 'rchart');
+    chart.setAttribute('role', 'img');
+    chart.setAttribute('aria-label', ariaLabel + ': ' + DS.TOPICS.map(function (t) {
+      return t.label + ' ' + Math.round(100 * tastes[t.id]) + ' percent';
+    }).join(', '));
+    var f = DS.radar.frame(n);
+    var layer = DS.radar.group('radar__learned-layer');
+    f.svg.appendChild(layer);
+    DS.radar.spikes(layer, DS.TOPICS.map(function (t) { return tastes[t.id]; }),
+                           DS.TOPICS.map(function (t) { return t.color; }));
+    chart.appendChild(f.svg);
+    DS.TOPICS.forEach(function (t, i) {
+      chart.appendChild(cornerLabel(i, n, highlight.indexOf(t.id) !== -1, t.emoji, String(Math.round(100 * tastes[t.id]))));
+    });
+    wrap.appendChild(chart);
+    wrap.appendChild(h('p', 'rchart__caption', caption));
+    return wrap;
+  }
+
+  // The person's REAL tastes, start vs end: the filter-bubble picture. Drawn one of two ways, to match
+  // what the radar on the card showed during play (RADAR_SHOWS):
+  //   interests  two radars drawn exactly like the card's: the start (the radar the player used) and the
+  //              end. The same picture, before and after, so the player can see that their own feed
+  //              shrank the shape into one spike.
+  //   learned    start (dashed) vs end (filled) in one radar, and beside it what the player learned: the
+  //              same spikes they saw on the card. "Your profile of Maya said Sports only... and your
+  //              feed made it true."
   function renderTastes(p) {
     var box = h('section', 'panel tastebox');
     box.appendChild(h('h3', 'panel__title', 'What ' + p.name + ' likes'));
     box.appendChild(h('p', 'panel__hint', 'Chance they\'d like each topic, in %.'));
 
-    var chart = h('div', 'chart');
-    chart.setAttribute('role', 'img');
-    var spoken = DS.TOPICS.map(function (t) {
-      return t.label + ' ' + Math.round(100 * p.tastesStart[t.id]) + ' to ' + Math.round(100 * p.tastesEnd[t.id]) + ' percent';
-    });
-    chart.setAttribute('aria-label', 'Chance ' + p.name + ' would like each topic, start to end: ' + spoken.join(', '));
-
+    var n = DS.TOPICS.length;
     // Highlight what was shown most, but only if something really stood out (shown 2+ times).
     // Several topics tied is fine, they all light up. If every post was a different topic,
     // nothing was "most shown", so nothing is highlighted.
     var highlight = p.topCount >= 2 ? p.topTopics : [];
-    var bars = [];
-    DS.TOPICS.forEach(function (t) {
-      var start = p.tastesStart[t.id], end = p.tastesEnd[t.id];
-      var group = h('div', 'chart__group' + (highlight.indexOf(t.id) !== -1 ? ' chart__group--top' : ''));
-      var area = h('div', 'chart__bars');
-      var s = h('div', 'bar bar--start'), e = h('div', 'bar bar--end');
-      s.style.setProperty('--color', t.color);
-      e.style.setProperty('--color', t.color);
-      s.style.setProperty('--v', 0);                       // start flat, then grow (see below)
-      e.style.setProperty('--v', 0);
-      area.appendChild(s); area.appendChild(e);
-      group.appendChild(area);
-      group.appendChild(h('div', 'chart__emoji', t.emoji));
-      group.appendChild(h('div', 'chart__nums', Math.round(100 * start) + ' → ' + Math.round(100 * end)));
-      chart.appendChild(group);
-      bars.push([s, start], [e, end]);
+    var row = h('div', 'tastes__row');
+
+    if (ui.showsInterests()) {
+      row.classList.add('tastes__row--pair');
+      row.appendChild(spikeChart(p.tastesStart, 'Start (your radar)', [], 'Chance ' + p.name + ' would like each topic at the start'));
+      row.appendChild(spikeChart(p.tastesEnd, 'End of round', highlight, 'Chance ' + p.name + ' would like each topic at the end'));
+      box.appendChild(row);
+      if (highlight.length) box.appendChild(h('p', 'legend', 'Highlighted: what you showed most.'));
+      box.appendChild(h('p', 'panel__line', text.tasteLine(p)));
+      return box;
+    }
+
+    // ---- the real tastes
+    var realWrap = h('div', 'rchart-wrap');
+    var real = h('div', 'rchart');
+    real.setAttribute('role', 'img');
+    real.setAttribute('aria-label', 'Chance ' + p.name + ' would like each topic, start to end: ' + DS.TOPICS.map(function (t) {
+      return t.label + ' ' + Math.round(100 * p.tastesStart[t.id]) + ' to ' + Math.round(100 * p.tastesEnd[t.id]) + ' percent';
+    }).join(', '));
+    var realFrame = DS.radar.frame(n);
+    realFrame.svg.appendChild(DS.radar.shape(DS.TOPICS.map(function (t) { return p.tastesStart[t.id]; }), 'radar__start'));
+    realFrame.svg.appendChild(DS.radar.shape(DS.TOPICS.map(function (t) { return p.tastesEnd[t.id]; }), 'radar__end'));
+    real.appendChild(realFrame.svg);
+    DS.TOPICS.forEach(function (t, i) {
+      real.appendChild(cornerLabel(i, n, highlight.indexOf(t.id) !== -1, t.emoji,
+        Math.round(100 * p.tastesStart[t.id]) + ' → ' + Math.round(100 * p.tastesEnd[t.id])));
     });
-    box.appendChild(chart);
+    realWrap.appendChild(real);
+    realWrap.appendChild(h('p', 'rchart__caption', 'Their real tastes'));
+    row.appendChild(realWrap);
+
+    // ---- what the player learned (their own pushes): spikes, "?" for never tried
+    var seenWrap = h('div', 'rchart-wrap');
+    var seen = h('div', 'rchart');
+    seen.setAttribute('role', 'img');
+    seen.setAttribute('aria-label', 'What you learned about ' + p.name + ': ' + DS.TOPICS.map(function (t) {
+      var o = p.observed[t.id];
+      return t.label + (o.tries ? ' liked ' + o.likes + ' of ' + o.tries : ' not tried');
+    }).join(', '));
+    var seenFrame = DS.radar.frame(n);
+    var layer = DS.radar.group('radar__learned-layer');
+    seenFrame.svg.appendChild(layer);
+    DS.radar.spikes(layer, DS.TOPICS.map(function (t) { return p.observed[t.id].estimate; }),
+                           DS.TOPICS.map(function (t) { return t.color; }));
+    DS.TOPICS.forEach(function (t, i) {
+      if (!p.observed[t.id].tries) seenFrame.spokes[i].classList.add('radar__spoke--untried');
+    });
+    seen.appendChild(seenFrame.svg);
+    DS.TOPICS.forEach(function (t, i) {
+      var o = p.observed[t.id];
+      seen.appendChild(cornerLabel(i, n, false, t.emoji, o.tries ? o.likes + '/' + o.tries : '?'));
+    });
+    seenWrap.appendChild(seen);
+    seenWrap.appendChild(h('p', 'rchart__caption', 'What you learned'));
+    row.appendChild(seenWrap);
+    box.appendChild(row);
 
     var legend = h('p', 'legend');
     legend.appendChild(h('span', 'legend__swatch legend__swatch--start'));
@@ -275,13 +349,6 @@
     if (highlight.length) legend.appendChild(document.createTextNode('   ·   Highlighted: what you showed most.'));
     box.appendChild(legend);
     box.appendChild(h('p', 'panel__line', text.tasteLine(p)));
-
-    // Grow the bars on the next frames (a CSS transition needs a starting value on screen first).
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () {
-        bars.forEach(function (b) { b[0].style.setProperty('--v', b[1]); });
-      });
-    });
     return box;
   }
 

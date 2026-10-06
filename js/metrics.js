@@ -92,6 +92,23 @@
              byTopic: byTopic, topTopic: topTopic, topCount: topCount };
   }
 
+  // What the PLAYER has seen, per topic: how often they showed it and how often it was liked. This is
+  // everything a real recommender knows about you, and it's what the radar draws during play (the
+  // hidden tastes never are). `estimate` is the spike length, smoothed by RADAR_SMOOTHING so that one
+  // lucky like doesn't look like a long track record. Untried topics get estimate null ("?"), never 0:
+  // "never tried" is not the same as "they hate it".
+  function observed(history) {
+    var S = C.RADAR_SMOOTHING;
+    var out = {};
+    DS.TOPIC_IDS.forEach(function (id) { out[id] = { tries: 0, likes: 0, estimate: null }; });
+    history.forEach(function (h) { out[h.topic].tries++; if (h.liked) out[h.topic].likes++; });
+    DS.TOPIC_IDS.forEach(function (id) {
+      var o = out[id];
+      if (o.tries) o.estimate = (o.likes + S) / (o.tries + 2 * S);
+    });
+    return out;
+  }
+
   // Topics a VP would still happily watch (taste at/above ENJOY_THRESHOLD).
   // Comparing this at the start and end of the round puts a plain number on
   // the filter bubble: "Maya used to enjoy 3 topics. Now she enjoys 1."
@@ -152,6 +169,8 @@
         tastesEnd: Object.assign({}, vp.tastes),
         enjoyedStart: enjoyedTopics(vp.tasteSnapshotStart).length,
         enjoyedEnd: enjoyedTopics(vp.tastes).length,
+        clue: vp.clue,
+        observed: observed(vp.history),        // what the player saw (the profile they built of this person)
         variety: {
           first: halves.first, second: halves.second,
           firstCount: halves.firstCount, secondCount: halves.secondCount,
@@ -190,6 +209,7 @@
     averageAttention: averageAttention,
     feedSummary: feedSummary,
     enjoyedTopics: enjoyedTopics,
+    observed: observed,
     buildReveal: buildReveal
   };
 })();

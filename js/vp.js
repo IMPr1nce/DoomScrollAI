@@ -76,6 +76,7 @@
     this.name = def.name;
     this.avatar = def.avatar;
     this.bio = def.bio;
+    this.clue = def.clue || null;   // the topic the bio hints at (shown as a star on the radar), or none
 
     // HIDDEN from the player during play. Only the reveal screen reads these.
     this.tastes = buildTastes(def);
@@ -344,8 +345,13 @@
   DS.VP = VP;
   DS.createVP = function (def) { return new VP(def); };
 
-  // The six VPs for the main game.
-  DS.createCast = function () { return DS.VP_DEFS.map(DS.createVP); };
+  // The people for the main game: the first PROFILE_COUNT in content.js.
+  DS.createCast = function () {
+    if (C.PROFILE_COUNT > DS.VP_DEFS.length) {
+      throw new Error('PROFILE_COUNT is ' + C.PROFILE_COUNT + ' but content.js only has ' + DS.VP_DEFS.length + ' people');
+    }
+    return DS.VP_DEFS.slice(0, C.PROFILE_COUNT).map(DS.createVP);
+  };
 
   // Alex, with the slower drain the tutorials use.
   DS.createTutorialVP = function () {
