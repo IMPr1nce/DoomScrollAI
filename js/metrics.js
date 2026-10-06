@@ -93,8 +93,8 @@
   }
 
   // What the PLAYER has seen, per topic: how often they showed it and how often it was liked. This is
-  // everything a real recommender knows about you, and it's what the radar draws during play (the
-  // hidden tastes never are). `estimate` is the spike length, smoothed by RADAR_SMOOTHING so that one
+  // everything a real recommender knows about you, and it's what the 'learned' radar draws during play
+  // (RADAR_SHOWS). `estimate` is the spike length, smoothed by RADAR_SMOOTHING so that one
   // lucky like doesn't look like a long track record. Untried topics get estimate null ("?"), never 0:
   // "never tried" is not the same as "they hate it".
   function observed(history) {

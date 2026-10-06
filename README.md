@@ -185,7 +185,9 @@ sim.html              open in Chrome: the balance simulator
 tests/                tests.js, plus optional tools: run-node.js (terminal runner), e2e.js (real-Chrome check),
                       dev-helpers.js (dev mode only)
 sim/sim.js            the simulator's engine (also page-free)
-CLAUDE.md             notes for future AI-assisted sessions
+steering/             how the project is meant to work, for anyone changing it (people or AI): start with
+                      steering/CLAUDE.md, then product.md, tech.md, structure.md, content.md, balance.md
+.claude/              launch.json (a local web server) and CLAUDE.md, which loads the steering docs into Claude Code
 ```
 
 Rules the code follows: plain HTML + CSS + vanilla JS; no modules, frameworks, build step or backend;
