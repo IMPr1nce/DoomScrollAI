@@ -45,7 +45,7 @@
       });
       return pick(best);
     },
-    // These two peek at the hidden tastes: "a player who already knows everyone".
+    // These two peek at the tastes: "a player who follows the interests radar" (or already knows everyone).
     spam: function (vp) {
       var best = DS.TOPIC_IDS[0];
       DS.TOPIC_IDS.forEach(function (id) { if (vp.tastes[id] > vp.tastes[best]) best = id; });

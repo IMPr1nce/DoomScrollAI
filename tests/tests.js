@@ -28,7 +28,8 @@
     LOW_ATTENTION_THRESHOLD: 25, FATIGUE_MESSAGE_MIN_COUNT: 2,
     HOOKED_WINDOW: 6, HOOKED_SHARE: 0.8, HOOKED_MESSAGE_CHANCE: 0.6,
     ENJOY_THRESHOLD: 0.45, LIKED_LOCKS_BUTTONS: true, RNG_SEED: null,
-    MESSAGE_NO_REPEAT: 4, TOPIC_MESSAGE_CHANCE: 0.4, REVEAL_TREND_DELTA: 0.15, REVEAL_LOW_VARIETY: 0.25
+    MESSAGE_NO_REPEAT: 4, TOPIC_MESSAGE_CHANCE: 0.4, REVEAL_TREND_DELTA: 0.15, REVEAL_LOW_VARIETY: 0.25,
+    PROFILE_COUNT: 6, RADAR_SMOOTHING: 1
   };
   var DEFAULTS = Object.assign(JSON.parse(JSON.stringify(C)), JSON.parse(JSON.stringify(PINNED)));
 
@@ -471,7 +472,7 @@
       var cast = DS.createCast();
       var log = [];
       for (var i = 0; i < 40; i++) {
-        var vp = cast[i % 6];
+        var vp = cast[i % cast.length];
         var r = vp.push(DS.TOPIC_IDS[(i * 5) % 6]);
         log.push(r.ok ? r.liked + r.message : 'x');
         vp.tick(1);
@@ -1066,6 +1067,89 @@
         var words = sentence.split(/\s+/).filter(Boolean).length;
         ok(words <= 24, 'sentence has ' + words + ' words (max 24): ' + sentence);
       });
+    });
+  });
+
+  // ================================================ 4 profiles, bio clues, the radar's numbers
+  test('content: with 4 or 6 profiles, the people in play love all six topics between them', function () {
+    [4, 6].forEach(function (n) {
+      DS.TOPIC_IDS.forEach(function (id) {
+        ok(DS.VP_DEFS.slice(0, n).some(function (d) { return d.favorites.indexOf(id) !== -1; }),
+           'with ' + n + ' profiles nobody loves ' + id + ' (reorder VP_DEFS in content.js)');
+      });
+    });
+  });
+
+  test('content: every main person has a bio clue that is one of their favorites; Alex has none', function () {
+    DS.VP_DEFS.forEach(function (d) {
+      ok(d.clue && d.favorites.indexOf(d.clue) !== -1, d.name + ' needs a clue that is one of their favorites');
+    });
+    eq(DS.createTutorialVP().clue, null, 'tutorial 1 is about learning from clicks alone');
+    eq(DS.createVP(DS.VP_DEFS[0]).clue, 'sports');
+  });
+
+  test('createCast uses the first PROFILE_COUNT people; asking for more than exist fails loudly', function () {
+    C.PROFILE_COUNT = 4;
+    eq(DS.createCast().map(function (v) { return v.id; }).join(','), 'maya,jordan,sam,riley');
+    C.PROFILE_COUNT = 6;
+    eq(DS.createCast().length, 6);
+    C.PROFILE_COUNT = 7;
+    var threw = false;
+    try { DS.createCast(); } catch (e) { threw = true; }
+    ok(threw, 'should throw for 7 profiles');
+  });
+
+  test('observed (the radar): tries and likes per topic; untried is null, never 0', function () {
+    var o = DS.metrics.observed([
+      { topic: 'sports', liked: true }, { topic: 'sports', liked: true }, { topic: 'sports', liked: false },
+      { topic: 'dance', liked: false }
+    ]);
+    eq(o.sports.tries, 3); eq(o.sports.likes, 2);
+    approx(o.sports.estimate, (2 + 1) / (3 + 2), 1e-12, '(likes + 1) / (tries + 2)');
+    approx(o.dance.estimate, 1 / 3, 1e-12, 'one skip is a weak "no", not a zero');
+    eq(o.music.tries, 0); eq(o.music.estimate, null, 'never tried = unknown, drawn as "?"');
+  });
+
+  test('observed (the radar): one lucky like cannot outgrow a long track record', function () {
+    var lucky = DS.metrics.observed([{ topic: 'dance', liked: true }]).dance.estimate;           // 1 of 1
+    var steady = DS.metrics.observed(Array.apply(null, Array(10)).map(function (_, i) {
+      return { topic: 'sports', liked: i !== 3 };                                                     // 9 of 10
+    })).sports.estimate;
+    ok(steady > lucky, '9 of 10 (' + steady.toFixed(2) + ') should beat 1 of 1 (' + lucky.toFixed(2) + ')');
+    C.RADAR_SMOOTHING = 0;
+    eq(DS.metrics.observed([{ topic: 'dance', liked: true }]).dance.estimate, 1, 'smoothing 0 = the raw rate');
+  });
+
+  test('reveal facts carry the bio clue and what the player observed', function () {
+    C.PROFILE_COUNT = 4;
+    var cast = DS.createCast();
+    DS.rng.use(LIKE);
+    cast[0].push('sports');
+    var p = DS.metrics.buildReveal(cast, 90).vps[0];
+    eq(p.clue, 'sports');
+    eq(p.observed.sports.tries, 1); eq(p.observed.sports.likes, 1); eq(p.observed.food.estimate, null);
+    eq(DS.metrics.buildReveal(cast, 90).total, 4);
+  });
+
+  test('radar geometry: a flat-topped hexagon, Sports upper left, then clockwise', function () {
+    var deg = function (i) { var d = DS.radar.direction(i, 6); return Math.round(Math.atan2(d.y, d.x) * 180 / Math.PI); };
+    eq([0, 1, 2, 3, 4, 5].map(deg).join(','), '-120,-60,0,60,120,180',
+       'Sports upper left, Dance upper right, Music right, Comics lower right, Movies lower left, Food left');
+    var full = DS.radar.point(2, 6, 1), half = DS.radar.point(2, 6, 0.5);
+    approx(full.x, DS.radar.R, 1e-9, 'a value of 1 reaches the radius');
+    approx(half.x, DS.radar.R / 2, 1e-9, 'a value of 0.5 reaches half of it');
+    eq(DS.radar.polygonPoints([1, 1, 1, 1, 1, 1]).split(' ').length, 6);
+    // the two corners at the top share a height: the top edge is flat, so no button sits above another
+    approx(DS.radar.point(0, 6, 1).y, DS.radar.point(1, 6, 1).y, 1e-9);
+  });
+
+  test('sim: goals are measured as shares, so they work with 4 or 6 people, and the luck goal is reported', function () {
+    [4, 6].forEach(function (n) {
+      var out = DS.sim.runAll({ runs: 10, overrides: { PROFILE_COUNT: n } });
+      eq(out.settings.profiles, n);
+      out.results.forEach(function (r) { eq(r.castSize, n); ok(r.afk.share >= 0 && r.afk.share <= 1); });
+      ok(out.goals.some(function (g) { return /luck/i.test(g.text); }), 'a luck goal is listed');
+      eq(out.goals.length, 7);
     });
   });
 

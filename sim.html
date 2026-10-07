@@ -38,8 +38,9 @@
   <h1>Balance simulator</h1>
   <p class="muted">
     Robot players play whole 90-second rounds with no real timers, using the same model as the game.
-    Bots marked “extra” are diagnostics. Smart bots peek at the hidden tastes, so read the numbers as
-    “a player who has already learned each VP”. Only “Explore, then stick” plays blind.
+    Bots marked “extra” are diagnostics. Smart bots peek at the tastes, so read the numbers as
+    “a player who follows the interests radar” (the default) or “who has already learned each VP”.
+    Only “Explore, then stick” plays blind, like a player with <code>?radar=learned</code>.
   </p>
 
   <div class="controls">
@@ -121,7 +122,7 @@
         }).join('');
 
         return '<h2>' + title + '</h2>' +
-          '<table><thead><tr><th>Strategy</th><th>Avg attention (±sd)</th><th>VPs AFK (of 6)</th>' +
+          '<table><thead><tr><th>Strategy</th><th>Avg attention (±sd)</th><th>VPs AFK (of ' + out.settings.profiles + ')</th>' +
           '<th>Everyone lost</th><th>Variety 1st half</th><th>Variety 2nd half</th><th>Variety whole round</th>' +
           '<th>Top topic share of feed</th><th>Topics enjoyed (start → end)</th><th>Like rate</th><th>Posts per VP</th>' +
           '</tr></thead><tbody>' + rows + '</tbody></table>' +
@@ -153,7 +154,7 @@
             var out = DS.sim.runAll(opts);
             var s = out.settings;
             return table(out, 'Buttons lock while watching: ' + (s.lockButtons ? 'ON' : 'OFF') +
-              ' · ' + s.runs + ' rounds each · ' + s.clickIntervalSec + ' s per click' +
+              ' · ' + s.profiles + ' profiles · ' + s.runs + ' rounds each · ' + s.clickIntervalSec + ' s per click' +
               (text ? ' · with overrides' : ' · config.js as is'));
           }).join('');
           $('output').innerHTML = html;

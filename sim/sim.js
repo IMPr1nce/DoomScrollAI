@@ -11,11 +11,13 @@
  *   pickTopic(vp)   which topic to show them
  * and one limit, shared by all bots: it can only click once every
  * SIM_CLICK_INTERVAL_SEC. That limit is what makes the game hard, because
- * attention drains on all six profiles at once.
+ * attention drains on every profile at once (PROFILE_COUNT of them).
  *
- * Honest caveat: the "smart" bots peek at the hidden tastes. They stand in
- * for a player who has already learned what each VP likes. A real kid is
+ * Honest caveat: the "smart" bots peek at the tastes. They stand in for a
+ * player who follows the interests radar (RADAR_SHOWS 'interests', the
+ * default), or who has already learned what each VP likes. A real kid is
  * slower and makes mistakes, so treat results as "best case for that style".
+ * The "learner" bot plays blind, like a player with RADAR_SHOWS 'learned'.
  */
 (function () {
   'use strict';
@@ -199,6 +201,7 @@
   }
 
   function summarize(strategy, rounds) {
+    var castSize = rounds[0].perVP.length;
     var pushes = vpMean(rounds, 'pushes');
     var likes = vpMean(rounds, 'likes');
     var finishedEarly = rounds.filter(function (r) { return r.allGoneAt !== null; });
@@ -209,7 +212,10 @@
       avgAttention: { mean: mean(rounds.map(function (r) { return r.avgAttention; })),
                       sd: sd(rounds.map(function (r) { return r.avgAttention; })) },
       afk: { mean: mean(rounds.map(function (r) { return r.afkCount; })),
-             sd: sd(rounds.map(function (r) { return r.afkCount; })) },
+             sd: sd(rounds.map(function (r) { return r.afkCount; })),
+             share: mean(rounds.map(function (r) { return r.afkCount; })) / castSize },
+      castSize: castSize,
+      scores: rounds.map(function (r) { return r.avgAttention; }),   // every round's score, for the luck goal
       allLostPct: 100 * finishedEarly.length / rounds.length,
       allLostAt: finishedEarly.length ? mean(finishedEarly.map(function (r) { return r.allGoneAt; })) : null,
       diversity: {
@@ -255,7 +261,16 @@
   }
 
   function describeSettings() {
-    return { runs: C.SIM_RUNS, clickIntervalSec: C.SIM_CLICK_INTERVAL_SEC, lockButtons: C.LIKED_LOCKS_BUTTONS };
+    return { runs: C.SIM_RUNS, clickIntervalSec: C.SIM_CLICK_INTERVAL_SEC, lockButtons: C.LIKED_LOCKS_BUTTONS,
+             profiles: C.PROFILE_COUNT };
+  }
+
+  // How often does a game of A score higher than a game of B? Compares every round of A with every
+  // round of B (ties count half). 0.5 = a coin flip; near 0 = B reliably wins.
+  function beatShare(a, b) {
+    var wins = 0;
+    a.forEach(function (x) { b.forEach(function (y) { wins += x > y ? 1 : x === y ? 0.5 : 0; }); });
+    return wins / (a.length * b.length);
   }
 
   // Turns the goals in the brief into pass/fail lines.
@@ -265,12 +280,12 @@
     var G = C.SIM_GOALS;
     function f(x, d) { return x === null ? 'n/a' : x.toFixed(d === undefined ? 1 : d); }
     return [
-      { pass: by.random.afk.mean >= G.randomMinAfk,
+      { pass: by.random.afk.share >= G.randomMinAfkShare,
         text: 'Random play loses VPs',
-        detail: f(by.random.afk.mean) + ' of 6 AFK (want >= ' + G.randomMinAfk + ')' },
-      { pass: by.spam.afk.mean <= G.spamMaxAfk,
+        detail: f(by.random.afk.mean) + ' of ' + by.random.castSize + ' AFK (want at least ' + Math.round(100 * G.randomMinAfkShare) + '%)' },
+      { pass: by.spam.afk.share <= G.spamMaxAfkShare,
         text: 'Spam-favorite keeps (almost) everyone',
-        detail: f(by.spam.afk.mean) + ' of 6 AFK (want <= ' + G.spamMaxAfk + ')' },
+        detail: f(by.spam.afk.mean) + ' of ' + by.spam.castSize + ' AFK (want at most ' + Math.round(100 * G.spamMaxAfkShare) + '%)' },
       { pass: by.spam.avgAttention.mean >= G.spamMinAttention,
         text: 'Spam-favorite scores well',
         detail: 'avg attention ' + f(by.spam.avgAttention.mean) + ' (want >= ' + G.spamMinAttention + ')' },
@@ -282,7 +297,15 @@
         detail: '2nd-half diversity ' + f(by.spam.diversity.second, 2) + ' (want <= ' + G.spamMaxDiversity + ')' },
       { pass: by.mix.diversity.second !== null && by.mix.diversity.second >= G.mixMinDiversity,
         text: 'Mix-it-up keeps variety',
-        detail: '2nd-half diversity ' + f(by.mix.diversity.second, 2) + ' (want >= ' + G.mixMinDiversity + ')' }
+        detail: '2nd-half diversity ' + f(by.mix.diversity.second, 2) + ' (want >= ' + G.mixMinDiversity + ')' },
+      // The "it's all luck" check: a careful player who learns from clicks (no peeking) should almost
+      // always beat someone clicking at random.
+      (function () {
+        var luck = beatShare(by.random.scores, by.learner.scores);
+        return { pass: luck <= G.maxLuck,
+                 text: 'Skill beats luck: a random clicker rarely beats a careful player',
+                 detail: 'random wins ' + f(100 * luck, 1) + '% of match-ups (want at most ' + Math.round(100 * G.maxLuck) + '%)' };
+      })()
     ];
   }
 
@@ -291,8 +314,8 @@
     function pad(s, n) { s = String(s); while (s.length < n) s += ' '; return s; }
     function f(x, d) { return x === null ? 'n/a' : x.toFixed(d); }
     var s = out.settings;
-    var lines = ['runs=' + s.runs + '  click=' + s.clickIntervalSec + 's  locks=' + s.lockButtons, ''];
-    lines.push(pad('strategy', 40) + pad('avgAttn', 10) + pad('AFK/6', 8) + pad('div 1st', 9) +
+    var lines = ['runs=' + s.runs + '  click=' + s.clickIntervalSec + 's  locks=' + s.lockButtons + '  profiles=' + s.profiles, ''];
+    lines.push(pad('strategy', 40) + pad('avgAttn', 10) + pad('AFK/' + s.profiles, 8) + pad('div 1st', 9) +
                pad('div 2nd', 9) + pad('div all', 9) + pad('topShare', 10) + pad('enjoyed', 10) + pad('like%', 7) + 'pushes/VP');
     out.results.forEach(function (r) {
       lines.push(pad(r.label, 40) + pad(f(r.avgAttention.mean, 1), 10) + pad(f(r.afk.mean, 2), 8) +

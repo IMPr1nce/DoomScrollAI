@@ -16,8 +16,10 @@ DS.CONFIG = {
   ATTENTION_MAX: 100,         // the bar is capped here (it's a 0–100 scale)
   LIKE_GAIN: 20,              // TOTAL attention gained over one watch (before fatigue). Was 15.
   DISLIKE_PENALTY: 12,        // instant loss when a VP skips a post
-  IDLE_DRAIN_PER_SEC: 1.5,    // loss per second while idle. This is what forces juggling. Was 2.
-  POST_DURATION_SEC: 5,       // how long a VP watches a liked post
+  IDLE_DRAIN_PER_SEC: 2.0,    // loss per second while idle. This is what forces juggling. (2 -> 1.5 for six
+                              // people; back to 2.0 for four, which are easier to keep up with)
+  POST_DURATION_SEC: 3,       // how long a VP watches a liked post (its buttons are locked meanwhile). Was 5:
+                              // with four people, 3 s keeps the game moving and gives more decisions per minute
 
   // -------------------------------------------------------------------- Round
   ROUND_SEC: 90,              // main game length
@@ -38,22 +40,56 @@ DS.CONFIG = {
   // made spamming a favorite LOSE to mixing topics (which flips the lesson).
   FATIGUE_WINDOW: 3,
   FATIGUE_MULTIPLIERS: [1, 0.85, 0.7, 0.6],
-  FATIGUE_LIKE_PENALTY: 0.05, // subtracted from like-chance for each repeat in the window
+  // Subtracted from the like chance for each repeat in the window. Was 0.05: together with favorites at
+  // 0.85, that made a player who KNEW the right answer get skipped on 23% of pushes, which is what made
+  // the game feel like luck. Fatigue now mostly cuts the gain (visible as a smaller "+12"), and only
+  // nudges the like chance, as the brief asks ("slightly lower the like chance").
+  FATIGUE_LIKE_PENALTY: 0.02,
 
   // -------------------------------------------------------------------- Drift
   // The filter-bubble mechanic. Each LIKED post pulls that topic's taste toward
   // TASTE_MAX and every other topic's taste toward TASTE_MIN.
   DRIFT_UP: 0.12,             // was 0.08. Stronger = a more visible bubble on the reveal screen
-  DRIFT_DOWN: 0.05,           // was 0.04. Above ~0.06, even a "mix it up" player gets squeezed
+  DRIFT_DOWN: 0.04,           // with 3 s watches each person sees more posts, so 0.05 squeezed even a player
+                              // who mixes topics on purpose. 0.04 keeps "mixing keeps variety" true.
   TASTE_MIN: 0.05,
   TASTE_MAX: 0.95,
 
   // ------------------------------------------------- Starting tastes (content.js
   // says WHICH topics are favorite / meh; these say HOW MUCH)
-  TASTE_FAVORITE: 0.85,
+  // Clearer than they were (0.85 / 0.15): a favorite is liked ~9 times in 10, a disliked topic ~1 in 12.
+  // Likes are still a dice roll, so players learn patterns, not one answer; but a right choice is rarely
+  // punished, and a random clicker almost never beats a careful player.
+  TASTE_FAVORITE: 0.92,
   TASTE_MEH: 0.5,
-  TASTE_DISLIKED: 0.15,
+  TASTE_DISLIKED: 0.08,
   TASTE_JITTER: 0.04,         // +/- random wobble so two "favorites" aren't identical
+
+  // ------------------------------------------------------------------ Layout
+  // Switches for playtesting. They can also be set from the address bar without editing this file:
+  //   index.html                             (the default: 4 people, radars showing their interests)
+  //   index.html?radar=learned               (radars that only show what the player has seen)
+  //   index.html?profiles=6&layout=grid      (the original game)
+  // PROFILE_COUNT: 4 = a 2x2 grid of the first four people in content.js (Maya, Jordan, Sam and Riley,
+  // who between them love all six topics); 6 = all six in a 3x2 grid. Six cards was too many to think
+  // about at once: players started clicking at random instead of choosing.
+  PROFILE_COUNT: 4,
+  // TOPIC_LAYOUT: 'radar' = the six topic buttons sit around a radar (see RADAR_SHOWS); 'grid' = the
+  // original 3x2 buttons, which show what the player has seen so far ("4/5" counts and a bio-clue star).
+  // The radar needs the wider cards of the 4-profile layout: with 6 profiles the game uses the grid.
+  TOPIC_LAYOUT: 'radar',
+  // RADAR_SHOWS: what the radar on each card draws during play.
+  //   'interests'  what each person is into at the START of the round, from the first second, so the player
+  //                can see at a glance what to show them. (The team lead's call: the radar is guidance.)
+  //                It never changes during the round. Each liked post still shifts their tastes, but the
+  //                player can't see it until the results screen shows start vs end (the hidden lesson).
+  //   'learned'    only what the player has seen so far: liked 4 of 5, "?" if never tried, and a star
+  //                on the topic the bio hints at. The player has to discover what each person likes.
+  // Also from the address bar: index.html?radar=learned
+  RADAR_SHOWS: 'interests',
+  // 'learned' only: how the radar turns "liked 4 of 5" into a spike length: (likes + S) / (tries + 2S).
+  // With S = 1, one lucky like (1 of 1 = 0.67) can't outgrow a long track record (9 of 10 = 0.83).
+  RADAR_SMOOTHING: 1,
 
   // ----------------------------------------------------------------- Messages
   LOW_ATTENTION_THRESHOLD: 25,    // below this, VPs start to complain
@@ -118,10 +154,12 @@ DS.CONFIG = {
 
   // What "good balance" means, as checked by the simulator's goal list.
   SIM_GOALS: {
-    randomMinAfk: 3,          // random play should lose at least this many of 6 VPs
-    spamMaxAfk: 1,            // spam-favorite should lose at most this many
+    randomMinAfkShare: 0.5,   // random play should lose at least this share of the people (half)
+    spamMaxAfkShare: 0.2,     // spam-favorite should lose at most this share
     spamMinAttention: 55,     // ...and keep average attention at least this high
     spamMaxDiversity: 0.25,   // ...while its 2nd-half diversity is at most this (narrow feed)
-    mixMinDiversity: 0.5      // mix-it-up keeps 2nd-half diversity at least this high
+    mixMinDiversity: 0.5,     // mix-it-up keeps 2nd-half diversity at least this high
+    maxLuck: 0.1              // a random clicker may beat a careful player ("explore, then stick") at most
+                              // this often (comparing every random round with every careful round)
   }
 };

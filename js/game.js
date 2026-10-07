@@ -24,6 +24,31 @@
   // DEV_MODE in config.js, or by opening index.html?dev
   var DEV = C.DEV_MODE || /[?&]dev(=1|=true)?(&|$)/.test(window.location.search);
 
+  // Playtest switches from the address bar, e.g. index.html?profiles=6&layout=grid or ?radar=learned, so
+  // two groups can play two versions without anyone editing config.js. Only these three settings, and
+  // only valid values, so a typo can't break the game. This runs before anything is built (and before
+  // play mode freezes the settings).
+  (function applyPlaytestSwitches() {
+    var q = window.location.search;
+    var profiles = /[?&]profiles=(\d+)/.exec(q);
+    if (profiles && (+profiles[1] === 4 || +profiles[1] === 6)) C.PROFILE_COUNT = +profiles[1];
+    var layout = /[?&]layout=(radar|grid)(&|$)/.exec(q);
+    if (layout) C.TOPIC_LAYOUT = layout[1];
+    var shows = /[?&]radar=(interests|learned)(&|$)/.exec(q);
+    if (shows) C.RADAR_SHOWS = shows[1];
+    // Six radars don't fit a laptop screen (the cards are too narrow and the buttons pile up), so six
+    // people always use the grid. Decided here, once, so the tutorial and the game always match, and
+    // the logged version ("grid/6") says what was really played.
+    if (C.TOPIC_LAYOUT === 'radar' && C.PROFILE_COUNT > 4) C.TOPIC_LAYOUT = 'grid';
+  })();
+
+  var NUMBER_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'];
+
+  // Which version is being played, for the log: "radar-interests/4", "radar-learned/4" or "grid/6".
+  function versionLabel() {
+    return (C.TOPIC_LAYOUT === 'radar' ? 'radar-' + C.RADAR_SHOWS : 'grid') + '/' + C.PROFILE_COUNT;
+  }
+
   // What is being played right now. Phases fill this in:
   //   vps       the models to tick every frame
   //   cards     the UI cards to refresh every frame
@@ -98,8 +123,9 @@
   }
 
   // ------------------------------------------------------------- Tutorial 1
-  // Goal: raise Alex's attention to TUTORIAL1_GOAL. Alex has real hidden tastes, so the
-  // player has to try topics and watch the reactions. That is "learning from clicks".
+  // Goal: raise Alex's attention to TUTORIAL1_GOAL. With the interests radar, the player learns to read
+  // it ("long spike = they like it"). Without it, Alex's tastes are hidden, so the player has to try
+  // topics and watch the reactions: "learning from clicks".
   function startTutorial1() {
     setPhase('tutorial1');
     ui.hideOverlay();
@@ -116,10 +142,14 @@
     });
     ui.mountCard('tut-card-slot', card);
 
+    var interests = ui.showsInterests();
     ui.setTutorialHeader({
       step: 'Tutorial 1 of 2',
       title: 'Hook them',
-      text: 'This is Alex\'s For You page. Pick posts to show them. Watch how they react.',
+      // The radar needs one sentence of explanation; it is the first time the player sees it.
+      text: interests ? 'This is Alex\'s For You page. Pick posts to show them. A long spike means Alex likes it.'
+          : C.TOPIC_LAYOUT === 'radar' ? 'This is Alex\'s For You page. Pick posts to show them. The spikes grow toward what Alex likes.'
+          : 'This is Alex\'s For You page. Pick posts to show them. Watch how they react.',
       goal: 'Goal: get Alex\'s attention up to ' + C.TUTORIAL1_GOAL
     });
     ui.showScreen('tutorial');
@@ -130,15 +160,20 @@
         if (vp.attention >= C.TUTORIAL1_GOAL) {
           showResultAfterDelay({
             title: 'You did it!',
-            text: 'You figured out what Alex likes. That\'s what a recommender algorithm does. ' +
-                  'It learns from what you click.',
+            // With the interests radar the player didn't have to figure Alex out, so say where such a
+            // radar comes from instead: that is the AI idea behind it.
+            text: interests
+              ? 'Real apps keep a profile like this radar on every user. They build it from every post you watch or skip.'
+              : 'You figured out what Alex likes. That\'s what a recommender algorithm does. ' +
+                'It learns from what you click.',
             buttons: [{ label: 'Next', primary: true, onClick: startTutorial2 }]
           });
         } else if (vp.state === 'afk') {
           // Pushed too many posts they hate. Let them try again with a fresh Alex.
           showResultAfterDelay({
             title: 'Alex left!',
-            text: 'Alex got bored and closed the app. Try again. Look for the posts Alex likes.',
+            text: 'Alex got bored and closed the app. Try again. ' +
+                  (interests ? 'Show Alex the topics with long spikes.' : 'Look for the posts Alex likes.'),
             buttons: [{ label: 'Try again', primary: true, onClick: startTutorial1 }]
           });
         }
@@ -215,8 +250,11 @@
     freeze();
     ui.showOverlay({
       title: 'Keep everyone scrolling',
-      text: 'Six people are on their feeds. Show each one posts they like. ' +
-            'If you ignore someone, their attention drains. At 0, they leave for good. ' +
+      // One idea per line (the pop-up keeps the line breaks): easier to read than one block.
+      text: (NUMBER_WORDS[vps.length] || vps.length) + ' people are scrolling. Show each one posts they like.\n' +
+            'Ignore someone and their attention drains. At 0, they leave for good.\n' +
+            (ui.showsInterests() ? 'Each radar shows what that person is into. ' : '★ = a clue from their bio. ') +
+            'Even favorites get skipped sometimes.\n' +
             'You have ' + C.ROUND_SEC + ' seconds.',
       buttons: [{
         label: 'Go!', primary: true,
@@ -224,7 +262,9 @@
           // The check guards against a stale click if the player somehow restarted meanwhile.
           if (active !== round || round.ended) return;
           // The round really starts now, so this is when each person's starting state is logged.
-          vps.forEach(function (vp) { logger.logVP('round_start', vp); });
+          // The detail says which version is being played (e.g. "radar-interests/4"), so a playtest
+          // that compares versions can tell the rows apart.
+          vps.forEach(function (vp) { logger.logVP('round_start', vp, versionLabel()); });
           unfreeze();
         }
       }]
