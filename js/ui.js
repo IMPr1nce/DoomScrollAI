@@ -62,7 +62,52 @@
   };
 
   // ------------------------------------------------------------------ Pop-up
-  // opts: { title, text, buttons: [{ label, primary, onClick }] }
+  // opts: { title, text, buttons: [{ label, primary, onClick }], target }
+  // `target` (an element, or a function that returns one) turns the pop-up into a pointer: the target is
+  // ringed and everything else dimmed, and a small panel sits beside it with an arrow. Less reading than a
+  // full-screen card, because the thing being explained is right there. No target = the centered card.
+  var spotOpts = null;    // the target of the pop-up on screen, so a resize can place it again
+  function resolveTarget(t) { return typeof t === 'function' ? t() : t; }
+
+  // Put the ring on the target and the panel on whichever side has room (below, above, right, left).
+  // Falls back to the centered card if the target isn't on screen (a hidden element has no size).
+  function placeSpot(target) {
+    var overlay = $('overlay'), spot = $('overlay-spot'), panel = overlay.querySelector('.overlay__panel');
+    var el = resolveTarget(target);
+    var r = el && el.getBoundingClientRect();
+    if (!r || !r.width || !r.height) { overlay.classList.remove('overlay--spot'); spot.hidden = true; return; }
+    var pad = 8, gap = 18, vw = window.innerWidth, vh = window.innerHeight;
+    spot.hidden = false;
+    spot.style.left = (r.left - pad) + 'px';  spot.style.top = (r.top - pad) + 'px';
+    spot.style.width = (r.width + 2 * pad) + 'px';  spot.style.height = (r.height + 2 * pad) + 'px';
+    overlay.classList.add('overlay--spot');
+
+    var pw = panel.offsetWidth, ph = panel.offsetHeight;
+    var box = { l: r.left - pad, t: r.top - pad, r: r.right + pad, b: r.bottom + pad };
+    var sides = [
+      { name: 'below', ok: box.b + gap + ph <= vh - 8 },
+      { name: 'above', ok: box.t - gap - ph >= 8 },
+      { name: 'right', ok: box.r + gap + pw <= vw - 8 },
+      { name: 'left',  ok: box.l - gap - pw >= 8 }
+    ];
+    var side = null;
+    for (var i = 0; i < sides.length; i++) if (sides[i].ok) { side = sides[i].name; break; }
+    if (!side) { overlay.classList.remove('overlay--spot'); spot.hidden = true; return; }   // nowhere to put it
+
+    var cx = (box.l + box.r) / 2, cy = (box.t + box.b) / 2;
+    var left = side === 'right' ? box.r + gap : side === 'left' ? box.l - gap - pw : cx - pw / 2;
+    var top = side === 'below' ? box.b + gap : side === 'above' ? box.t - gap - ph : cy - ph / 2;
+    left = Math.max(8, Math.min(vw - pw - 8, left));
+    top = Math.max(8, Math.min(vh - ph - 8, top));
+    panel.style.left = left + 'px';  panel.style.top = top + 'px';
+    panel.setAttribute('data-side', side);
+    // The arrow points at the middle of the target, kept inside the panel's rounded corners.
+    var ax = side === 'below' || side === 'above' ? cx - left : cy - top;
+    var max = (side === 'below' || side === 'above' ? pw : ph) - 28;
+    panel.style.setProperty('--arrow', Math.max(28, Math.min(max, ax)) + 'px');
+  }
+  window.addEventListener('resize', function () { if (spotOpts && !$('overlay').hidden) placeSpot(spotOpts); });
+
   ui.showOverlay = function (opts) {
     $('overlay-title').textContent = opts.title;
     $('overlay-text').textContent = opts.text;
@@ -75,6 +120,9 @@
       box.appendChild(btn);
     });
     $('overlay').hidden = false;
+    spotOpts = opts.target || null;
+    if (spotOpts) placeSpot(spotOpts);
+    else { $('overlay').classList.remove('overlay--spot'); $('overlay-spot').hidden = true; }
     // Make the page behind the pop-up "inert": Tab can't reach it and clicks can't hit it.
     // Without this, a keyboard user could Tab behind the pop-up and press Pause or Skip.
     $('app').inert = true;
@@ -85,6 +133,9 @@
   };
   ui.hideOverlay = function () {
     $('overlay').hidden = true;
+    $('overlay-spot').hidden = true;
+    $('overlay').classList.remove('overlay--spot');
+    spotOpts = null;
     $('app').inert = false;
   };
   ui.overlayShown = function () { return !$('overlay').hidden; };
@@ -115,12 +166,13 @@
   };
 
   // ------------------------------------------------------------- Main-game board
-  // Fill the grid: 2 columns for up to 4 people (2x2), 3 for more (3x2). Order = the order of the
+  // Fill the grid: two people sit side by side in one tall row, up to 4 make a 2x2, 3 for more (3x2). Order = the order of the
   // array (left to right, top to bottom).
   ui.mountCards = function (slotId, cards) {
     var slot = $(slotId);
     slot.innerHTML = '';
     slot.style.setProperty('--cols', cards.length <= 4 ? 2 : 3);
+    slot.style.setProperty('--rows', cards.length <= 2 ? 1 : 2);
     slot.classList.toggle('board--radar', cards.length > 0 && cards[0].el.classList.contains('card--radar'));
     cards.forEach(function (c, i) {
       c.el.style.setProperty('--i', i);            // CSS delays each card a little, so they pop in one by one

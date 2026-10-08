@@ -17,6 +17,8 @@ results wording, labels.
 - **Tastes:** 1–2 favorites and 2 "meh" topics; everything else is disliked. No two people share a mix.
 - **`clue`:** the topic their bio hints at, always one of their favorites (the ★ in `?radar=learned`).
   Alex, the tutorial person, has none.
+- **Tutorial pop-ups must not hint at the narrowing.** They may say that repeats get boring (each repeat gains
+  less: the player can see that in the +). They may not say that a person's tastes change.
 - **Order matters** in `DS.VP_DEFS`: the first `PROFILE_COUNT` people play, and the first four must love
   all six topics between them (tested).
 

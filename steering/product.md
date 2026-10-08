@@ -4,8 +4,8 @@ Read this for the why: who the game is for, what it teaches, how a session goes,
 change has to keep, and what has already been decided.
 
 ## What it is
-A five-minute browser game for 8th graders, built as an AI4K12 project. The student *is* the
-recommendation algorithm of a pretend video app. Four people ("Virtual Profiles", VPs) are scrolling,
+A three-minute browser game for 8th graders, built as an AI4K12 project. The student *is* the
+recommendation algorithm of a pretend video app. Two people ("Virtual Profiles", VPs) are scrolling,
 and the student chooses which topic to show each one next to keep their attention up. It plays like a
 fast juggling game.
 
@@ -34,13 +34,15 @@ student built it by chasing attention. The class then discusses whether that was
 - **AI4K12 ideas it touches:** representation and learning (a profile of interests, built from data) and
   societal impact (what optimizing for engagement does to people).
 
-## How a session goes (about five minutes)
+## How a session goes (about three minutes)
 1. **Title** → Start.
-2. **Tutorial 1, "Hook them":** one person, Alex. Read Alex's radar and get their attention up to 90.
-3. **Tutorial 2, "Lose them":** make Alex leave. For a platform, that's the worst outcome: no attention, no ads.
-4. **The round:** four people, 90 seconds. Attention drains while someone is ignored, and at 0 they leave
+2. **The tutorial, "Hook them":** one person, Alex. A chain of pop-ups explains the radar plot, liked vs skipped,
+   and that a long spike doesn't mean "show it again and again". Then get Alex's attention up to 90, with
+   one-time hints after the first like, skip and repeat. The last pop-up says that at 0 a person leaves: for a
+   platform the worst outcome, no attention, no ads.
+3. **The round:** two people, 30 seconds. Attention drains while someone is ignored, and at 0 they leave
    for good (AFK). The score is how many are still scrolling and their average attention.
-5. **Results**, one step at a time: the win first, then one step per person (what you showed them, the
+4. **Results**, one step at a time: the win first, then one step per person (what you showed them, the
    variety they watched in each half, and their radar at the start next to the end), then the big picture
    with three questions for the class. **Play again** starts a new round right away.
 
@@ -66,12 +68,13 @@ Switches in the address bar let two groups play two versions without anyone edit
 
 | Link | Version |
 |---|---|
-| `index.html` | the default: 4 people, radars showing each person's interests |
+| `index.html` | the default: 2 people, radars showing each person's interests |
+| `index.html?profiles=4` | the previous default: 4 people in a 2 × 2 grid of radars |
 | `index.html?radar=learned` | radars start empty and fill from the player's own pushes ("4/5", or "?" if never tried); a ★ marks each bio's hint |
 | `index.html?profiles=6&layout=grid` | the original: 6 people, 3 × 2 buttons |
-| `index.html?layout=grid` | 4 people, 3 × 2 buttons |
+| `index.html?layout=grid` | 2 people, 3 × 2 buttons |
 
-The `round_start` rows in the CSV record which version was played (`radar-interests/4`, `radar-learned/4`, `grid/6`).
+The `round_start` rows in the CSV record which version was played (`radar-interests/2`, `radar-learned/2`, `grid/6`).
 
 ## Decision log
 Decided with the team lead. Don't reopen these without new evidence, such as a playtest or data. Add new
@@ -85,3 +88,4 @@ decisions here with the date and the reason.
 | 2026-10-05 | **The radar never changes during a round.** | Keeps the brief's other rule: players must not see the drift happen. The results compare the start and the end. |
 | 2026-10-05 | **The results show each person's radar at the start next to the end.** | The same picture, before and after, makes "your feed did this" plain to see. |
 | 2026-10-05 | **Fairer dice and a 3-second watch** ([balance.md](balance.md)). | The game felt like luck: a player who knew the right answer was skipped 23% of the time. |
+| 2026-10-07 | **One tutorial instead of two, with many explanatory pop-ups. A 30-second round. 2 people instead of 4.** (`?profiles=4` stays.) | The team lead asked for a shorter, more explained session. The "lose them" idea moved into the tutorial's last pop-up. Trade-offs, checked in the simulator: with 30 s and 2 people each half of the round has only about 5 watched posts per person, so a person who leaves early often gets the "too few watched posts" wording; drain and starting attention were retuned so random play still loses people ([balance.md](balance.md)). |

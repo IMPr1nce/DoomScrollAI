@@ -72,7 +72,7 @@
     return Promise.resolve().then(function () {
       if (DS.game.phase === 'title') { document.getElementById('btn-start').click(); return sleep(150); }
     }).then(function () {
-      if (DS.game.phase === 'tutorial1' || DS.game.phase === 'tutorial2') { document.getElementById('btn-skip').click(); return sleep(150); }
+      if (DS.game.phase === 'tutorial1') { document.getElementById('btn-skip').click(); return sleep(150); }
     }).then(function () {
       return sleep(C.CLICK_GUARD_MS + 100);                       // wait out the click guard on the "ready?" card
     }).then(function () {

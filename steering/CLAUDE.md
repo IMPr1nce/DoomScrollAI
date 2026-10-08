@@ -1,6 +1,6 @@
 # CLAUDE.md — Doomscroll AI
 
-Browser game for 8th graders (AI4K12). The student plays a recommender algorithm: they push posts to four
+Browser game for 8th graders (AI4K12). The student plays a recommender algorithm: they push posts to two
 simulated people ("Virtual Profiles", VPs) to keep their attention. Hidden lesson: chasing engagement
 narrows what people see (a filter bubble). Fun first; the results screen reveals the cost. The team lead
 wants to understand the code, so **comment the why, not the what.**
@@ -47,7 +47,7 @@ Paths in backticks are relative to the project root.
   `css/style.css` ([structure.md](structure.md#the-radar)).
 - **Words have rules** (results must be honest; no he/she; sentences of 24 words or fewer; speech bubbles
   of 40 characters or fewer): [content.md](content.md). A new results outcome needs new wording and a new test.
-- **Balance was tuned for 4 people.** Changing `PROFILE_COUNT`, the dice, the drain or the drift means
+- **Balance was tuned for 2 people and a 30-second round.** Changing `PROFILE_COUNT`, the dice, the drain or the drift means
   re-running the simulator ([balance.md](balance.md)).
 - **The first 11 CSV columns are the agreed set.** Add new ones at the end. Everything leaves through
   `logger.flush()`.
@@ -55,8 +55,11 @@ Paths in backticks are relative to the project root.
   clobbered half of `reveal.js`). Prefer exact multi-line edits, then re-run the tests.
 
 ## Status
-- Phases 1–6 done: model, simulator, tutorials, main game, results + logger + CSV, polish + docs.
+- Phases 1–6 done: model, simulator, tutorial, main game, results + logger + CSV, polish + docs.
 - 2026-10-05: fairer dice, 4 people, radar cards, results radars, playtest switches. Then the interests radar
   became the default (the results compare the radar at the start and the end), narrow radar buttons made the
   board fit 1001–1180px-wide windows, and the steering documents were written.
+- 2026-10-07: one tutorial with a chain of explanatory pop-ups and one-time hints (the "Lose them" tutorial is
+  gone), a 30-second round, and 2 people by default (`?profiles=4` and `?profiles=6` still work). Drain and
+  starting attention were retuned for it ([balance.md](balance.md)).
 - Not built, by design: the Flask endpoint (one `fetch` in `logger.flush`), sound, accounts.

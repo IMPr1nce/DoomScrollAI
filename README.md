@@ -3,7 +3,7 @@
 **You ARE the algorithm.** A short browser game for 8th graders (AI4K12) about how recommender
 systems work.
 
-The student plays the algorithm. Four pretend people ("Virtual Profiles") are scrolling, and the
+The student plays the algorithm. Two pretend people ("Virtual Profiles") are scrolling, and the
 student pushes posts to each one to keep their attention up. It is fun to play. Then the results
 screen shows what the student actually did: they kept everyone's attention by showing each person
 more and more of the same thing, and the people's tastes narrowed. That is a filter bubble, and the
@@ -27,14 +27,16 @@ toolbars are counted). Everyone fits on screen without scrolling in any window a
 (under about 1180 px, the radar buttons get narrower, with the emoji above the word). Narrower windows
 still work; the page just scrolls.
 
-## What the student does (about 5 minutes)
+## What the student does (about 3 minutes)
 
 1. **Title screen** → Start.
-2. **Tutorial 1, "Hook them":** one person, Alex. Show Alex posts they like and get their attention
-   up to 90. Real apps keep a profile like Alex's radar for every user, built from everything they watch.
-3. **Tutorial 2, "Lose them":** do the opposite and make Alex leave. For a platform, that's the worst
-   outcome.
-4. **The game:** four people, 90 seconds. Everyone's attention drains when you ignore them. Show each
+2. **The tutorial, "Hook them":** one person, Alex. A chain of pop-ups first explains the radar plot, what
+   a like and a skip do, and that a long spike is *not* a reason to show the same topic again and
+   again. Then the student gets Alex's attention up to 90; one-time hint pop-ups appear after their
+   first like, skip and repeat. Real apps keep a profile like Alex's radar for every user, built from
+   everything they watch. The last pop-up says that at 0 attention a person leaves, the worst outcome
+   for a platform.
+3. **The game:** two people, 30 seconds. Everyone's attention drains when you ignore them. Show each
    person posts they like. At 0 they leave for good ("AFK"). The score is *still scrolling* and
    *average attention*.
    Each person's six topic buttons sit around a **radar**, with a spike pointing at each button. The
@@ -61,13 +63,14 @@ editing a file. Add them after `index.html` (put the link in a bookmark):
 
 | Link | Version |
 |---|---|
-| `index.html` | 4 people, radars showing what each person is into (the default) |
-| `index.html?radar=learned` | 4 people, radars that start empty: a spike grows only after you show a topic ("4/5" = liked 4 of 5 times, "?" = never tried), and a **★** marks the topic each bio hints at. Players have to discover what each person likes. |
+| `index.html` | 2 people, radars showing what each person is into (the default) |
+| `index.html?radar=learned` | 2 people, radars that start empty: a spike grows only after you show a topic ("4/5" = liked 4 of 5 times, "?" = never tried), and a **★** marks the topic each bio hints at. Players have to discover what each person likes. |
 | `index.html?profiles=6&layout=grid` | the original: 6 people, 3 × 2 buttons (with the "4/5" counts and ★) |
-| `index.html?layout=grid` | 4 people, 3 × 2 buttons |
+| `index.html?layout=grid` | 2 people, 3 × 2 buttons |
+| `index.html?profiles=4` | the 4-person board from before: a 2 × 2 grid of radars (the 90-second round is now 30 s; set `ROUND_SEC` for the old length) |
 
 Six radars don't fit a laptop screen, so `profiles=6` always uses the buttons. Each round's `round_start`
-rows in the CSV say which version was played (`radar-interests/4`, `radar-learned/4`, `grid/6`, ...), so the
+rows in the CSV say which version was played (`radar-interests/2`, `radar-learned/2`, `grid/6`, ...), so the
 data can be split by version.
 
 ---
@@ -79,12 +82,12 @@ Edit the file, save it, reload the page.
 
 | I want… | Change |
 |---|---|
-| **4 or 6 people**, **radar or buttons** | `PROFILE_COUNT` (4), `TOPIC_LAYOUT` (`'radar'`), or the address-bar switches above |
+| **2, 4 or 6 people**, **radar or buttons** | `PROFILE_COUNT` (2), `TOPIC_LAYOUT` (`'radar'`), or the address-bar switches above |
 | The radar to show **interests** or only **what the player has seen** | `RADAR_SHOWS` (`'interests'` or `'learned'`) |
 | An **easier** game | raise `ATTENTION_START` or `LIKE_GAIN`; lower `IDLE_DRAIN_PER_SEC` or `DISLIKE_PENALTY` |
 | A **harder** game | the opposite |
-| A **longer or shorter** round | `ROUND_SEC` (90) |
-| A **stronger filter bubble** on the results screen | raise `DRIFT_UP` (how fast a liked topic is learned) or `DRIFT_DOWN` (how fast other topics fade). Careful with `DRIFT_DOWN`: above about 0.04 (with 4 people and 3-second watches) even a player who mixes topics on purpose gets squeezed, which weakens "you had a choice". The simulator checks this. |
+| A **longer or shorter** round | `ROUND_SEC` (30). The balance was tuned for 30 s and 2 people: see `steering/balance.md` |
+| A **stronger filter bubble** on the results screen | raise `DRIFT_UP` (how fast a liked topic is learned) or `DRIFT_DOWN` (how fast other topics fade). Careful with `DRIFT_DOWN`: above about 0.04 (with 3-second watches) even a player who mixes topics on purpose gets squeezed, which weakens "you had a choice". The simulator checks this. |
 | Spamming one topic to be **less rewarding** | lower `FATIGUE_MULTIPLIERS`. Careful: too harsh and mixing topics beats spamming, which flips the lesson. The simulator warns you. |
 | Buttons to **stay live** while someone watches | `LIKED_LOCKS_BUTTONS: false` (a new post then cuts the current watch short) |
 | A **longer or easier tutorial** | `TUTORIAL1_GOAL`, `TUTORIAL_DRAIN_MULT` |
@@ -108,8 +111,8 @@ changes without editing any file.
 To change the **words and people**, edit `js/content.js`: the six topics (emoji and color), the
 people (name, animal avatar, bio, which topics they love or find "meh", and `clue`: the topic their bio
 hints at), and every speech-bubble line. Keep lines under 40 characters so they fit on one line of a
-small card. **Order matters:** with 4 profiles only the first four people play, and between them they must
-love all six topics. `tests.html` checks all of this.
+small card. **Order matters:** with 4 profiles the first four people play, and between them they must
+love all six topics (the default of 2 plays Maya and Jordan). `tests.html` checks all of this.
 
 ---
 
@@ -131,7 +134,7 @@ people did. Closing the tab without downloading discards it.
 |---|---|
 | `session_id` | random id for this sitting (page load). Several rounds can share one session. |
 | `timestamp_ms` | wall-clock time, in milliseconds. It keeps running while the game is paused. |
-| `phase` | `tutorial1`, `tutorial2`, `main` |
+| `phase` | `tutorial1`, `main` |
 | `vp_id` | which person (blank for pause/resume) |
 | `event` | `push`, `watch_end`, `afk`, `round_start`, `round_end`, `pause`, `resume` |
 | `topic` | topic pushed (push events) |
@@ -228,10 +231,10 @@ the page, so the tests and the simulator can run them without a browser.
   watched posts" instead of a made-up number. All of this is tested.
 - **Why it no longer feels like luck.** Favorites used to be skipped 23% of the time, even for a player
   who knew every answer. Now it's under 10%, so "even favorites get skipped sometimes" is still true but
-  rare. Only a handful of ideas fit on the screen at once, so the game uses 4 people instead of 6 (six
+  rare. Only a handful of ideas fit on the screen at once, so the game uses 2 people (it was 4, and 6 before that: six
   made players click at random), and the radar shows at a glance what each person is into.
 - **The radar shows interests on purpose (the team lead's call).** It turns the game from "guess what
-  they like" into "keep four people happy at once", and the narrowing still stays hidden because the
+  they like" into "keep two people happy at once", and the narrowing still stays hidden because the
   radar never updates mid-round. Speed is now the skill: in the simulator, a robot that always shows
   the longest spike averages about 94 attention at one click a second, 84 at one every 1.5 s, and 64 at
   one every 2 s (a random clicker gets 20–26). The cost is that nobody has to *learn* each person. To

@@ -462,14 +462,14 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 .timebar { width: 100%; max-width: 1500px; height: 8px; margin: 6px 0 0; border-radius: 999px; background: #e0dcf3; overflow: hidden; }
 .timebar__fill { height: 100%; width: 0; background: var(--primary); }
 
-/* --cols columns x 2 rows (ui.mountCards sets --cols: 2 for four people, 3 for six). minmax(0, 1fr)
+/* --cols columns x --rows rows (ui.mountCards sets --cols: 2 and --rows: 1 for two people, 2 for four, 3 x 2 for six). minmax(0, 1fr)
    lets cells shrink below their content, and flex: 1 makes the board take all the height left under
    the HUD, so the page never scrolls. */
 .board {
   flex: 1; min-height: 0; width: 100%; max-width: 1500px; margin-top: 6px;
   display: grid; gap: 10px;
   grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows, 2), minmax(0, 1fr));   /* ui.mountCards: 1 row for two people */
 }
 
 /* ---------------------------------------------------------------- Pop-up */
@@ -488,6 +488,32 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 .overlay__panel h2 { margin: 0 0 8px; font-size: 32px; }
 .overlay__panel p { margin: 0 0 22px; font-size: 20px; white-space: pre-line; }   /* keeps "\n" line breaks */
 .overlay__buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+/* A pop-up that points at something (ui.showOverlay's `target`). The ring's huge box-shadow does the
+   dimming, so the target itself stays bright; the panel is a small card next to it with an arrow. */
+.overlay--spot { background: transparent; display: block; }
+.overlay__spot {
+  position: fixed; border-radius: 18px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(31, 27, 58, 0.55);
+  outline: 4px solid #ffd84d; outline-offset: 0;
+  animation: spot-pulse 1.4s ease-in-out infinite;
+}
+@keyframes spot-pulse { 50% { outline-color: #fff; } }
+.overlay--spot .overlay__panel {
+  position: fixed; width: min(340px, 92vw); padding: 18px 22px 20px; border-radius: 20px; text-align: left;
+}
+.overlay--spot .overlay__panel h2 { font-size: 24px; margin-bottom: 4px; }
+.overlay--spot .overlay__panel p { font-size: 18px; margin-bottom: 14px; }
+.overlay--spot .overlay__buttons { justify-content: flex-end; }
+.overlay--spot .overlay__buttons .btn { padding: 8px 22px; font-size: 18px; }
+/* the arrow: a rotated square on the edge facing the target, at --arrow along that edge */
+.overlay--spot .overlay__panel::before {
+  content: ''; position: absolute; width: 18px; height: 18px; background: var(--card); transform: rotate(45deg);
+}
+.overlay--spot .overlay__panel[data-side="below"]::before { top: -9px;    left: calc(var(--arrow) - 9px); }
+.overlay--spot .overlay__panel[data-side="above"]::before { bottom: -9px; left: calc(var(--arrow) - 9px); }
+.overlay--spot .overlay__panel[data-side="right"]::before { left: -9px;   top: calc(var(--arrow) - 9px); }
+.overlay--spot .overlay__panel[data-side="left"]::before  { right: -9px;  top: calc(var(--arrow) - 9px); }
 
 /* ------------------------------------------------------------------ Banner */
 
@@ -812,5 +838,6 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 
 /* People who ask their computer for less motion get none. */
 @media (prefers-reduced-motion: reduce) {
+  .overlay__spot { animation: none; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

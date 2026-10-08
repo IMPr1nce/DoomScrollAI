@@ -57,7 +57,7 @@ What to run after a change:
 
 - The **unit tests** pin their own copy of the settings (`PINNED` in `tests/tests.js`), so tuning
   `config.js` never breaks them.
-- The **simulator** plays hundreds of 90-second rounds with robot players, without real timers, and checks
+- The **simulator** plays hundreds of 30-second rounds with robot players, without real timers, and checks
   the goals in [balance.md](balance.md).
 - **`tests/e2e.js`** drives real Chrome through the DevTools protocol using Node's built-in WebSocket, so
   there's nothing to install. It covers the play-mode lockdown, both radar versions, the 6-person grid, the

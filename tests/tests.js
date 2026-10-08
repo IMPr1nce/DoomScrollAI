@@ -936,7 +936,7 @@
     try {
       var vp = makeVP(); L.watch(vp);
       DS.rng.use(LIKE);
-      ['tutorial1', 'tutorial2', 'main'].forEach(function (phase) {
+      ['tutorial1', 'main'].forEach(function (phase) {
         L.setContext({ phase: phase, round: 1 });
         vp.push('sports');                                  // (refused while watching; the first one is logged)
         L.flushPending();

@@ -298,10 +298,15 @@
       { pass: by.mix.diversity.second !== null && by.mix.diversity.second >= G.mixMinDiversity,
         text: 'Mix-it-up keeps variety',
         detail: '2nd-half diversity ' + f(by.mix.diversity.second, 2) + ' (want >= ' + G.mixMinDiversity + ')' },
-      // The "it's all luck" check: a careful player who learns from clicks (no peeking) should almost
-      // always beat someone clicking at random.
+      // The "it's all luck" check: a careful player should almost always beat someone clicking at random.
+      // "Careful" means the player the version being played produces: with the interests radar (the
+      // default) that's spam, who follows the longest spike; with ?radar=learned it's the blind learner,
+      // who has to discover tastes from clicks. In a 30 s round with 2 people the blind learner has
+      // barely time to learn, so holding the default version to the learner's standard would test a
+      // version nobody is playing.
       (function () {
-        var luck = beatShare(by.random.scores, by.learner.scores);
+        var careful = C.RADAR_SHOWS === 'learned' ? by.learner : by.spam;
+        var luck = beatShare(by.random.scores, careful.scores);
         return { pass: luck <= G.maxLuck,
                  text: 'Skill beats luck: a random clicker rarely beats a careful player',
                  detail: 'random wins ' + f(100 * luck, 1) + '% of match-ups (want at most ' + Math.round(100 * G.maxLuck) + '%)' };

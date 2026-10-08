@@ -210,7 +210,7 @@
   // and read the answers. It opens once the results screen is up, which is also the only place
   // the Download button lives.
   function sealed() {
-    return context.phase === 'tutorial1' || context.phase === 'tutorial2' || context.phase === 'main';
+    return context.phase === 'tutorial1' || context.phase === 'main';
   }
 
   // ------------------------------------------------------------------ Inspection

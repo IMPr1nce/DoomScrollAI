@@ -12,17 +12,19 @@ window.DS = window.DS || {};
 
 DS.CONFIG = {
   // ---------------------------------------------------------------- Attention
-  ATTENTION_START: 60,        // every VP starts a round here
+  ATTENTION_START: 50,        // every VP starts a round here. Was 60 (the brief): with a 30 s round, 60 + the old
+                              // drain meant a random clicker rarely lost anyone (see balance.md)
   ATTENTION_MAX: 100,         // the bar is capped here (it's a 0–100 scale)
   LIKE_GAIN: 20,              // TOTAL attention gained over one watch (before fatigue). Was 15.
   DISLIKE_PENALTY: 12,        // instant loss when a VP skips a post
-  IDLE_DRAIN_PER_SEC: 2.0,    // loss per second while idle. This is what forces juggling. (2 -> 1.5 for six
-                              // people; back to 2.0 for four, which are easier to keep up with)
+  IDLE_DRAIN_PER_SEC: 3.0,    // loss per second while idle. This is what forces juggling. (2 -> 1.5 for six
+                              // people; back to 2.0 for four; 3.0 for two people in a 30 s round, so that an
+                              // ignored person is gone in about 17 s and random play still loses people)
   POST_DURATION_SEC: 3,       // how long a VP watches a liked post (its buttons are locked meanwhile). Was 5:
                               // with four people, 3 s keeps the game moving and gives more decisions per minute
 
   // -------------------------------------------------------------------- Round
-  ROUND_SEC: 90,              // main game length
+  ROUND_SEC: 30,              // main game length. Was 90 (the brief); the team lead asked for a 30 s round
   ROUND_END_DELAY_SEC: 1.5,   // after the round ends, the final board stays up this long (with a
                               // "Time's up!" banner) before the results screen, so the player sees
                               // who left and who stayed
@@ -30,7 +32,9 @@ DS.CONFIG = {
 
   // ----------------------------------------------------------------- Tutorial
   TUTORIAL_DRAIN_MULT: 0.5,   // idle drain is multiplied by this in the tutorials
-  TUTORIAL1_GOAL: 90,         // attention needed to pass tutorial 1
+  TUTORIAL1_GOAL: 90,         // attention needed to pass the tutorial
+  TUTORIAL_HINT_DELAY_SEC: 0.8, // after a push, wait this long before a tutorial hint pop-up, so the player
+                              // sees the reaction first (a bit shorter than TUTORIAL_RESULT_DELAY_SEC)
 
   // ------------------------------------------------------------------ Fatigue
   // Look at the VP's last FATIGUE_WINDOW pushes; count how many were the same
@@ -53,17 +57,17 @@ DS.CONFIG = {
   DRIFT_DOWN: 0.04,           // with 3 s watches each person sees more posts, so 0.05 squeezed even a player
                               // who mixes topics on purpose. 0.04 keeps "mixing keeps variety" true.
   TASTE_MIN: 0.05,
-  TASTE_MAX: 0.95,
+  TASTE_MAX: 0.97,            // was 0.95: raised with TASTE_FAVORITE, which would otherwise be clamped to it
 
   // ------------------------------------------------- Starting tastes (content.js
   // says WHICH topics are favorite / meh; these say HOW MUCH)
   // Clearer than they were (0.85 / 0.15): a favorite is liked ~9 times in 10, a disliked topic ~1 in 12.
   // Likes are still a dice roll, so players learn patterns, not one answer; but a right choice is rarely
   // punished, and a random clicker almost never beats a careful player.
-  TASTE_FAVORITE: 0.92,
+  TASTE_FAVORITE: 0.95,       // was 0.92, then 0.85: playtesters still saw too many skips on a long spike
   TASTE_MEH: 0.5,
   TASTE_DISLIKED: 0.08,
-  TASTE_JITTER: 0.04,         // +/- random wobble so two "favorites" aren't identical
+  TASTE_JITTER: 0.03,         // was 0.04         // +/- random wobble so two "favorites" aren't identical
 
   // ------------------------------------------------------------------ Layout
   // Switches for playtesting. They can also be set from the address bar without editing this file:
@@ -73,7 +77,7 @@ DS.CONFIG = {
   // PROFILE_COUNT: 4 = a 2x2 grid of the first four people in content.js (Maya, Jordan, Sam and Riley,
   // who between them love all six topics); 6 = all six in a 3x2 grid. Six cards was too many to think
   // about at once: players started clicking at random instead of choosing.
-  PROFILE_COUNT: 4,
+  PROFILE_COUNT: 2,           // was 4 (and 6 before that); 4 and 6 stay available as playtest switches
   // TOPIC_LAYOUT: 'radar' = the six topic buttons sit around a radar (see RADAR_SHOWS); 'grid' = the
   // original 3x2 buttons, which show what the player has seen so far ("4/5" counts and a bio-clue star).
   // The radar needs the wider cards of the 4-profile layout: with 6 profiles the game uses the grid.

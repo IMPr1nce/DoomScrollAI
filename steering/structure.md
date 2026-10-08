@@ -48,13 +48,19 @@ tests load it without the page code.
   verdict comes from `buildReveal()`.
 
 ## Game state
-- **Phases:** `title → tutorial1 → tutorial2 → main → reveal`. **Play again** goes to `main`; **Replay
+- **Phases:** `title → tutorial1 → main → reveal`. **Play again** goes to `main`; **Replay
   the tutorial** goes to `tutorial1`.
 - **`active`** is whatever is being played: `vps`, `cards`, `frozen` (nothing ticks: a pop-up, the
   "ready?" card, a pause or a finished round), `paused` (only a real pause), `ended`, `elapsed`,
   `limitSec` and `check`.
 - **Delayed callbacks** capture `active` as a token and do nothing if it changed, because the player may
   have restarted in the meantime.
+- **The tutorial's pop-ups** (`game.js`): an intro chain (`introPages` → `showPopupChain`) that freezes the
+  round, then one-time hints (`attachHints`, listening to Alex's `push` events) and the win pop-up. None may
+  mention the narrowing of tastes. Each pop-up can pass `target` to `ui.showOverlay`: the target is ringed,
+  the rest dimmed, and a small panel with an arrow sits beside it (`placeSpot` in `ui.js`). Keep that text to
+  one or two short lines: the highlight does the explaining. The board is one row of two cards for 2 people (`--rows` set by
+  `ui.mountCards`), a 2 × 2 for 4, and 3 × 2 for 6.
 - **Pausing:** the Pause button, Esc, or switching tabs. Only the main round can be paused.
 
 ## The radar
@@ -82,7 +88,8 @@ It lives in two places that must agree.
   include it in `versionLabel()` so the CSV says what was played, and add it to the version tables in the
   README and [product.md](product.md#versions-for-playtests).
 - **A person:** add them to `DS.VP_DEFS` in `js/content.js` ([content.md](content.md#the-people-vps)). The
-  first `PROFILE_COUNT` people play, and the first four must love all six topics between them.
+  first `PROFILE_COUNT` people play, and the first four must love all six topics between them (that is the
+  `?profiles=4` board).
 - **A topic:** add it to `DS.TOPICS` and `DS.TOPIC_MESSAGES`, and make sure someone loves it. The radar's
   sizing in CSS assumes six topics (a hexagon), so a seventh means reworking the radar layout.
 - **A speech-bubble line or category:** see [content.md](content.md#speech-bubbles).
