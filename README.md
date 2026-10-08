@@ -47,6 +47,11 @@ still work; the page just scrolls.
    variety they saw, and their radar twice: at the start (the one you played with) and at the end,
    usually shrunk into a single spike. That's the filter bubble, and the student's own feed made it.
    Then the big picture and three questions for the class.
+6. **Bonus: Guess the profile** (the button next to *Download data*): a random person, an empty radar and
+   10 points to share across the topics. Drag each dot out or in, then press **Simulate**. The person sees one
+   post per point, watches what they want and skips the rest. A skip means "too much of this"; a topic you
+   never show tells you nothing. Move points until every post gets watched. It's the recommender's real
+   job: learning a profile from watches and skips. After 4 tries, *Show me the answer* appears.
 
 Teacher tips:
 
@@ -87,6 +92,7 @@ Edit the file, save it, reload the page.
 | An **easier** game | raise `ATTENTION_START` or `LIKE_GAIN`; lower `IDLE_DRAIN_PER_SEC` or `DISLIKE_PENALTY` |
 | A **harder** game | the opposite |
 | A **longer or shorter** round | `ROUND_SEC` (30). The balance was tuned for 30 s and 2 people: see `steering/balance.md` |
+| "Guess the profile": more or fewer **points**, a bigger radar, when the answer is offered | `GUESS_POINTS` (10), `GUESS_MAX_PER_TOPIC` (5), `GUESS_ANSWER_AFTER` (4) |
 | A **stronger filter bubble** on the results screen | raise `DRIFT_UP` (how fast a liked topic is learned) or `DRIFT_DOWN` (how fast other topics fade). Careful with `DRIFT_DOWN`: above about 0.04 (with 3-second watches) even a player who mixes topics on purpose gets squeezed, which weakens "you had a choice". The simulator checks this. |
 | Spamming one topic to be **less rewarding** | lower `FATIGUE_MULTIPLIERS`. Careful: too harsh and mixing topics beats spamming, which flips the lesson. The simulator warns you. |
 | Buttons to **stay live** while someone watches | `LIKED_LOCKS_BUTTONS: false` (a new post then cuts the current watch short) |
@@ -182,6 +188,7 @@ js/logger.js          event log, CSV download, and flush(), the one exit for dat
 js/radar.js           draws the six-topic radar (on the cards and on the results screen)
 js/ui.js              screens, pop-up, scoreboard, profile cards (radar or button layout)
 js/reveal.js          the results screen: the wording (pure, tested) + the drawing
+js/guess.js           "Guess the profile", the bonus puzzle: the model and wording (pure, tested) + the drawing
 js/game.js            the conductor: clock, phases, pause, round end, logging hooks
 tests.html            open in Chrome: the model, logger and results-wording tests
 sim.html              open in Chrome: the balance simulator

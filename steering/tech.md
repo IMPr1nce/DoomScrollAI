@@ -8,7 +8,7 @@ commands, what to run after a change, and how the data leaves the game.
 - **It must run by double-clicking `index.html`** (a `file://` page, offline). So: no ES modules, no
   `fetch` or XHR, and no data files loaded at runtime. Data lives in `.js` files.
 - **Classic `<script>` tags in dependency order, sharing one global, `window.DS`:**
-  `config → content → vp → metrics → logger → radar → ui → reveal → game`. Each file is an IIFE
+  `config → content → vp → metrics → logger → radar → ui → reveal → guess → game`. Each file is an IIFE
   (`(function () { 'use strict'; … })()`) that adds to `DS`; `config.js` and `content.js` just set data.
 - **ES5 style** in everything the browser loads: `var` and function expressions, with no arrow functions,
   `let`/`const`, classes or template literals. (`tests/run-node.js` and `tests/e2e.js` run in Node.)
@@ -37,7 +37,7 @@ node tests/e2e.js             # the real game in headless Chrome from file://, a
 No terminal? Open `tests.html` and `sim.html` in Chrome. They run the same code.
 
 **To see the game:** double-click `index.html`, or start the static server in `.claude/launch.json`
-(`python3 -m http.server 8765`) and open `http://localhost:8765/index.html`.
+(a `python3` static server that sends `Cache-Control: no-store`, so a reload always gets your latest edits) and open `http://localhost:8765/index.html`.
 
 **Dev mode:** `index.html?dev=1` keeps the console handles open and loads `tests/dev-helpers.js`:
 - `DS.dev.play({ bot: 'spam' })` plays a whole round instantly and lands on the results (bots: `learner`,

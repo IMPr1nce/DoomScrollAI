@@ -62,4 +62,6 @@ results wording, labels.
 | Tutorial header and pop-ups, the "ready?" card, pause | `js/game.js` | no: follow the rules by hand |
 | Card labels and status chips ("Waiting", "Needs a post!", "AFK — closed the app") | `js/ui.js` | no |
 | Results labels, captions and legends | the drawing half of `js/reveal.js` | no |
+| "Guess the profile" sentences (summary, per-topic lines, hints, win) | `DS.guessModel.text` in `js/guess.js` | yes |
+| "Guess the profile" labels and the "How it works" list | the drawing half of `js/guess.js` | no |
 | Title screen | `index.html` | no |

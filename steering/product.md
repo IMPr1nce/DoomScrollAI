@@ -45,6 +45,8 @@ student built it by chasing attention. The class then discusses whether that was
 4. **Results**, one step at a time: the win first, then one step per person (what you showed them, the
    variety they watched in each half, and their radar at the start next to the end), then the big picture
    with three questions for the class. **Play again** starts a new round right away.
+5. **Bonus: Guess the profile** (next to *Download data*): build a random person's profile on a radar with 10
+   points, press Simulate, read the watches and skips, and adjust until every post is watched.
 
 ## Principles every change has to keep
 1. **Fun first, lesson last.** Nothing during play explains the filter bubble, and the narrowing (the taste
@@ -89,3 +91,4 @@ decisions here with the date and the reason.
 | 2026-10-05 | **The results show each person's radar at the start next to the end.** | The same picture, before and after, makes "your feed did this" plain to see. |
 | 2026-10-05 | **Fairer dice and a 3-second watch** ([balance.md](balance.md)). | The game felt like luck: a player who knew the right answer was skipped 23% of the time. |
 | 2026-10-07 | **One tutorial instead of two, with many explanatory pop-ups. A 30-second round. 2 people instead of 4.** (`?profiles=4` stays.) | The team lead asked for a shorter, more explained session. The "lose them" idea moved into the tutorial's last pop-up. Trade-offs, checked in the simulator: with 30 s and 2 people each half of the round has only about 5 watched posts per person, so a person who leaves early often gets the "too few watched posts" wording; drain and starting attention were retuned so random play still loses people ([balance.md](balance.md)). |
+| 2026-10-07 | **"Guess the profile" puzzle on the last results step.** 10 points across six topics, one post per point; the person watches up to what they want and skips the rest. Deterministic, no dice. | The team lead wanted players to build a radar themselves and learn from a simulation. The budget stops "max everything". It teaches how a profile is learned (skips = too much; an unshown topic = no data), and every perfect profile mixes 3+ topics. |

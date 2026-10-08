@@ -4,7 +4,10 @@
     {
       "name": "doomscroll-ai",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1"],
+      "runtimeArgs": [
+        "-c",
+        "import http.server as s\nclass H(s.SimpleHTTPRequestHandler):\n    def end_headers(self):\n        self.send_header('Cache-Control', 'no-store')\n        super().end_headers()\ns.ThreadingHTTPServer(('127.0.0.1', 8765), H).serve_forever()"
+      ],
       "port": 8765
     }
   ]

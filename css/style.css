@@ -722,6 +722,69 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 .big__actions { grid-column: 1 / -1; display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
 .big > .link-btn { grid-column: 1 / -1; justify-self: center; margin-top: 0; }
 
+/* ---- "Guess the profile" (guess.js): a draggable radar on the left, what the simulation showed on the right.
+   Sized to fit the 1366 x 600 target without scrolling, like the results steps. */
+.guess { flex: 1; min-height: 0; width: 100%; max-width: 1200px; display: flex; flex-direction: column; gap: 10px; }
+.guess__head { display: flex; align-items: center; gap: 12px; }
+.guess__name { margin: 0; font-size: 24px; line-height: 1.2; }
+.guess__bio { margin: 0; font-size: 16px; color: var(--muted); }
+.guess__body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 12px; }
+.guess__editor { display: flex; flex-direction: column; min-height: 0; }
+/* flex-basis 0: without it the SVG's own aspect ratio sets its height and the page scrolls. It keeps its
+   shape anyway (the default preserveAspectRatio fits it inside the box). */
+.guess__svg { flex: 1 1 0; min-height: 0; width: 100%; touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.guess__ring { fill: none; stroke: #e7e3f6; stroke-width: 1; }
+.guess__ring--outer { stroke: #cfc8ee; stroke-width: 1.5; }
+.guess__spoke { stroke: #e0dbf4; stroke-width: 1; }
+.guess__shape { fill: rgba(91, 61, 245, 0.18); stroke: var(--primary); stroke-width: 2.5; stroke-linejoin: round; }
+.guess__answer { fill: none; stroke: var(--good); stroke-width: 3; stroke-dasharray: 7 5; stroke-linejoin: round; }
+.guess__label { font-size: 13px; font-weight: 800; fill: var(--ink); }
+.guess__value { font-size: 12px; font-weight: 700; fill: var(--muted); }
+.guess__handle { fill: #fff; stroke-width: 4; cursor: grab; }
+.guess__handle--zero { stroke-width: 2.5; stroke-dasharray: 3 2; }
+.guess__handle:focus { outline: none; }
+.guess__handle:focus-visible { stroke-width: 6; filter: drop-shadow(0 0 4px rgba(91, 61, 245, 0.9)); }
+.guess__bar { display: flex; align-items: center; gap: 10px; padding-top: 6px; }
+.guess__bar .btn { padding: 10px 22px; font-size: 18px; }
+.guess__bar .btn:disabled { opacity: 0.45; cursor: default; }
+.guess__left { flex: 1; margin: 0; font-size: 18px; font-weight: 800; color: var(--muted); }
+.guess__left--done { color: var(--good); }
+.guess__left--flash { color: var(--bad); animation: guess-shake 0.35s; }
+@keyframes guess-shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+.guess__result { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: auto; font-size: 16px; }
+.guess__how { margin: 4px 0 0; padding-left: 1.2em; font-size: 18px; }
+.guess__how li { margin: 6px 0; }
+.guess__score { display: flex; align-items: baseline; gap: 8px; }
+.guess__try { font-weight: 800; color: var(--muted); }
+.guess__pct { font-size: 30px; font-variant-numeric: tabular-nums; line-height: 1; }
+.guess__pct-label { font-weight: 700; color: var(--muted); }
+.guess__meter { height: 10px; border-radius: 999px; background: #ece9fb; overflow: hidden; }
+.guess__meter-fill { height: 100%; background: var(--primary); transition: width 0.4s ease-out; }
+.guess__feed { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0; padding: 0; list-style: none; }
+.guess__post {
+  display: flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 10px; font-size: 18px; font-weight: 800;
+  animation: guess-post 0.3s ease-out both; animation-delay: calc(var(--i) * 70ms);
+}
+.guess__post--watched { background: #e2f5e8; color: var(--good); }
+.guess__post--skipped { background: #fde6e6; color: var(--bad); }
+.guess__post--skipped .guess__post-emoji { opacity: 0.5; }
+@keyframes guess-post { from { opacity: 0; transform: translateY(6px); } }
+.guess__summary { margin: 0; font-size: 18px; font-weight: 800; }
+.guess__topics { margin: 0; padding: 0; list-style: none; }
+.guess__topic { display: flex; gap: 6px; margin: 2px 0; }
+.guess__topic--skips { color: var(--bad); font-weight: 700; }
+.guess__topic--none { color: var(--muted); }
+.guess__hint { margin: 0; color: var(--muted); }
+.guess__win { margin: 0; color: var(--good); font-weight: 800; }
+.guess__history { margin: 0; color: var(--muted); font-weight: 700; }
+.guess__show { align-self: flex-start; margin: 0; }
+.guess__foot { display: flex; justify-content: space-between; gap: 12px; }
+@media (max-width: 1000px) {
+  .guess__body { grid-template-columns: 1fr; }
+  .guess__svg { min-height: 320px; }
+}
+
 /* ------------------------------------------------ Short windows (tutorial)
    On a laptop the browser leaves ~600px of height. The tutorial's big card is taller than that
    at its roomy default, so below 700px tall everything tightens up (the buttons are still big). */

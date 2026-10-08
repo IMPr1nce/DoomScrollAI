@@ -138,6 +138,12 @@ DS.CONFIG = {
   //         (the unused part of the gain is lost).
   LIKED_LOCKS_BUTTONS: true,
 
+  // ------------------------------------------- "Guess the profile" (the bonus on the last results step)
+  GUESS_POINTS: 10,           // points the player shares across the six topics. The cap is the puzzle: without
+                              // it, every topic would be dragged to the top and the feed would teach nothing
+  GUESS_MAX_PER_TOPIC: 5,     // the radar's outer ring
+  GUESS_ANSWER_AFTER: 4,      // after this many tries, a "Show me the answer" link appears
+
   // --------------------------------------------------------------------- Dev
   RNG_SEED: null,             // null = different every play. A number = same game every time.
 

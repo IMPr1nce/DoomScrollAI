@@ -243,6 +243,47 @@ async function main() {
       }
     }
 
+    // ---- 4b. "Guess the profile", opened from the real button next to Download CSV. A solver plays it with
+    // the keyboard (arrow keys on each topic's slider) using only what the screen says, so this also proves
+    // the puzzle can be solved from its feedback alone.
+    var guess = await b.eval("(async function () {" +
+      "var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+      "var out = {}; var st = [].slice.call(document.querySelectorAll('#reveal-steps .step')); st[st.length - 1].click(); await sleep(700);" +
+      "var btns = [].slice.call(document.querySelectorAll('.big__actions .btn')); out.order = btns.map(function (x) { return x.textContent; });" +
+      "btns.filter(function (x) { return /Guess/.test(x.textContent); })[0].click(); await sleep(700);" +
+      "out.screen = document.body.dataset.screen; out.fits = document.documentElement.scrollHeight <= innerHeight;" +
+      "var ids = DS.TOPIC_IDS, handles = [].slice.call(document.querySelectorAll('.guess__handle'));" +
+      "var val = function (i) { return +handles[i].getAttribute('aria-valuenow'); };" +
+      "var key = function (i, k) { handles[i].dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); };" +
+      "var setTo = function (i, v) { var guard = 0; while (val(i) < v && guard++ < 9) key(i, 'ArrowUp'); while (val(i) > v && guard++ < 18) key(i, 'ArrowDown'); };" +
+      // the budget: push one topic to its cap, then try to go past 10 points in total
+      "setTo(0, 5); setTo(1, 5); key(2, 'ArrowUp'); out.capped = val(2) === 0 && /No points left/.test(document.querySelector('.guess__left').textContent);" +
+      "for (var z = 0; z < ids.length; z++) setTo(z, 0);" +
+      // the solver: exact[i] once a topic showed skips; low[i] = the most it ever watched without skipping
+      "var exact = {}, low = {}; ids.forEach(function (id, i) { low[i] = 0; });" +
+      "for (var t = 0; t < 15; t++) {" +
+      "  var plan = {}, left = 10; ids.forEach(function (id, i) { plan[i] = exact[i] !== undefined ? exact[i] : low[i]; left -= plan[i]; });" +
+      "  for (var guard = 0; left > 0 && guard < 60; guard++) { var i2 = guard % ids.length; if (exact[i2] === undefined && plan[i2] < 5) { plan[i2]++; left--; } }" +
+      "  for (var d = 0; d < ids.length; d++) setTo(d, 0); for (var u = 0; u < ids.length; u++) setTo(u, plan[u]);" +
+      "  document.querySelector('.guess__bar .btn--primary').click(); await sleep(80);" +
+      "  var lines = [].slice.call(document.querySelectorAll('.guess__topic')).map(function (li) { return li.textContent; });" +
+      "  if (document.querySelector('.guess__win')) { out.solvedIn = t + 1; break; }" +
+      "  lines.forEach(function (line, i) { var m = /watched (\\d+), skipped/.exec(line); if (m) exact[i] = +m[1]; else if (/skipped all/.test(line)) exact[i] = 0; else if (/watched all/.test(line)) low[i] = Math.max(low[i], plan[i]); });" +
+      "}" +
+      "out.winText = document.querySelector('.guess__win') ? document.querySelector('.guess__win').textContent : null;" +
+      "out.fitsAfter = document.documentElement.scrollHeight <= innerHeight;" +
+      "out.text = document.getElementById('screen-guess').innerText;" +
+      "await sleep(600); [].slice.call(document.querySelectorAll('.guess__foot .btn')).filter(function (x) { return /Back/.test(x.textContent); })[0].click(); await sleep(400);" +
+      "out.backTo = document.body.dataset.screen + ' / ' + document.getElementById('reveal-progress').textContent;" +
+      "return out; })()");
+    check('guess: the button sits next to Download CSV and opens the puzzle, which fits the window',
+          guess.order[0].indexOf('Download') !== -1 && /Guess the profile/.test(guess.order[1]) && guess.screen === 'guess' && guess.fits, JSON.stringify(guess.order) + ' ' + guess.screen + ' fits=' + guess.fits);
+    check('guess: the 10-point budget holds (no topic can take a point once all 10 are placed)', guess.capped === true, JSON.stringify(guess.capped));
+    check('guess: a solver that only reads the watches and skips finds the perfect profile', guess.solvedIn > 0 && guess.solvedIn <= 8 && /You built/.test(guess.winText),
+          'solved in ' + guess.solvedIn + ': ' + guess.winText);
+    check('guess: still fits after results, no "undefined"/"NaN", no he/she', guess.fitsAfter && !/undefined|NaN|\[object/.test(guess.text) && !/\b(he|she|him|her|his)\b/i.test(guess.text), guess.text.slice(0, 200));
+    check('guess: "Back to results" returns to the last results step', /^reveal \/ (\d+) of \1$/.test(guess.backTo), guess.backTo);
+
     // ---- 5. The CSV that the real Download button produces
     var csv = await b.eval("(async function () {" +
       "var name = null, blob = null, oc = URL.createObjectURL, ok = HTMLAnchorElement.prototype.click;" +

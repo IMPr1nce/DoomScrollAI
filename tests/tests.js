@@ -29,7 +29,8 @@
     HOOKED_WINDOW: 6, HOOKED_SHARE: 0.8, HOOKED_MESSAGE_CHANCE: 0.6,
     ENJOY_THRESHOLD: 0.45, LIKED_LOCKS_BUTTONS: true, RNG_SEED: null,
     MESSAGE_NO_REPEAT: 4, TOPIC_MESSAGE_CHANCE: 0.4, REVEAL_TREND_DELTA: 0.15, REVEAL_LOW_VARIETY: 0.25,
-    PROFILE_COUNT: 6, RADAR_SMOOTHING: 1
+    PROFILE_COUNT: 6, RADAR_SMOOTHING: 1,
+    GUESS_POINTS: 10, GUESS_MAX_PER_TOPIC: 5
   };
   var DEFAULTS = Object.assign(JSON.parse(JSON.stringify(C)), JSON.parse(JSON.stringify(PINNED)));
 
@@ -1150,6 +1151,95 @@
       out.results.forEach(function (r) { eq(r.castSize, n); ok(r.afk.share >= 0 && r.afk.share <= 1); });
       ok(out.goals.some(function (g) { return /luck/i.test(g.text); }), 'a luck goal is listed');
       eq(out.goals.length, 7);
+    });
+  });
+
+  // ================================================ "Guess the profile" (guess.js, the model half)
+  var G = function () { return DS.guessModel; };
+  function guessOf(o) {
+    var g = {};
+    DS.TOPIC_IDS.forEach(function (id) { g[id] = o[id] || 0; });
+    return g;
+  }
+
+  test('guess: every hidden profile spends exactly 10 points, favorites biggest, disliked topics at 0', function () {
+    DS.rng.seed(7);
+    for (var run = 0; run < 50; run++) {
+      DS.VP_DEFS.forEach(function (def) {
+        var t = G().makeTarget(def);
+        eq(G().sum(t), 10, def.id + ' spends all the points');
+        var minFav = Math.min.apply(null, def.favorites.map(function (id) { return t[id]; }));
+        DS.TOPIC_IDS.forEach(function (id) {
+          ok(t[id] >= 0 && t[id] <= 5, def.id + ' ' + id + ' within 0..5');
+          if (def.meh.indexOf(id) !== -1) ok(t[id] >= 1 && t[id] < minFav, def.id + ' meh ' + id + ' below every favorite');
+          else if (def.favorites.indexOf(id) === -1) eq(t[id], 0, def.id + ' disliked ' + id);
+        });
+      });
+    }
+  });
+
+  test('guess: a perfect profile mixes topics (never one spike), so the puzzle carries the lesson', function () {
+    DS.rng.seed(3);
+    DS.VP_DEFS.forEach(function (def) {
+      var t = G().makeTarget(def);
+      ok(DS.TOPIC_IDS.filter(function (id) { return t[id] > 0; }).length >= 3, def.id + ' wants at least 3 topics');
+    });
+  });
+
+  test('guess: simulate watches up to what the person wants and skips the rest; only an exact match is perfect', function () {
+    var target = guessOf({ sports: 4, food: 3, movies: 2, dance: 1 });
+    var r = G().simulate(guessOf({ sports: 5, food: 2, comics: 1 }), target);
+    var by = {};
+    r.topics.forEach(function (t) { by[t.id] = t; });
+    eq(by.sports.watched, 4); eq(by.sports.skipped, 1, 'one Sports too many');
+    eq(by.food.watched, 2); eq(by.food.skipped, 0, 'too little Food shows no skip: it has to be explored');
+    eq(by.comics.skipped, 1, 'a topic they never want is skipped');
+    eq(by.movies.shown, 0);
+    eq(r.watched, 6); eq(r.skipped, 2); eq(r.shown, 8); eq(r.score, 60); eq(r.perfect, false);
+
+    var p = G().simulate(guessOf({ sports: 4, food: 3, movies: 2, dance: 1 }), target);
+    eq(p.perfect, true); eq(p.score, 100); eq(p.skipped, 0);
+    eq(G().simulate(guessOf({ sports: 4, food: 3, movies: 2 }), target).perfect, false, 'a point short is not perfect');
+  });
+
+  test('guess: the budget and the per-topic cap', function () {
+    var g = guessOf({ sports: 5, food: 4 });
+    eq(G().pointsLeft(g), 1);
+    eq(G().canAdd(g, 'sports'), false, 'sports is at the cap');
+    eq(G().canAdd(g, 'food'), true);
+    g.food = 5;
+    eq(G().canAdd(g, 'music'), false, 'no points left');
+  });
+
+  test('guess: the feed interleaves topics, and a topic\'s watched posts come before its skipped ones', function () {
+    var r = G().simulate(guessOf({ sports: 3, music: 1 }), guessOf({ sports: 2, music: 1 }));
+    var feed = G().feed(r).map(function (p) { return p.id + (p.watched ? '+' : '-'); });
+    eq(feed.join(' '), 'sports+ music+ sports+ sports-');
+  });
+
+  test('guess text: honest, short, no he/she, and 1 is never plural', function () {
+    var T2 = G().text;
+    var target = guessOf({ sports: 4, food: 3, movies: 2, dance: 1 });
+    var cases = [guessOf({}), guessOf({ sports: 1 }), guessOf({ sports: 5, comics: 5 }), guessOf({ sports: 4, food: 3, movies: 2, dance: 1 }),
+                 guessOf({ sports: 2, food: 2 }), guessOf({ comics: 1 })];
+    var pool = [T2.intro('Maya'), T2.noPointsLeft, T2.answer('Maya'), T2.win('Maya', 1, 4), T2.win('Maya', 3, 3)];
+    [0, 1, 5, 10].forEach(function (n) { pool.push(T2.pointsLeft(n)); });
+    cases.forEach(function (g) {
+      var r = G().simulate(g, target);
+      pool.push(T2.summary('Maya', r), T2.hint(r));
+      r.topics.forEach(function (t) { pool.push(T2.topicLine(t)); });
+    });
+    eq(T2.pointsLeft(1), '1 point left');
+    eq(T2.summary('Maya', G().simulate(guessOf({ sports: 1 }), target)), 'Maya watched 1 of your 1 post.');
+    ok(/1 try\./.test(T2.win('Maya', 1, 4)), 'one try, not "1 tries"');
+    eq(T2.hint(G().simulate(guessOf({ sports: 4, food: 3, movies: 2, dance: 1 }), target)), '', 'no nudge once it is perfect');
+    pool.forEach(function (line) {
+      ok(!/\b(he|she|him|her|hers|his|himself|herself)\b/i.test(line), 'gendered word in: ' + line);
+      ok(!/\b1 (points|posts|tries)\b/.test(line), '"1" with a plural in: ' + line);
+      line.split(/(?<=[.!?])\s+/).forEach(function (sentence) {
+        var words = sentence.split(/\s+/).filter(Boolean).length;
+        ok(words <= 24, 'sentence has ' + words + ' words (max 24): ' + sentence);
+      });
     });
   });
 

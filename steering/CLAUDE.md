@@ -62,4 +62,6 @@ Paths in backticks are relative to the project root.
 - 2026-10-07: one tutorial with a chain of explanatory pop-ups and one-time hints (the "Lose them" tutorial is
   gone), a 30-second round, and 2 people by default (`?profiles=4` and `?profiles=6` still work). Drain and
   starting attention were retuned for it ([balance.md](balance.md)).
+- 2026-10-07: tutorial pop-ups point at what they explain (a spotlight), favorites liked ~95% of the time, and
+  the "Guess the profile" bonus puzzle (`js/guess.js`) on the last results step.
 - Not built, by design: the Flask endpoint (one `fetch` in `logger.flush`), sound, accounts.
