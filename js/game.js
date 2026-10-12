@@ -1,9 +1,9 @@
 /*
  * game.js — the conductor. It owns the clock, the phases, and what a click MEANS.
  *
- *   title -> tutorial1 ("Hook them") -> tutorial2 ("Lose them") -> main -> reveal
- *                                                                    ^        |
- *                                                                    +--------+  "Play again"
+ *   title -> tutorial1 ("Hook them") -> main -> reveal
+ *                                         ^        |
+ *                                         +--------+  "Play again"
  *
  * How it fits together:
  *   vp.js      the rules (no DOM)        game.js asks it to tick and to push
@@ -31,7 +31,7 @@
   (function applyPlaytestSwitches() {
     var q = window.location.search;
     var profiles = /[?&]profiles=(\d+)/.exec(q);
-    if (profiles && (+profiles[1] === 4 || +profiles[1] === 6)) C.PROFILE_COUNT = +profiles[1];
+    if (profiles && (+profiles[1] === 2 || +profiles[1] === 4 || +profiles[1] === 6)) C.PROFILE_COUNT = +profiles[1];
     var layout = /[?&]layout=(radar|grid)(&|$)/.exec(q);
     if (layout) C.TOPIC_LAYOUT = layout[1];
     var shows = /[?&]radar=(interests|learned)(&|$)/.exec(q);
@@ -122,10 +122,128 @@
     active = null;
   }
 
-  // ------------------------------------------------------------- Tutorial 1
-  // Goal: raise Alex's attention to TUTORIAL1_GOAL. With the interests radar, the player learns to read
-  // it ("long spike = they like it"). Without it, Alex's tastes are hidden, so the player has to try
-  // topics and watch the reactions: "learning from clicks".
+  // --------------------------------------------------------------- Tutorial
+  // One tutorial, one person (Alex), a goal of TUTORIAL1_GOAL. It used to be two (hook them, then lose
+  // them); the team lead cut it to one and asked for more pop-ups that explain what the player sees. So
+  // the tutorial teaches in three layers:
+  //   1. an intro chain of pop-ups before anything moves (the radar, the attention bar, "don't overdo it"),
+  //   2. a one-time hint the first time each thing happens (a like, a skip, a repeat), and
+  //   3. the win pop-up, which also says what happens when attention hits 0.
+  // None of it mentions the narrowing of tastes: that stays hidden until the results screen.
+  function topicWord(id) { return DS.TOPIC_BY_ID[id].label; }
+
+  // The topics Alex's radar shows with the longest spikes, as words ("Music and Food"). Only used with the
+  // interests radar, which draws exactly this snapshot already, so naming them tells the player nothing the
+  // radar doesn't. Spikes within 0.1 of the longest count: the starting tastes carry a small random wobble,
+  // so two favorites are never exactly equal, and "the longest" alone would hide a near-tie.
+  function longestSpikes(vp) {
+    var max = 0;
+    DS.TOPIC_IDS.forEach(function (id) { max = Math.max(max, vp.tasteSnapshotStart[id]); });
+    var ids = DS.TOPIC_IDS.filter(function (id) { return vp.tasteSnapshotStart[id] >= max - 0.1; });
+    return { ids: ids, words: ids.map(topicWord).join(' and '), plural: ids.length > 1 };
+  }
+
+  // What a tutorial pop-up can point at. Each returns a function (not an element), because the card is
+  // rebuilt on "Try again" and the pop-up looks the element up only when it is shown.
+  function cardPart(selector) {
+    return function () { return document.querySelector('#tut-card-slot ' + selector); };
+  }
+  function topicButton(topicId) {
+    return function () {
+      var all = document.querySelectorAll('#tut-card-slot .topic-btn');
+      return all[DS.TOPIC_IDS.indexOf(topicId)] || null;
+    };
+  }
+
+  // Show pop-ups one after another. Each has a "Next" button; the last one calls `done`. `token` is the
+  // game state we started from: if the player skipped the tutorial meanwhile, the chain stops.
+  function showPopupChain(pages, token, done) {
+    function show(i) {
+      if (active !== token) return;
+      var last = i === pages.length - 1;
+      ui.showOverlay({
+        title: pages[i].title,
+        text: pages[i].text,
+        target: pages[i].target,
+        buttons: [{
+          label: last ? 'Got it' : 'Next', primary: true,
+          onClick: function () { if (last) done(); else show(i + 1); }
+        }]
+      });
+    }
+    show(0);
+  }
+
+  // The intro: each page points at the thing it talks about and says it in a line or two, so the player
+  // looks at the card instead of reading a wall of text.
+  function introPages(vp, interests) {
+    var spikes = interests ? longestSpikes(vp) : null;
+    var pages = [
+      { title: 'Meet ' + vp.name, text: 'Keep ' + vp.name + ' scrolling by showing posts they like.',
+        target: cardPart('.card__head') },
+      { title: 'This is attention', text: 'Likes raise it. Skips drop it. At 0, ' + vp.name + ' leaves for good.\nGet it to the goal line.',
+        target: cardPart('.meter') }
+    ];
+    if (interests) {
+      pages.push({ title: 'This is a radar plot',
+        text: 'A longer spike means ' + vp.name + ' likes that topic more.\n' + spikes.words + (spikes.plural ? ' are' : ' is') + ' longest.',
+        target: cardPart('.radar') });
+      pages.push({ title: 'Don\'t overdo it',
+        text: 'A long spike doesn\'t mean you can show it again and again. Each repeat gains less.',
+        // point at one of the longest spikes: the button the player will be tempted to press over and over
+        target: topicButton(spikes.ids[0]) });
+    } else if (C.TOPIC_LAYOUT === 'radar') {
+      pages.push({ title: 'This is a radar plot',
+        text: 'You don\'t know what ' + vp.name + ' likes yet. Try a topic: the spike grows when they like it.',
+        target: cardPart('.radar') });
+      pages.push({ title: 'Don\'t overdo it',
+        text: 'Even a topic ' + vp.name + ' likes gets old if you repeat it. Each repeat gains less.',
+        target: cardPart('.radar') });
+    } else {
+      pages.push({ title: 'Find what ' + vp.name + ' likes',
+        text: 'Try a topic and watch the reaction. The counts show how often it worked.',
+        target: cardPart('.topics') });
+      pages.push({ title: 'Don\'t overdo it',
+        text: 'Even a topic ' + vp.name + ' likes gets old if you repeat it. Each repeat gains less.',
+        target: cardPart('.topics') });
+    }
+    return pages;
+  }
+
+  // One-time hints while Alex is being played. `seen` makes each fire once per tutorial run. Each points at
+  // what just happened: the meter for a like, the button that was pressed for a repeat.
+  function attachHints(vp, token, interests) {
+    var seen = {};
+    function hint(key, title, text, target) {
+      if (seen[key]) return;
+      seen[key] = true;
+      // Wait a moment so the player SEES the reaction (the bubble, the +/- pill) before the text covers it.
+      setTimeout(function () {
+        // The goal or an AFK pop-up may have taken over in the meantime, or the player may have left.
+        if (active !== token || token.frozen) return;
+        freeze();
+        ui.showOverlay({ title: title, text: text, target: target, buttons: [{
+          label: 'Got it', primary: true,
+          onClick: function () { if (active === token && !token.ended) unfreeze(); }
+        }] });
+      }, C.TUTORIAL_HINT_DELAY_SEC * 1000);
+    }
+    vp.onEvent(function (e) {
+      if (e.event !== 'push') return;
+      if (e.fatigueMult !== null && e.fatigueMult < 1) {
+        hint('repeat', 'Same topic again',
+             'Repeats gain less, so the + is smaller. Mix it up!', topicButton(e.topic));
+      } else if (e.liked) {
+        hint('liked', vp.name + ' liked it!',
+             'Attention rises while ' + vp.name + ' watches. Buttons lock until the post ends.', cardPart('.meter'));
+      } else {
+        hint('skipped', vp.name + ' skipped it',
+             'A skip costs attention right away.' + (interests ? ' Aim for the long spikes.' : ' Try something else.'),
+             cardPart('.meter'));
+      }
+    });
+  }
+
   function startTutorial1() {
     setPhase('tutorial1');
     ui.hideOverlay();
@@ -144,29 +262,27 @@
 
     var interests = ui.showsInterests();
     ui.setTutorialHeader({
-      step: 'Tutorial 1 of 2',
+      step: 'Tutorial',
       title: 'Hook them',
-      // The radar needs one sentence of explanation; it is the first time the player sees it.
-      text: interests ? 'This is Alex\'s For You page. Pick posts to show them. A long spike means Alex likes it.'
-          : C.TOPIC_LAYOUT === 'radar' ? 'This is Alex\'s For You page. Pick posts to show them. The spikes grow toward what Alex likes.'
-          : 'This is Alex\'s For You page. Pick posts to show them. Watch how they react.',
-      goal: 'Goal: get Alex\'s attention up to ' + C.TUTORIAL1_GOAL
+      text: 'Pick posts to show ' + vp.name + '. Keep ' + vp.name + ' scrolling.',
+      goal: 'Goal: get ' + vp.name + '\'s attention up to ' + C.TUTORIAL1_GOAL
     });
     ui.showScreen('tutorial');
 
-    active = {
+    var tutorial = active = {
       vps: [vp], cards: [card], frozen: false, elapsed: 0,
       check: function () {
         if (vp.attention >= C.TUTORIAL1_GOAL) {
           showResultAfterDelay({
             title: 'You did it!',
             // With the interests radar the player didn't have to figure Alex out, so say where such a
-            // radar comes from instead: that is the AI idea behind it.
-            text: interests
-              ? 'Real apps keep a profile like this radar on every user. They build it from every post you watch or skip.'
-              : 'You figured out what Alex likes. That\'s what a recommender algorithm does. ' +
-                'It learns from what you click.',
-            buttons: [{ label: 'Next', primary: true, onClick: startTutorial2 }]
+            // radar comes from instead: that is the AI idea behind it. Then say what the other way to
+            // end a round is, since there is no longer a second tutorial that makes Alex leave.
+            text: (interests
+              ? 'Real apps keep a profile like this radar on every user. They build it from every post you watch or skip.\n'
+              : 'You figured out what Alex likes. That\'s what a recommender algorithm does. It learns from what you click.\n') +
+              'In the game, an ignored person leaves at 0. For a platform, that\'s the worst outcome: no attention, no ads.',
+            buttons: [{ label: 'Start the game', primary: true, onClick: startMain }]
           });
         } else if (vp.state === 'afk') {
           // Pushed too many posts they hate. Let them try again with a fresh Alex.
@@ -179,39 +295,18 @@
         }
       }
     };
-  }
 
-  // ------------------------------------------------------------- Tutorial 2
-  // Same Alex, same card. Now the goal is the opposite: make them leave. This is the point
-  // of the whole game: a platform measures success by attention, and 0 attention is failure.
-  function startTutorial2() {
-    setPhase('tutorial2');
-    var vp = active.vps[0];
-    var card = active.cards[0];
-
-    card.setGoalMarker(null);                 // the goal is now "0", the left edge
-    ui.setTutorialHeader({
-      step: 'Tutorial 2 of 2',
-      title: 'Lose them',
-      text: 'Now do the opposite. Show Alex posts they don\'t like until they leave.',
-      goal: 'Goal: drop Alex\'s attention to 0'
+    // Nothing moves until the intro has been read (Alex's attention would drain behind the pop-ups).
+    freeze();
+    attachHints(vp, tutorial, interests);
+    showPopupChain(introPages(vp, interests), tutorial, function () {
+      if (active === tutorial) unfreeze();
     });
-
-    active.check = function () {
-      if (vp.state === 'afk') {
-        showResultAfterDelay({
-          title: 'Alex closed the app.',
-          text: 'For the platform, that\'s the worst outcome. No attention, no ads.',
-          buttons: [{ label: 'Start the game', primary: true, onClick: startMain }]
-        });
-      }
-    };
-    unfreeze();
   }
 
   // -------------------------------------------------------------- Main game
-  // Six VPs, one shared clock. The player has to spread attention across all of them:
-  // every idle VP drains, so pushing to one means the other five are getting closer to AFK.
+  // A few VPs (PROFILE_COUNT), one shared clock. The player has to spread attention across all of them:
+  // every idle VP drains, so pushing to one means the others are getting closer to AFK.
   // That juggling is what makes "just keep them hooked" feel like a real job.
   function startMain() {
     roundNo++;
@@ -371,7 +466,6 @@
   var game = {
     phase: 'title',
     startTutorial1: startTutorial1,
-    startTutorial2: startTutorial2,
     startMain: startMain,
     pause: pause,
     resume: resume,

@@ -39,7 +39,7 @@
           <li><span class="how__icon" aria-hidden="true">⏱️</span>Don't let anyone leave</li>
         </ol>
         <button id="btn-start" class="btn btn--primary btn--big" type="button">Start</button>
-        <p class="title-card__fine">About 5 minutes. No sign-in. No names.</p>
+        <p class="title-card__fine">About 3 minutes. No sign-in. No names.</p>
       </div>
     </section>
 
@@ -71,6 +71,9 @@
       <div id="main-grid" class="board"></div>
     </section>
 
+    <!-- "Guess the profile": a bonus puzzle from the last results step. guess.js builds it. -->
+    <section id="screen-guess" class="screen"></section>
+
     <!-- The results: a score first, then one step per person, then the big picture (reveal.js). -->
     <section id="screen-reveal" class="screen">
       <nav id="reveal-steps" class="steps" aria-label="Results steps"></nav>
@@ -89,6 +92,8 @@
 
   <!-- One shared pop-up: tutorial results, the "ready?" card, and pause. -->
   <div id="overlay" class="overlay" hidden>
+    <!-- Spotlight: when a pop-up points at something, this ring sits over it and dims everything else. -->
+    <div id="overlay-spot" class="overlay__spot" hidden></div>
     <div class="overlay__panel" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
       <h2 id="overlay-title"></h2>
       <p id="overlay-text"></p>
@@ -109,6 +114,7 @@
   <script src="js/radar.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/reveal.js"></script>
+  <script src="js/guess.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

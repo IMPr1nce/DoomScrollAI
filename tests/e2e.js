@@ -136,7 +136,34 @@ async function main() {
     check('play mode: the game still starts', play.tutorial === 'tutorial', JSON.stringify(play));
     check('play mode: no console errors', b.problems.length === 0, b.problems.join(' | '));
 
-    // ---- 3. The radar board (the default: 4 people, radars showing each person's interests)
+    // ---- 2b. The one tutorial: an intro chain of pop-ups before anything moves, one-time hints, and a win
+    // pop-up that goes straight to the game (there is no second tutorial any more)
+    b.problems.length = 0;
+    await b.goto(ROOT + 'index.html?dev=1'); await sleep(300);
+    var tut = await b.eval("(async function () {" +
+      "var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+      "var out = { titles: [] }; var ov = document.getElementById('overlay');" +
+      "document.getElementById('btn-start').click(); await sleep(700);" +
+      "var vp = DS.game.current().vps[0]; var before = vp.attention;" +
+      // the guard ignores clicks for CLICK_GUARD_MS after a pop-up appears, hence the waits
+      "var stillFrozen = true;" +
+      "while (!ov.hidden && out.titles.length < 8) { out.titles.push(document.getElementById('overlay-title').textContent); stillFrozen = stillFrozen && vp.attention === before; document.querySelector('#overlay-buttons button').click(); await sleep(650); }" +
+      "out.step = document.getElementById('tut-step').textContent; out.frozenDuringIntro = stillFrozen;" +
+      // a repeat of the same topic must raise the one-time hint; push the longest spike twice
+      "var top = DS.TOPIC_IDS.slice().sort(function (a, c) { return vp.tasteSnapshotStart[c] - vp.tasteSnapshotStart[a]; })[0];" +
+      "vp.push(top); await sleep(1500); out.hint1 = ov.hidden ? null : document.getElementById('overlay-title').textContent;" +
+      "if (!ov.hidden) { document.querySelector('#overlay-buttons button').click(); await sleep(650); }" +
+      "out.resumed = !DS.game.current().frozen;" +
+      "vp.attention = 95; await sleep(2000); out.win = document.getElementById('overlay-title').textContent; out.winButton = document.querySelector('#overlay-buttons button').textContent;" +
+      "return out; })()");
+    check('tutorial: four intro pop-ups first (radar plot, liked or skipped, "don\'t overdo it"), and nothing moves behind them',
+          tut.titles.length === 4 && tut.titles[2] === 'This is a radar plot' && tut.titles[3] === 'Don\'t overdo it' && tut.frozenDuringIntro, JSON.stringify(tut));
+    check('tutorial: there is just one ("Tutorial", no "1 of 2"), a hint pop-up follows a push, and the game continues after it',
+          tut.step === 'Tutorial' && !!tut.hint1 && tut.resumed, JSON.stringify(tut));
+    check('tutorial: reaching the goal leads straight to the game', tut.win === 'You did it!' && tut.winButton === 'Start the game', JSON.stringify(tut));
+    check('tutorial: no console errors', b.problems.length === 0, b.problems.join(' | '));
+
+    // ---- 3. The radar board (the default: 2 people, radars showing each person's interests)
     // In three steps: skip the tutorials and measure the board; measure it again in a 1024x768 window
     // (a small laptop, or the preview pane); then start the round and push one liked post on the first
     // card. The round keeps running for the dev checks below.
@@ -184,8 +211,8 @@ async function main() {
     b.problems.length = 0;
     await b.goto(ROOT + 'index.html?dev=1'); await sleep(400);
     var radar = await runBoard();
-    check('radar board: 4 people, each with a radar of 6 buttons, in a 2x2 grid that fits the window',
-          radar.cards === 4 && radar.radarCards === 4 && radar.buttons === 24 && radar.big.fits, JSON.stringify(radar));
+    check('radar board: 2 people side by side, each with a radar of 6 buttons, that fits the window',
+          radar.cards === 2 && radar.radarCards === 2 && radar.buttons === 12 && radar.big.fits, JSON.stringify(radar));
     check('radar board: no button overlaps another or sticks out of its card', radar.big.overlaps === 0 && radar.big.outside === 0, JSON.stringify(radar.big));
     check('radar board: a 1024x768 window fits too, with no overlaps (the narrow-button layout)',
           radar.small.fits && radar.small.overlaps === 0 && radar.small.outside === 0, JSON.stringify(radar.small));
@@ -216,6 +243,47 @@ async function main() {
       }
     }
 
+    // ---- 4b. "Guess the profile", opened from the real button next to Download CSV. A solver plays it with
+    // the keyboard (arrow keys on each topic's slider) using only what the screen says, so this also proves
+    // the puzzle can be solved from its feedback alone.
+    var guess = await b.eval("(async function () {" +
+      "var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+      "var out = {}; var st = [].slice.call(document.querySelectorAll('#reveal-steps .step')); st[st.length - 1].click(); await sleep(700);" +
+      "var btns = [].slice.call(document.querySelectorAll('.big__actions .btn')); out.order = btns.map(function (x) { return x.textContent; });" +
+      "btns.filter(function (x) { return /Guess/.test(x.textContent); })[0].click(); await sleep(700);" +
+      "out.screen = document.body.dataset.screen; out.fits = document.documentElement.scrollHeight <= innerHeight;" +
+      "var ids = DS.TOPIC_IDS, handles = [].slice.call(document.querySelectorAll('.guess__handle'));" +
+      "var val = function (i) { return +handles[i].getAttribute('aria-valuenow'); };" +
+      "var key = function (i, k) { handles[i].dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); };" +
+      "var setTo = function (i, v) { var guard = 0; while (val(i) < v && guard++ < 9) key(i, 'ArrowUp'); while (val(i) > v && guard++ < 18) key(i, 'ArrowDown'); };" +
+      // the budget: push one topic to its cap, then try to go past 10 points in total
+      "setTo(0, 5); setTo(1, 5); key(2, 'ArrowUp'); out.capped = val(2) === 0 && /No points left/.test(document.querySelector('.guess__left').textContent);" +
+      "for (var z = 0; z < ids.length; z++) setTo(z, 0);" +
+      // the solver: exact[i] once a topic showed skips; low[i] = the most it ever watched without skipping
+      "var exact = {}, low = {}; ids.forEach(function (id, i) { low[i] = 0; });" +
+      "for (var t = 0; t < 15; t++) {" +
+      "  var plan = {}, left = 10; ids.forEach(function (id, i) { plan[i] = exact[i] !== undefined ? exact[i] : low[i]; left -= plan[i]; });" +
+      "  for (var guard = 0; left > 0 && guard < 60; guard++) { var i2 = guard % ids.length; if (exact[i2] === undefined && plan[i2] < 5) { plan[i2]++; left--; } }" +
+      "  for (var d = 0; d < ids.length; d++) setTo(d, 0); for (var u = 0; u < ids.length; u++) setTo(u, plan[u]);" +
+      "  document.querySelector('.guess__bar .btn--primary').click(); await sleep(80);" +
+      "  var lines = [].slice.call(document.querySelectorAll('.guess__topic')).map(function (li) { return li.textContent; });" +
+      "  if (document.querySelector('.guess__win')) { out.solvedIn = t + 1; break; }" +
+      "  lines.forEach(function (line, i) { var m = /watched (\\d+), skipped/.exec(line); if (m) exact[i] = +m[1]; else if (/skipped all/.test(line)) exact[i] = 0; else if (/watched all/.test(line)) low[i] = Math.max(low[i], plan[i]); });" +
+      "}" +
+      "out.winText = document.querySelector('.guess__win') ? document.querySelector('.guess__win').textContent : null;" +
+      "out.fitsAfter = document.documentElement.scrollHeight <= innerHeight;" +
+      "out.text = document.getElementById('screen-guess').innerText;" +
+      "await sleep(600); [].slice.call(document.querySelectorAll('.guess__foot .btn')).filter(function (x) { return /Back/.test(x.textContent); })[0].click(); await sleep(400);" +
+      "out.backTo = document.body.dataset.screen + ' / ' + document.getElementById('reveal-progress').textContent;" +
+      "return out; })()");
+    check('guess: the button sits next to Download CSV and opens the puzzle, which fits the window',
+          guess.order[0].indexOf('Download') !== -1 && /Guess the profile/.test(guess.order[1]) && guess.screen === 'guess' && guess.fits, JSON.stringify(guess.order) + ' ' + guess.screen + ' fits=' + guess.fits);
+    check('guess: the 10-point budget holds (no topic can take a point once all 10 are placed)', guess.capped === true, JSON.stringify(guess.capped));
+    check('guess: a solver that only reads the watches and skips finds the perfect profile', guess.solvedIn > 0 && guess.solvedIn <= 8 && /You built/.test(guess.winText),
+          'solved in ' + guess.solvedIn + ': ' + guess.winText);
+    check('guess: still fits after results, no "undefined"/"NaN", no he/she', guess.fitsAfter && !/undefined|NaN|\[object/.test(guess.text) && !/\b(he|she|him|her|his)\b/i.test(guess.text), guess.text.slice(0, 200));
+    check('guess: "Back to results" returns to the last results step', /^reveal \/ (\d+) of \1$/.test(guess.backTo), guess.backTo);
+
     // ---- 5. The CSV that the real Download button produces
     var csv = await b.eval("(async function () {" +
       "var name = null, blob = null, oc = URL.createObjectURL, ok = HTMLAnchorElement.prototype.click;" +
@@ -230,8 +298,8 @@ async function main() {
     check('CSV: has rows for pushes, round starts and round ends', ['push', 'round_start', 'round_end'].every(function (e) { return lines.some(function (l) { return l.split(',')[4] === e; }); }), 'missing an event type');
     check('CSV: one session id on every row', lines.slice(1).every(function (l) { return l.split(',')[0] === csv.session; }), 'mixed session ids');
     var starts = lines.filter(function (l) { return l.split(',')[4] === 'round_start'; });
-    check('CSV: round_start rows say which version was played ("radar-interests/4")',
-          starts.length > 0 && starts.every(function (l) { return /,radar-interests\/4$/.test(l); }), starts.slice(0, 2).join(' | '));
+    check('CSV: round_start rows say which version was played ("radar-interests/2")',
+          starts.length > 0 && starts.every(function (l) { return /,radar-interests\/2$/.test(l); }), starts.slice(0, 2).join(' | '));
 
     // ---- 6. Loopholes: frantic clicks, the pause state machine, stale timers
     var loop = await b.eval("(async function () {" +
@@ -276,15 +344,24 @@ async function main() {
     await b.goto(ROOT + 'index.html?dev=1&radar=learned'); await sleep(400);
     var learned = await runBoard();
     check('learned radar: fits the window (and a 1024x768 one), with no overlapping buttons',
-          learned.cards === 4 && learned.big.fits && learned.big.overlaps === 0 && learned.big.outside === 0 &&
+          learned.cards === 2 && learned.big.fits && learned.big.overlaps === 0 && learned.big.outside === 0 &&
           learned.small.fits && learned.small.overlaps === 0 && learned.small.outside === 0, JSON.stringify(learned));
     check('learned radar: every person has a bio-clue star, every count starts as "?", and no spikes yet',
-          learned.stars === 4 && learned.counts === 24 && learned.allUnknown && learned.spikesAtStart.every(function (n) { return n === 0; }), JSON.stringify(learned));
+          learned.stars === 2 && learned.counts === 12 && learned.allUnknown && learned.spikesAtStart.every(function (n) { return n === 0; }), JSON.stringify(learned));
     check('learned radar: a push updates that topic\'s count and draws its spike', learned.countAfterPush === '1/1' && learned.spikesAfterPush === 1, JSON.stringify(learned));
     var learnedEnd = await b.eval("(async function () { var out = {}; out.phase = await DS.dev.play({ bot: 'learner' }); out.steps = await DS.dev.measureReveal(); return out; })()");
     check('learned radar: the round ends on a results screen whose steps all fit',
-          learnedEnd.phase === 'reveal' && learnedEnd.steps.length === 6 && learnedEnd.steps.every(function (s) { return /fits$/.test(s); }), JSON.stringify(learnedEnd));
+          learnedEnd.phase === 'reveal' && learnedEnd.steps.length === 4 && learnedEnd.steps.every(function (s) { return /fits$/.test(s); }), JSON.stringify(learnedEnd));
     check('learned radar: no console errors', b.problems.length === 0, b.problems.join(' | '));
+
+    // Then: four people, the 2x2 board from before the 2-person default (?profiles=4)
+    b.problems.length = 0;
+    await b.goto(ROOT + 'index.html?dev=1&profiles=4'); await sleep(400);
+    var four = await runBoard();
+    check('four-person radar board (?profiles=4): a 2x2 grid that fits at 1366x600 and 1024x768, no overlaps',
+          four.cards === 4 && four.buttons === 24 && four.big.fits && four.big.overlaps === 0 && four.big.outside === 0 &&
+          four.small.fits && four.small.overlaps === 0 && four.small.outside === 0, JSON.stringify(four));
+    check('four-person radar board: no console errors', b.problems.length === 0, b.problems.join(' | '));
 
     // Then: six people, grid buttons (?profiles=6&layout=grid)
     b.problems.length = 0;

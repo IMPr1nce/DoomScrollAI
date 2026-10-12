@@ -434,10 +434,17 @@
       dl.textContent = name ? '✓ Saved ' + name : 'Could not save. Try again.';
       setTimeout(function () { dl.textContent = '⬇ Download data (CSV)'; }, 3000);
     }));
+    // The bonus puzzle: build a random person's profile on a radar (guess.js).
+    var guessBtn = h('button', 'btn btn--ghost btn--big', '🧩 Guess the profile');
+    guessBtn.type = 'button';
+    guessBtn.addEventListener('click', ui.guarded(function () {
+      DS.guess.show({ onBack: function () { ui.showScreen('reveal'); ui.armGuard(); goTo(state.step); } });
+    }));
     var again = h('button', 'btn btn--primary btn--big', '▶ Play again');
     again.type = 'button';
     again.addEventListener('click', ui.guarded(function () { state.handlers.onPlayAgain(); }));
     actions.appendChild(dl);
+    actions.appendChild(guessBtn);
     actions.appendChild(again);
     box.appendChild(actions);
 

@@ -15,6 +15,7 @@ js/logger.js           the event log, the CSV, flush()
 js/radar.js            radar geometry (pure) and SVG drawing
 js/ui.js               screens, pop-up, click guard, scoreboard, banner, the profile card
 js/reveal.js           the results screen: DS.revealText (pure wording) + DS.reveal (drawing)
+js/guess.js            "Guess the profile": DS.guessModel (pure: hidden profile, simulate, wording) + DS.guess (screen)
 js/game.js             the conductor: loop, phases, pause, round end, playtest switches, lockdown
 tests.html             the unit tests in a browser (tests/tests.js)
 sim.html, sim/sim.js   the balance simulator
@@ -28,7 +29,7 @@ README.md              for teachers and the team lead: running, tuning, the data
 
 ## Two layers
 - **Model** (no DOM; runs in the browser and in Node): `config`, `content`, `vp`, `metrics`, `logger`
-  (records and CSV), the geometry in `radar.js`, `DS.revealText`, and `sim/sim.js`.
+  (records and CSV), the geometry in `radar.js`, `DS.revealText`, `DS.guessModel`, and `sim/sim.js`.
 - **Page:** `ui.js`, the drawing in `radar.js` and `reveal.js`, `game.js`, `tests/dev-helpers.js`.
 
 A file may only use what loaded before it. `reveal.js` looks up `DS.ui` when it first draws, because the
@@ -48,13 +49,20 @@ tests load it without the page code.
   verdict comes from `buildReveal()`.
 
 ## Game state
-- **Phases:** `title → tutorial1 → tutorial2 → main → reveal`. **Play again** goes to `main`; **Replay
+- **Phases:** `title → tutorial1 → main → reveal`. "Guess the profile" is a screen opened from the last results
+  step (`DS.guess.show`), not a phase: nothing ticks there and nothing is logged. **Play again** goes to `main`; **Replay
   the tutorial** goes to `tutorial1`.
 - **`active`** is whatever is being played: `vps`, `cards`, `frozen` (nothing ticks: a pop-up, the
   "ready?" card, a pause or a finished round), `paused` (only a real pause), `ended`, `elapsed`,
   `limitSec` and `check`.
 - **Delayed callbacks** capture `active` as a token and do nothing if it changed, because the player may
   have restarted in the meantime.
+- **The tutorial's pop-ups** (`game.js`): an intro chain (`introPages` → `showPopupChain`) that freezes the
+  round, then one-time hints (`attachHints`, listening to Alex's `push` events) and the win pop-up. None may
+  mention the narrowing of tastes. Each pop-up can pass `target` to `ui.showOverlay`: the target is ringed,
+  the rest dimmed, and a small panel with an arrow sits beside it (`placeSpot` in `ui.js`). Keep that text to
+  one or two short lines: the highlight does the explaining. The board is one row of two cards for 2 people (`--rows` set by
+  `ui.mountCards`), a 2 × 2 for 4, and 3 × 2 for 6.
 - **Pausing:** the Pause button, Esc, or switching tabs. Only the main round can be paused.
 
 ## The radar
@@ -82,7 +90,8 @@ It lives in two places that must agree.
   include it in `versionLabel()` so the CSV says what was played, and add it to the version tables in the
   README and [product.md](product.md#versions-for-playtests).
 - **A person:** add them to `DS.VP_DEFS` in `js/content.js` ([content.md](content.md#the-people-vps)). The
-  first `PROFILE_COUNT` people play, and the first four must love all six topics between them.
+  first `PROFILE_COUNT` people play, and the first four must love all six topics between them (that is the
+  `?profiles=4` board).
 - **A topic:** add it to `DS.TOPICS` and `DS.TOPIC_MESSAGES`, and make sure someone loves it. The radar's
   sizing in CSS assumes six topics (a hexagon), so a seventh means reworking the radar layout.
 - **A speech-bubble line or category:** see [content.md](content.md#speech-bubbles).
