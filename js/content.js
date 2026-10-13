@@ -26,7 +26,7 @@ DS.TOPICS.forEach(function (t) { DS.TOPIC_BY_ID[t.id] = t; });
 // ---------------------------------------------------------------------- VPs
 // A VP definition only says who they are and which topics they like. The
 // actual probabilities are built in vp.js from config (TASTE_FAVORITE, etc.).
-//   favorites: ~0.92 like chance    meh: ~0.5    everything else: ~0.08
+//   favorites: ~0.95 like chance    meh: ~0.5    everything else: ~0.08
 // `clue` is the topic their bio hints at. It's always one of their favorites, and the radar marks it
 // with a star, so a player who reads the bio doesn't have to make a blind first guess. (Alex, the
 // tutorial person, has no clue on purpose: tutorial 1 is about learning from clicks alone.)
@@ -34,29 +34,36 @@ DS.TOPICS.forEach(function (t) { DS.TOPIC_BY_ID[t.id] = t; });
 // imply any gender, skin tone, or look.
 // Each VP has a different mix, so players have to learn each one separately.
 
-// Used only in the two tutorials.
+// Used only in the tutorial. Alex has THREE favorites, like the cast below, side by side on the radar (Dance upper
+// right, Music right, Comics lower right). The tutorial's profile radar grows a ring per watched post, and a topic
+// with no watches sits at the center, so only neighbors enclose an area: three in a row end as a filled kite
+// pointing at Music. Spread out, they made a thin "Y"; the old two favorites (Music and Food) sat opposite each
+// other and made a flat line through the middle.
 DS.TUTORIAL_VP_DEF = {
   id: 'alex', name: 'Alex', avatar: '🦊', bio: '13, likes hanging with friends',
-  favorites: ['music', 'food'],
-  meh: ['movies', 'dance']
-  // sports + comics are disliked: easy to find, and easy to use in tutorial 2
+  favorites: ['dance', 'music', 'comics'],
+  meh: ['sports']
+  // movies + food are disliked: the skips that exploring costs
 };
 
 // The cast for the main game. ORDER MATTERS: with PROFILE_COUNT = 4 only the first four play, and those
 // four (Maya, Jordan, Sam, Riley) must love all six topics between them (tests.html checks this).
+// Like Alex, everyone has 3 favorites side by side on the radar, so each radar is a filled wedge the player
+// reads at a glance, with three near-sure picks. The bio clue is the middle one; the one "meh" sits opposite.
+// (It was 1-2 favorites and 2 "meh": the shapes were thin slivers, and the "meh" posts were coin flips.)
 DS.VP_DEFS = [
   { id: 'maya',   name: 'Maya',   avatar: '🐼', bio: '13, plays soccer every weekend',
-    favorites: ['sports'],            meh: ['food', 'movies'],   clue: 'sports' },
+    favorites: ['food', 'sports', 'dance'],    meh: ['comics'],  clue: 'sports' },
   { id: 'jordan', name: 'Jordan', avatar: '🐙', bio: '14, always dancing in the kitchen',
-    favorites: ['dance', 'music'],    meh: ['food', 'movies'],   clue: 'dance' },
+    favorites: ['sports', 'dance', 'music'],   meh: ['movies'],  clue: 'dance' },
   { id: 'sam',    name: 'Sam',    avatar: '🐸', bio: '13, draws comics at lunch',
-    favorites: ['comics'],            meh: ['movies', 'music'],  clue: 'comics' },
+    favorites: ['music', 'comics', 'movies'],  meh: ['sports'],  clue: 'comics' },
   { id: 'riley',  name: 'Riley',  avatar: '🦄', bio: '13, movie night every Friday',
-    favorites: ['movies', 'food'],    meh: ['music', 'comics'],  clue: 'movies' },
+    favorites: ['comics', 'movies', 'food'],   meh: ['dance'],   clue: 'movies' },
   { id: 'devon',  name: 'Devon',  avatar: '🐯', bio: '14, loves trying new snacks',
-    favorites: ['food'],              meh: ['sports', 'dance'],  clue: 'food' },
+    favorites: ['movies', 'food', 'sports'],   meh: ['music'],   clue: 'food' },
   { id: 'priya',  name: 'Priya',  avatar: '🐱', bio: '13, makes a playlist for everything',
-    favorites: ['music', 'comics'],   meh: ['dance', 'sports'],  clue: 'music' }
+    favorites: ['dance', 'music', 'comics'],   meh: ['food'],    clue: 'music' }
 ];
 
 // ----------------------------------------------------------------- Messages

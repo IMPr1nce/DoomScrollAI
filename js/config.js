@@ -16,10 +16,12 @@ DS.CONFIG = {
                               // drain meant a random clicker rarely lost anyone (see balance.md)
   ATTENTION_MAX: 100,         // the bar is capped here (it's a 0–100 scale)
   LIKE_GAIN: 20,              // TOTAL attention gained over one watch (before fatigue). Was 15.
-  DISLIKE_PENALTY: 12,        // instant loss when a VP skips a post
-  IDLE_DRAIN_PER_SEC: 3.0,    // loss per second while idle. This is what forces juggling. (2 -> 1.5 for six
-                              // people; back to 2.0 for four; 3.0 for two people in a 30 s round, so that an
-                              // ignored person is gone in about 17 s and random play still loses people)
+  DISLIKE_PENALTY: 18,        // instant loss when a VP skips a post. Was 12: since everyone has 3 favorites (half
+                              // the topics), a random click lands on one half the time, so a skip must hurt more
+                              // for random play to still lose people (balance.md)
+  IDLE_DRAIN_PER_SEC: 4.0,    // loss per second while idle. This is what forces juggling. (2 -> 1.5 for six
+                              // people; back to 2.0 for four; 3.0 for two people in a 30 s round; 4.0 with 3
+                              // favorites each, so an ignored person is gone in about 12 s)
   POST_DURATION_SEC: 2,       // how long a VP watches a liked post (its buttons are locked meanwhile). Was 5, then 3:
                               // the team lead asked for 2 s so the game moves faster (all 7 sim goals still pass)
 
@@ -31,7 +33,11 @@ DS.CONFIG = {
   TIMER_URGENT_SEC: 10,       // the clock turns red and pulses for the last N seconds
 
   // ----------------------------------------------------------------- Tutorial
-  TUTORIAL_DRAIN_MULT: 0.5,   // idle drain is multiplied by this in the tutorials
+  TUTORIAL_DRAIN_MULT: 0.375, // idle drain is multiplied by this in the tutorial. Was 0.5; with the round's drain at
+                              // 4.0 this keeps Alex's at 1.5/s, as before (at 2/s a blind player lost Alex more often)
+  TUTORIAL_DISLIKE_PENALTY: 12, // the tutorial keeps the old skip cost. Alex's profile starts empty, so the first
+                              // picks are blind: at DISLIKE_PENALTY (18) a blind player lost Alex in about 1
+                              // tutorial in 5 at 2 s per pick; at 12, almost never
   // The tutorial has two steps. Step 1 (explore) ends when every topic has been tried. Step 2 (exploit) ends
   // after this many watched posts in a row: a skip starts the count again, so showing what you know works is
   // the way to finish. (It replaced an attention goal of 90, which step 1 often reached on its own.)
@@ -46,9 +52,11 @@ DS.CONFIG = {
   // topic as the one being pushed now (0..FATIGUE_WINDOW). That count indexes
   // FATIGUE_MULTIPLIERS, so the array needs FATIGUE_WINDOW + 1 entries.
   // Softened from [1, 0.7, 0.45, 0.3] / 0.1 after the balance simulator showed the original
-  // made spamming a favorite LOSE to mixing topics (which flips the lesson).
+  // made spamming a favorite LOSE to mixing topics (which flips the lesson). Softened again from
+  // [1, 0.85, 0.7, 0.6] when everyone got 3 favorites: rotating three sure picks dodges most of the
+  // fatigue, so mixing caught up with spamming (it won at 2 s per click). Repeats now cost a little.
   FATIGUE_WINDOW: 3,
-  FATIGUE_MULTIPLIERS: [1, 0.85, 0.7, 0.6],
+  FATIGUE_MULTIPLIERS: [1, 0.95, 0.9, 0.85],
   // Subtracted from the like chance for each repeat in the window. Was 0.05: together with favorites at
   // 0.85, that made a player who KNEW the right answer get skipped on 23% of pushes, which is what made
   // the game feel like luck. Fatigue now mostly cuts the gain (visible as a smaller "+12"), and only

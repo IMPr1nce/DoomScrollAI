@@ -14,7 +14,9 @@ results wording, labels.
 - **Animal avatars, on purpose:** no gender, skin tone or look. **Never use he, she, him, her or his**
   (the results wording is tested for this).
 - **Bio:** age plus one hobby, short enough for one line on a small card. Narrow layouts cut it with "…".
-- **Tastes:** 1–2 favorites and 2 "meh" topics; everything else is disliked. No two people share a mix.
+- **Tastes:** 3 favorites side by side on the radar, 1 "meh" (opposite the bio clue in the cast), and 2 disliked.
+  No two people share a mix. Neighbors on the radar enclose an area, so each radar is a filled wedge read at a
+  glance, and the tutorial's profile ends as a filled shape, never a line (tested). Alex included.
 - **`clue`:** the topic their bio hints at, always one of their favorites (the ★ in `?radar=learned`).
   Alex, the tutorial person, has none.
 - **Tutorial pop-ups must not hint at the narrowing.** They may say that repeats get boring (each repeat gains

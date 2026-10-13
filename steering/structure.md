@@ -114,9 +114,9 @@ It lives in two places that must agree.
 - **A playtest switch:** parse it in `applyPlaytestSwitches()` in `game.js` (accept only valid values),
   include it in `versionLabel()` so the CSV says what was played, and add it to the version tables in the
   README and [product.md](product.md#versions-for-playtests).
-- **A person:** add them to `DS.VP_DEFS` in `js/content.js` ([content.md](content.md#the-people-vps)). The
-  first `PROFILE_COUNT` people play, and the first four must love all six topics between them (that is the
-  `?profiles=4` board).
+- **A person:** add them to `DS.VP_DEFS` in `js/content.js` ([content.md](content.md#the-people-vps)), with 3
+  favorites side by side on the radar and 1 "meh" (tested). The first `PROFILE_COUNT` people play, and the first
+  four must love all six topics between them (that is the `?profiles=4` board).
 - **A topic:** add it to `DS.TOPICS` and `DS.TOPIC_MESSAGES`, and make sure someone loves it. The radar's
   sizing in CSS assumes six topics (a hexagon), so a seventh means reworking the radar layout.
 - **A speech-bubble line or category:** see [content.md](content.md#speech-bubbles).

@@ -54,7 +54,8 @@ Paths in backticks are relative to the project root.
   of 40 characters or fewer; "exploring" and "exploiting" in the tutorial and the big-picture step, never in the
   round): [content.md](content.md).
   A new results outcome needs new wording and a new test.
-- **Balance was tuned for 2 people, a 30-second round and a 2-second watch.** Changing `PROFILE_COUNT`, the
+- **Balance was tuned for 2 people with 3 favorites each, a 30-second round and a 2-second watch.** Changing
+  anyone's tastes, `PROFILE_COUNT`, the
   dice (including `SKIP_STREAK_BREAK`), the watch, the drain or the drift means re-running the simulator
   ([balance.md](balance.md)).
 - **The first 11 CSV columns are the agreed set.** Add new ones at the end. Everything leaves through
@@ -84,4 +85,8 @@ Paths in backticks are relative to the project root.
   all 6 topics), then Exploit (3 watches in a row). The two words are now said in the tutorial too.
 - 2026-10-12, later: a name screen first. The player's first and last name name the CSV (`Kai_Moreno.csv`), and
   nothing else: the name is in no row.
+- 2026-10-12, later: Alex has 3 favorites side by side on the radar, so the tutorial's profile ends as a filled
+  shape instead of a line ([balance.md](balance.md#the-tutorial-explore-then-exploit)).
+- 2026-10-13: everyone in the round has 3 favorites side by side too (filled wedges on the radars), with a retune
+  (skips 18, drain 4/s, softer fatigue). The tutorial keeps its old skip cost and drain ([balance.md](balance.md)).
 - Not built, by design: the Flask endpoint (one `fetch` in `logger.flush`), sound, accounts.

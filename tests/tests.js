@@ -21,7 +21,7 @@
   var PINNED = {
     ATTENTION_START: 60, ATTENTION_MAX: 100, LIKE_GAIN: 15, DISLIKE_PENALTY: 12,
     IDLE_DRAIN_PER_SEC: 2, POST_DURATION_SEC: 5, ROUND_SEC: 90,
-    TUTORIAL_DRAIN_MULT: 0.5,
+    TUTORIAL_DRAIN_MULT: 0.5, TUTORIAL_DISLIKE_PENALTY: 7,
     FATIGUE_WINDOW: 3, FATIGUE_MULTIPLIERS: [1, 0.7, 0.45, 0.3], FATIGUE_LIKE_PENALTY: 0.1, SKIP_STREAK_BREAK: null,
     DRIFT_UP: 0.08, DRIFT_DOWN: 0.04, TASTE_MIN: 0.05, TASTE_MAX: 0.95,
     TASTE_FAVORITE: 0.85, TASTE_MEH: 0.5, TASTE_DISLIKED: 0.15, TASTE_JITTER: 0.04,
@@ -80,7 +80,7 @@
   }
 
   // ----------------------------------------------------------- Content / setup
-  test('content: every VP has 1-2 favorites, in-range tastes, and a different mix', function () {
+  test('content: everyone (Alex too) has 3 favorites and 1 "meh", in-range tastes, and a different mix', function () {
     var defs = DS.VP_DEFS.concat([DS.TUTORIAL_VP_DEF]);
     var seen = {};
     defs.forEach(function (def) {
@@ -91,7 +91,8 @@
         ok(p >= C.TASTE_MIN && p <= C.TASTE_MAX, def.name + ' ' + id + ' out of range: ' + p);
         if (p >= 0.8) favorites++;
       });
-      ok(favorites >= 1 && favorites <= 2, def.name + ' should have 1-2 favorites, has ' + favorites);
+      eq(favorites, 3, def.name + ' should have 3 favorites');
+      eq(def.meh.length, 1, def.name + ' should have 1 "meh"');
       var signature = def.favorites.slice().sort() + '|' + def.meh.slice().sort();
       ok(!seen[signature], def.name + ' has the same mix as ' + seen[signature]);
       seen[signature] = def.name;
@@ -157,6 +158,14 @@
     eq(vp.state, 'idle');
     ok(vp.canPush(), 'buttons stay live after a skip');
     ok(vp.push('food').ok, 'second push accepted');
+  });
+
+  test('the tutorial\'s Alex pays TUTORIAL_DISLIKE_PENALTY for a skip, not DISLIKE_PENALTY', function () {
+    var alex = DS.createTutorialVP();
+    var before = alex.attention;
+    DS.rng.use(DISLIKE);
+    ok(!alex.push('food').liked, 'should be skipped');
+    eq(alex.attention, before - C.TUTORIAL_DISLIKE_PENALTY);
   });
 
   test('like chance follows the taste (roll just under/over the taste value)', function () {
@@ -1179,6 +1188,20 @@
         ok(DS.VP_DEFS.slice(0, n).some(function (d) { return d.favorites.indexOf(id) !== -1; }),
            'with ' + n + ' profiles nobody loves ' + id + ' (reorder VP_DEFS in content.js)');
       });
+    });
+  });
+
+  // Neighbors on the radar enclose an area; spread-out favorites draw spokes. So everyone's 3 favorites sit side by
+  // side: a filled wedge on the round's radars, and on the tutorial's profile radar (where a topic with no watches
+  // sits at the center) a filled shape instead of the flat line Alex's old favorites made.
+  test('content: everyone\'s 3 favorites sit side by side on the radar (a filled shape, never a line)', function () {
+    var n = DS.TOPIC_IDS.length;
+    DS.VP_DEFS.concat([DS.TUTORIAL_VP_DEF]).forEach(function (def) {
+      var idx = def.favorites.map(function (id) { return DS.TOPIC_IDS.indexOf(id); });
+      ok(idx.every(function (i) { return i >= 0; }), def.name + ': every favorite is a topic');
+      // In a row (wrapping round the hexagon): exactly one favorite has no favorite just before it.
+      var starts = idx.filter(function (i) { return idx.indexOf((i + n - 1) % n) === -1; });
+      eq(starts.length, 1, def.name + ': ' + def.favorites.join(', ') + ' are not side by side');
     });
   });
 

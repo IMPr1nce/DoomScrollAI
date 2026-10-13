@@ -106,7 +106,7 @@ Edit the file, save it, reload the page.
 | A **stronger filter bubble** on the results screen | raise `DRIFT_UP` (how fast a liked topic is learned) or `DRIFT_DOWN` (how fast other topics fade). Careful with `DRIFT_DOWN`: above about 0.04 (with 2-second watches) even a player who mixes topics on purpose gets squeezed, which weakens "you had a choice". The simulator checks this. |
 | Spamming one topic to be **less rewarding** | lower `FATIGUE_MULTIPLIERS`. Careful: too harsh and mixing topics beats spamming, which flips the lesson. The simulator warns you. |
 | Buttons to **stay live** while someone watches | `LIKED_LOCKS_BUTTONS: false` (a new post then cuts the current watch short) |
-| A **longer or easier tutorial** | `TUTORIAL_EXPLOIT_STREAK` (3 watches in a row in step 2), `TUTORIAL_DRAIN_MULT`. Step 1 always asks for every topic. `PROFILE_RINGS` (5) sets how many watches fill a spike on the tutorial's profile radar. |
+| A **longer or easier tutorial** | `TUTORIAL_EXPLOIT_STREAK` (3 watches in a row in step 2), `TUTORIAL_DRAIN_MULT` (0.375), `TUTORIAL_DISLIKE_PENALTY` (12, the tutorial's own skip cost). Step 1 always asks for every topic. `PROFILE_RINGS` (5) sets how many watches fill a spike on the tutorial's profile radar. |
 | A **faster or slower game** | `POST_DURATION_SEC` (2): how long a liked post is watched. Check the simulator after changing it. |
 | The **same game every time** (for a demo) | `RNG_SEED: 42` (any number; `null` = different every time) |
 | **More or less luck** | `TASTE_FAVORITE` (0.95) and `TASTE_DISLIKED` (0.08): the closer to 1 and 0, the more a right choice is rewarded. `SKIP_STREAK_BREAK` (0.6): right after a skip, a topic with at least this like chance always lands, so long spikes are never skipped twice in a row (`null` = pure dice). `FATIGUE_LIKE_PENALTY` (0.02) adds a little luck back for repeated topics. |
@@ -124,11 +124,14 @@ robot players and tells you whether the game still teaches the lesson:
 
 (The same thing from a terminal: `node tests/run-node.js sim`.) The simulator also lets you try
 changes without editing any file. Below the goals it reports how often a careful player who can't see
-Alex's tastes finishes the tutorial's two steps (about 97% today; the rest lose Alex once and try again).
+Alex's tastes finishes the tutorial's two steps (all of them at 1–2 seconds per pick today; at 3 seconds,
+about 1 in 20 loses Alex once and tries again).
 
 To change the **words and people**, edit `js/content.js`: the six topics (emoji and color), the
 people (name, animal avatar, bio, which topics they love or find "meh", and `clue`: the topic their bio
-hints at), and every speech-bubble line. Keep lines under 40 characters so they fit on one line of a
+hints at), and every speech-bubble line. Everyone loves 3 topics that sit side by side on the radar, so each
+radar is a filled wedge, and finds 1 "meh". The balance is tuned for that: re-run the simulator if you change
+anyone's tastes. Keep lines under 40 characters so they fit on one line of a
 small card. **Order matters:** with 4 profiles the first four people play, and between them they must
 love all six topics (the default of 2 plays Maya and Jordan). `tests.html` checks all of this.
 
