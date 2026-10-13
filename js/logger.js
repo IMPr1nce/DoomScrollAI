@@ -12,8 +12,9 @@
  * there). Nothing else in the game has to change, because the game never talks to the
  * network, it only ever calls log*() and flushPending().
  *
- * Privacy: a session id is a random code. No names, no accounts, nothing about the person
- * playing. The data describes what the six pretend people did, not the player.
+ * Privacy: a session id is a random code, and nothing in the rows is about the person playing:
+ * the data describes what the pretend people did. The player's name (asked on the first screen)
+ * only names the downloaded file, so the rows stay anonymous and a future server never gets it.
  */
 (function () {
   'use strict';
@@ -56,6 +57,7 @@
   };
 
   var context = { phase: 'title', round: 0 };  // stamped onto every record; game.js keeps it current
+  var player = { first: '', last: '' };        // names the CSV file only (see fileName below)
   var pending = [];                            // logged, but not yet handed to flush()
   var store = [];                              // flushed: exactly what exportCSV() writes
 
@@ -195,12 +197,43 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
-  // Downloads doomscroll_<session_id>.csv. Returns the file name (handy for a "Saved" message),
+  // ------------------------------------------------------------------ The file's name
+  // The teacher collects one file per student, so the file is named after the player: Kai_Moreno.csv.
+  // A name is typed by a 13-year-old, so it is cleaned for every system's file names: characters that
+  // Windows or macOS refuse (/ \ : * ? " < > |) go, spaces inside a name become "-" (the "_" is kept
+  // between first and last), leading dots go (they would hide the file on a Mac), and it's cut at
+  // NAME_MAX characters so the "Saved …" button still fits the results step. Letters in any language stay.
+  var NAME_MAX = 20;
+  logger.cleanName = function (s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/[\\\/:*?"<>|\u0000-\u001f\u007f]/g, '')
+      .trim().replace(/\s+/g, '-').replace(/-{2,}/g, '-')
+      .replace(/^[.\-]+/, '')
+      .slice(0, NAME_MAX)
+      .replace(/[.\-]+$/, '');
+  };
+  logger.NAME_MAX = NAME_MAX;
+
+  // game.js calls this once the first screen is filled in. Both names are needed, or the file
+  // keeps its anonymous name.
+  logger.setPlayer = function (first, last) {
+    player.first = logger.cleanName(first);
+    player.last = logger.cleanName(last);
+  };
+
+  // Kai_Moreno.csv, or doomscroll_<session_id>.csv when there is no name (the tests, and the dev
+  // helpers, which can start a round without the first screen).
+  logger.fileName = function () {
+    return player.first && player.last ? player.first + '_' + player.last + '.csv'
+                                       : 'doomscroll_' + logger.sessionId + '.csv';
+  };
+
+  // Downloads the log as logger.fileName(). Returns the file name (handy for a "Saved" message),
   // or null if the log is sealed (see below).
   logger.exportCSV = function () {
     if (sealed()) return null;
     logger.flushPending();
-    var name = 'doomscroll_' + logger.sessionId + '.csv';
+    var name = logger.fileName();
     download(name, logger.buildCSV(store));
     return name;
   };
@@ -220,6 +253,7 @@
   logger.reset = function () {                                 // for tests
     pending.length = 0; store.length = 0;
     context.phase = 'title'; context.round = 0;
+    player.first = ''; player.last = '';
     logger.sessionId = makeSessionId();
   };
 

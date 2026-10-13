@@ -59,6 +59,8 @@ Paths in backticks are relative to the project root.
   ([balance.md](balance.md)).
 - **The first 11 CSV columns are the agreed set.** Add new ones at the end. Everything leaves through
   `logger.flush()`.
+- **The player's name only names the CSV file** (`logger.fileName()`). Never put it in a row or a column: the rows
+  are what a future server receives.
 - When editing a file with a script, **don't slice by a comment string that appears twice** (it once
   clobbered half of `reveal.js`). Prefer exact multi-line edits, then re-run the tests.
 
@@ -80,4 +82,6 @@ Paths in backticks are relative to the project root.
   "Replay the tutorial"), a 2-second watch, and no skip streaks on good picks (`SKIP_STREAK_BREAK`).
 - 2026-10-12: the tutorial is two named steps on a profile radar drawn like "Guess the profile": Explore (try
   all 6 topics), then Exploit (3 watches in a row). The two words are now said in the tutorial too.
+- 2026-10-12, later: a name screen first. The player's first and last name name the CSV (`Kai_Moreno.csv`), and
+  nothing else: the name is in no row.
 - Not built, by design: the Flask endpoint (one `fetch` in `logger.flush`), sound, accounts.

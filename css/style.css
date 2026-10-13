@@ -76,7 +76,8 @@ button { touch-action: manipulation; }
 body.guarded .overlay__buttons .btn,
 body.guarded .stage-nav .btn,
 body.guarded .steps .step,
-body.guarded .big__actions .btn { opacity: 0.55; }
+body.guarded .big__actions .btn,
+body.guarded .title-card .btn { opacity: 0.55; }
 
 .link-btn {
   margin-top: 8px;
@@ -88,7 +89,8 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 
 /* -------------------------------------------------------------- Title screen */
 
-#screen-title.screen--active { justify-content: center; position: relative; overflow: hidden; }
+#screen-title.screen--active,
+#screen-name.screen--active { justify-content: center; position: relative; overflow: hidden; }
 
 /* The six topics drift around behind the card. Decoration only. */
 .title-bg span {
@@ -125,6 +127,26 @@ body.guarded .big__actions .btn { opacity: 0.55; }
   font-size: 16px; font-weight: 700; line-height: 1.25;
 }
 .how__icon { font-size: 28px; line-height: 1; }
+
+/* --------------------------------------------------------------- Name screen */
+
+/* The first screen reuses the title card's look, so the two read as one start-up. */
+.name-card { width: 100%; max-width: 560px; }
+.name-card h1 { font-size: 44px; }
+.name-card__fields { display: flex; gap: 14px; text-align: left; }
+.field { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.field__label { font-size: 16px; font-weight: 700; }
+.field__input {
+  width: 100%; font: inherit; color: var(--ink);
+  padding: 10px 14px; background: #fff;
+  border: 2px solid var(--line); border-radius: 12px;
+  /* The card turns text selection off (frantic clicks elsewhere), but a name has to be editable. */
+  -webkit-user-select: text; user-select: text;
+}
+.field__input:focus { border-color: var(--primary); }
+.field__input[aria-invalid="true"] { border-color: var(--bad); }
+/* Always one line tall, empty or not, so the button doesn't jump when the message appears. */
+.name-card__error { min-height: 1.45em; margin: 10px 0 8px; font-size: 16px; font-weight: 700; color: var(--bad); }
 
 /* ----------------------------------------------------------------- Tutorial */
 
@@ -872,6 +894,7 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 }
 @media (max-width: 640px) {
   .board { grid-template-columns: 1fr; }
+  .name-card__fields { flex-direction: column; }
   .banner span { font-size: 40px; padding: 10px 24px; }
 }
 

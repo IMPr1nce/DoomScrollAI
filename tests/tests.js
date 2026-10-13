@@ -995,6 +995,42 @@
     L.reset();
   });
 
+  test('logger: the CSV is named after the player (First_Last.csv), cleaned to be a safe file name', function () {
+    var L = freshLogger();
+    try {
+      eq(L.fileName(), 'doomscroll_' + L.sessionId + '.csv', 'no name yet: the anonymous name');
+      L.setPlayer('Kai', 'Moreno');            eq(L.fileName(), 'Kai_Moreno.csv');
+      L.setPlayer('  Mary   Ann ', "O'Brien"); eq(L.fileName(), "Mary-Ann_O'Brien.csv", 'spaces inside a name become "-"');
+      L.setPlayer('José', 'Núñez');            eq(L.fileName(), 'José_Núñez.csv', 'letters in any language stay');
+      L.setPlayer('a/b\\c:d*', 'e?"<f>|');     eq(L.fileName(), 'abcd_ef.csv', 'characters a file name cannot hold go');
+      L.setPlayer('..hidden', 'name.');        eq(L.fileName(), 'hidden_name.csv', 'no leading dot (a hidden file on a Mac)');
+      L.setPlayer('Abcdefghijklmnopqrstuvwxyz', 'X');
+      eq(L.fileName(), 'Abcdefghijklmnopqrst_X.csv', 'cut at NAME_MAX (' + L.NAME_MAX + ') characters');
+      // Both names are needed; one that cleans to nothing counts as missing.
+      L.setPlayer('Kai', '');    eq(L.fileName(), 'doomscroll_' + L.sessionId + '.csv');
+      L.setPlayer('???', 'Moreno'); eq(L.fileName(), 'doomscroll_' + L.sessionId + '.csv');
+      eq(L.cleanName('  '), ''); eq(L.cleanName(null), '');
+      L.setPlayer('Kai', 'Moreno'); L.reset();
+      eq(L.fileName(), 'doomscroll_' + L.sessionId + '.csv', 'reset() forgets the name');
+    } finally { restoreLogger(); }
+  });
+
+  test('logger: the player\'s name names the file only: it is in no row and no column', function () {
+    var L = freshLogger();
+    try {
+      L.setPlayer('Zebedee', 'Quimby');
+      L.setContext({ phase: 'main', round: 1 });
+      var vp = makeVP(); L.watch(vp);
+      DS.rng.use(LIKE);
+      vp.push('sports');
+      L.logVP('round_end', vp, 'time_up');
+      L.flushPending();
+      var csv = L.buildCSV(openLog());
+      ok(csv.split('\r\n').length > 2, 'the log has rows');
+      ok(!/Zebedee|Quimby/.test(csv), 'the name must not be in the data');
+    } finally { restoreLogger(); }
+  });
+
   // ---------------------------------------------------- Reveal wording (reveal.js)
   // These call the PURE sentence functions in DS.revealText, so no browser is needed.
   var T = function () { return DS.revealText; };

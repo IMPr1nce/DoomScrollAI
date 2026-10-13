@@ -111,4 +111,5 @@ alone, and a skip gets a quick 👆 swipe.
 | Results labels, captions and legends | the drawing half of `js/reveal.js` | no |
 | "Guess the profile" sentences (summary, per-topic lines, hints, win) | `DS.guessModel.text` in `js/guess.js` | yes |
 | "Guess the profile" labels and the "How it works" list | the drawing half of `js/guess.js` | no |
-| Title screen | `index.html` | no |
+| Title screen, and the name screen's labels | `index.html` | the name screen, in `tests/e2e.js` |
+| The name screen's message ("Type your first and last name.") | `askName()` in `js/game.js` | yes, in `tests/e2e.js` |

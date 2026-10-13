@@ -5,7 +5,7 @@ breaking the rules in [tech.md](tech.md).
 
 ## Layout
 ```
-index.html             every screen (title, tutorial, main, reveal), the pop-up and the banner; scripts at the bottom
+index.html             every screen (name, title, tutorial, main, reveal), the pop-up and the banner; scripts at the bottom
 css/style.css          all styling; colors are variables at the top
 js/config.js           every tunable number and flag (DS.CONFIG)
 js/content.js          topics, the people (+ Alex for the tutorials), speech-bubble lines
@@ -57,7 +57,9 @@ tests load it without the page code.
   verdict comes from `buildReveal()`.
 
 ## Game state
-- **Phases:** `title → tutorial1 → main → reveal`. "Guess the profile" is a screen opened from the last results
+- **Phases:** `title → tutorial1 → main → reveal`. The name screen comes before the title (`askName()` in
+  `game.js`), but it isn't a phase: nothing is played or logged there. Its Continue arms the click guard, so Start
+  is wrapped in `ui.guarded`. "Guess the profile" is a screen opened from the last results
   step (`DS.guess.show`), not a phase: nothing ticks there and nothing is logged. **Play again** goes to `main`; **Replay
   the tutorial** goes to `tutorial1`.
 - **`active`** is whatever is being played: `vps`, `cards`, `frozen` (nothing ticks: a pop-up, the

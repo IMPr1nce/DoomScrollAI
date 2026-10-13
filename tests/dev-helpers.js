@@ -70,7 +70,10 @@
     var clickEvery = opts.clickEverySec || 1;
 
     return Promise.resolve().then(function () {
-      if (DS.game.phase === 'title') { document.getElementById('btn-start').click(); return sleep(150); }
+      // Start ignores clicks for a moment after the name screen (the click guard), so wait that out first.
+      if (DS.game.phase === 'title') {
+        return sleep(C.CLICK_GUARD_MS + 100).then(function () { document.getElementById('btn-start').click(); return sleep(150); });
+      }
       // From the results screen, a new round (like "Play again"). Without this, a second play() would
       // re-read the finished round, and the next bot would never play at all.
       if (DS.game.phase === 'reveal') { DS.game.startMain(); return sleep(150); }

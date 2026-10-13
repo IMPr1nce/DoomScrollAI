@@ -10,7 +10,8 @@ more and more of the same thing, and the people's tastes narrowed. That is a fil
 student made it by chasing attention. The class then talks about whether that was good for those
 people.
 
-No installs. No server. No accounts. No names collected.
+No installs. No server. No accounts. The only thing asked of the student is their name, and it only
+names the data file.
 
 ---
 
@@ -29,7 +30,8 @@ still work; the page just scrolls.
 
 ## What the student does (about 3 minutes)
 
-1. **Title screen** → Start.
+1. **Who's playing?** The student types their first and last name (both needed), then the **title
+   screen** → Start. The name names the data file saved at the end.
 2. **The tutorial:** one person, Alex, a brand-new user, in two named steps. The radar is Alex's
    **profile**, drawn like *Guess the profile*: it starts empty, and each post Alex watches moves that topic
    out one ring (each button reads like "✓2 ✗1": watched twice, skipped once).
@@ -138,13 +140,17 @@ Everything the game does is written to a log in the browser's memory: every post
 was liked, attention before and after, each person's tastes as they change, who left and why, pauses,
 and the start and end of each round.
 
-On the last results step, **Download data (CSV)** saves `doomscroll_<session_id>.csv`. (The log holds
+On the last results step, **Download data (CSV)** saves a file named after the student, like
+`Kai_Moreno.csv`, so you can tell whose file is whose. Spaces in a name become `-`, characters a file name
+can't hold are dropped, and each name is cut at 20 characters. (The log holds
 the people's tastes as they drift, which the player must not see until the end, so it can't be read or
 downloaded in the middle of a game, only from the results screen.)
 
-**Privacy:** the session id is a random code like `20261004-153012-a3f9c1`. Nothing about the player
-is collected: no name, no account, no device information. The log describes what the pretend
-people did. Closing the tab without downloading discards it.
+**Privacy:** the student's name is on the file's name only. Inside, nothing is about the player: no
+name, no account, no device information. The session id is a random code like `20261004-153012-a3f9c1`,
+and the log describes what the pretend people did. The name never leaves the laptop, and a future server
+(below) would not receive it. Closing the tab without downloading discards it all. Check your school's
+rules before collecting files with students' names.
 
 | Column | Meaning |
 |---|---|

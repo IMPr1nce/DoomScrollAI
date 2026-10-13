@@ -1,9 +1,12 @@
 /*
  * game.js — the conductor. It owns the clock, the phases, and what a click MEANS.
  *
- *   title -> tutorial1 (explore, then exploit) -> main -> reveal
- *                                                  ^        |
- *                                                  +--------+  "Play again"
+ *   (name screen) -> title -> tutorial1 (explore, then exploit) -> main -> reveal
+ *                                                                  ^        |
+ *                                                                  +--------+  "Play again"
+ *
+ * The name screen comes first but isn't a phase: nothing is played or logged there. The name only
+ * names the CSV file (logger.fileName).
  *
  * How it fits together:
  *   vp.js      the rules (no DOM)        game.js asks it to tick and to push
@@ -527,6 +530,32 @@
   }
 
   // ---------------------------------------------------------------- Start-up
+  // The first screen: who is playing. Both names are needed, because the teacher sorts the files by them.
+  // The check uses the CLEANED name, so "???" counts as empty instead of making a file called "_.csv".
+  function askName() {
+    var form = document.getElementById('name-form');
+    var inputs = [document.getElementById('name-first'), document.getElementById('name-last')];
+    var error = document.getElementById('name-error');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();                    // a real submit would reload the page
+      var missing = inputs.filter(function (input) { return !logger.cleanName(input.value); });
+      inputs.forEach(function (input) { input.setAttribute('aria-invalid', String(missing.indexOf(input) !== -1)); });
+      if (missing.length) {
+        error.textContent = 'Type your first and last name.';
+        missing[0].focus();
+        return;
+      }
+      error.textContent = '';
+      logger.setPlayer(inputs[0].value, inputs[1].value);
+      ui.showScreen('title');
+      // A double-click (or a held Enter) on Continue must not land on Start and skip the title.
+      ui.armGuard();
+      document.getElementById('btn-start').focus();
+    });
+    ui.showScreen('name');
+    inputs[0].focus();
+  }
+
   var game = {
     phase: 'title',
     startTutorial1: startTutorial1,
@@ -535,7 +564,7 @@
     resume: resume,
 
     init: function () {
-      document.getElementById('btn-start').addEventListener('click', startTutorial1);
+      document.getElementById('btn-start').addEventListener('click', ui.guarded(startTutorial1));
       document.getElementById('btn-skip').addEventListener('click', function () { ui.hideOverlay(); startMain(); });
       document.getElementById('btn-pause').addEventListener('click', function () { pause('button'); });
       DS.reveal.init();
@@ -551,7 +580,7 @@
       // came back, mid-action. (pause() ignores the call if a pop-up is already showing.)
       document.addEventListener('visibilitychange', function () { if (document.hidden) pause('tab_hidden'); });
 
-      ui.showScreen('title');
+      askName();
       requestAnimationFrame(frame);
     }
   };

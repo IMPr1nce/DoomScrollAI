@@ -140,6 +140,35 @@ async function main() {
     var goals = await b.eval("[].slice.call(document.querySelectorAll('ul.goals li')).map(function (l) { return l.textContent.trim(); })");
     check('sim.html: all balance goals pass', goals.length >= 6 && goals.every(function (g) { return g.charAt(0) === '✔'; }), goals.join(' | '));
 
+    // ---- 1b. The first screen asks who is playing. Both names are needed (a name that cleans to nothing counts as
+    // missing), the name only names the CSV, and a double-click on Continue can't land on Start.
+    b.problems.length = 0;
+    await b.goto(ROOT + 'index.html');
+    var who = await b.eval("(async function () {" +
+      "var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+      "var first = document.getElementById('name-first'), last = document.getElementById('name-last'), go = document.getElementById('btn-name');" +
+      "var err = function () { return document.getElementById('name-error').textContent; };" +
+      "var out = { screen: document.body.dataset.screen, focused: document.activeElement === first, fits: document.documentElement.scrollHeight <= innerHeight };" +
+      "go.click(); await sleep(50); out.empty = { screen: document.body.dataset.screen, error: err(), invalid: first.getAttribute('aria-invalid') + ' ' + last.getAttribute('aria-invalid'), focused: document.activeElement === first };" +
+      "first.value = '  Mary   Ann '; last.value = '???'; go.click(); await sleep(50);" +
+      "out.junk = { screen: document.body.dataset.screen, invalid: first.getAttribute('aria-invalid') + ' ' + last.getAttribute('aria-invalid'), focused: document.activeElement === last };" +
+      "last.value = \"O'Brien\"; go.click(); await sleep(50);" +
+      "out.done = { screen: document.body.dataset.screen, error: err(), file: DS.logger.fileName(), startFocused: document.activeElement === document.getElementById('btn-start') };" +
+      "document.getElementById('btn-start').click(); await sleep(50); out.doubleClickHeld = document.body.dataset.screen === 'title';" +
+      "await sleep(600); document.getElementById('btn-start').click(); await sleep(150); out.started = document.body.dataset.screen;" +
+      "return out; })()");
+    check('name screen: the game opens on it, with the first name ready to type, and it fits the window',
+          who.screen === 'name' && who.focused && who.fits, JSON.stringify(who));
+    check('name screen: Continue with no name stays put, says why and marks both boxes',
+          who.empty.screen === 'name' && who.empty.error === 'Type your first and last name.' && who.empty.invalid === 'true true' && who.empty.focused, JSON.stringify(who.empty));
+    check('name screen: a last name of only "???" counts as missing',
+          who.junk.screen === 'name' && who.junk.invalid === 'false true' && who.junk.focused, JSON.stringify(who.junk));
+    check('name screen: both names lead to the title, and the CSV will be called Mary-Ann_O\'Brien.csv',
+          who.done.screen === 'title' && who.done.error === '' && who.done.file === "Mary-Ann_O'Brien.csv" && who.done.startFocused, JSON.stringify(who.done));
+    check('name screen: a double-click on Continue doesn\'t land on Start; a later click starts the tutorial',
+          who.doubleClickHeld && who.started === 'tutorial', JSON.stringify(who));
+    check('name screen: no console errors', b.problems.length === 0, b.problems.join(' | '));
+
     // ---- 2. PLAY mode (what students get): the easy console doors are closed, and the game starts
     b.problems.length = 0;
     await b.goto(ROOT + 'index.html');
@@ -289,6 +318,9 @@ async function main() {
     }
     b.problems.length = 0;
     await b.goto(ROOT + 'index.html?dev=1'); await sleep(400);
+    // Through the first screen, as a student would: the CSV downloaded in section 5 is named after this player.
+    await b.eval("document.getElementById('name-first').value = 'Zebedee'; document.getElementById('name-last').value = 'Quimby'; document.getElementById('btn-name').click();");
+    await sleep(600);                    // the click guard on Start
     var radar = await runBoard();
     check('radar board: 2 people side by side, each with a radar of 6 buttons, that fits the window',
           radar.cards === 2 && radar.radarCards === 2 && radar.buttons === 12 && radar.big.fits, JSON.stringify(radar));
@@ -440,7 +472,8 @@ async function main() {
       "URL.createObjectURL = oc; HTMLAnchorElement.prototype.click = ok;" +
       "var text = await blob.text(); return { name: name, text: text, session: DS.logger.sessionId, columns: DS.logger.COLUMNS }; })()");
     var lines = csv.text.trim().split('\r\n');
-    check('CSV: named doomscroll_<session_id>.csv', csv.name === 'doomscroll_' + csv.session + '.csv', csv.name);
+    check('CSV: named after the player from the first screen (Zebedee_Quimby.csv)', csv.name === 'Zebedee_Quimby.csv', csv.name);
+    check('CSV: the player\'s name is in no row (it only names the file)', !/Zebedee|Quimby/.test(csv.text), 'the name is in the data');
     check('CSV: header is the agreed columns', lines[0] === csv.columns.join(','), lines[0]);
     check('CSV: has rows for pushes, round starts and round ends', ['push', 'round_start', 'round_end'].every(function (e) { return lines.some(function (l) { return l.split(',')[4] === e; }); }), 'missing an event type');
     check('CSV: one session id on every row', lines.slice(1).every(function (l) { return l.split(',')[0] === csv.session; }), 'mixed session ids');

@@ -39,7 +39,8 @@ student built it by chasing attention. The class then discusses whether that was
   societal impact (what optimizing for engagement does to people).
 
 ## How a session goes (about three minutes)
-1. **Title** → Start.
+1. **Who's playing?** First and last name (both needed), then **Title** → Start. The name only names the
+   data file saved at the end (`Kai_Moreno.csv`).
 2. **The tutorial:** one person, Alex, a new user, in two named steps. An intro chain of pop-ups explains
    attention and the radar, which here is Alex's **profile**: drawn like "Guess the profile", it starts empty
    and each post Alex watches moves that topic out one ring (buttons read "✓2 ✗1").
@@ -75,7 +76,8 @@ student built it by chasing attention. The class then discusses whether that was
 4. **Skill beats luck.** A careful player almost never loses to someone clicking at random.
 5. **One screen, read at a glance.** Everything fits the target laptop without scrolling, and a
    13-year-old can follow it while busy.
-6. **Safe and private.** Age-appropriate, no personal data, nothing leaves the browser.
+6. **Safe and private.** Age-appropriate, nothing leaves the browser, and the only personal data is the
+   player's name, which names the CSV file and is in none of its rows.
 
 ## Not built, on purpose
 - **The Flask backend.** `logger.flush()` is ready for a single `fetch` ([tech.md](tech.md#data-and-logging)).
@@ -114,3 +116,4 @@ decisions here with the date and the reason.
 | 2026-10-11 | **A 2-second watch** (was 3). | The team lead asked for a faster game. All 7 goals still pass at 1, 1.5 and 2 s per click; a careful player shows each person about 15 posts at 1 s per click (was 11). |
 | 2026-10-11 | **No skip streaks on good picks** (`SKIP_STREAK_BREAK` 0.6): right after a skip, a post with a like chance of 60% or more always lands. | The team lead felt the game failed them too often. With pure dice, 55% of rounds had someone skip 2+ posts in a row; now 17%, and those involve coin-flip "meh" topics. A threshold of 0.5 cut it to 2% but let random play keep people. The average like rate barely moves (spam 92%), and the tutorial is finished more often. |
 | 2026-10-12 | **The tutorial is two named steps, Explore then Exploit, on a profile radar.** Step 1: try all 6 topics. Step 2: 3 watches in a row (a skip starts the count again). The radar is drawn like "Guess the profile": five rings, one per watched post, and a purple profile shape; buttons read "✓2 ✗1". The words "exploring" and "exploiting" now appear in the tutorial too (with the results' definitions, word for word), never in the round. Replaces the two 2026-10-11 tutorial rows (the blank `learned` radar, and "every topic tried and attention at 90"). | The team lead found the learned radar iffy (a topic skipped once still grew a one-third spike) and saw that the tutorial never actually introduced exploring or exploiting. Naming them reverses the 2026-10-11 rule that kept the words to the results; the filter bubble (the drift) stays hidden. A blind but sensible player finishes in 96.5–98% of runs at 0.5–2 s per pick, in about 11.5 posts ([balance.md](balance.md#the-tutorial-explore-then-exploit)). |
+| 2026-10-12 | **A name screen comes first: the player's first and last name name the CSV** (`First_Last.csv`, cleaned for a file name, 20 characters each). Both are needed. The name is in no row of the data. | The team lead wants each student's data file to say whose it is. This relaxes principle 6 ("no personal data"): the name stays on the laptop and only names the file, so the rows stay anonymous and a future server wouldn't receive it. Without a name (tests, dev helpers) the file keeps `doomscroll_<session_id>.csv`. |
