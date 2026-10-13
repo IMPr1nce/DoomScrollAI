@@ -20,8 +20,8 @@ DS.CONFIG = {
   IDLE_DRAIN_PER_SEC: 3.0,    // loss per second while idle. This is what forces juggling. (2 -> 1.5 for six
                               // people; back to 2.0 for four; 3.0 for two people in a 30 s round, so that an
                               // ignored person is gone in about 17 s and random play still loses people)
-  POST_DURATION_SEC: 3,       // how long a VP watches a liked post (its buttons are locked meanwhile). Was 5:
-                              // with four people, 3 s keeps the game moving and gives more decisions per minute
+  POST_DURATION_SEC: 2,       // how long a VP watches a liked post (its buttons are locked meanwhile). Was 5, then 3:
+                              // the team lead asked for 2 s so the game moves faster (all 7 sim goals still pass)
 
   // -------------------------------------------------------------------- Round
   ROUND_SEC: 30,              // main game length. Was 90 (the brief); the team lead asked for a 30 s round
@@ -32,7 +32,12 @@ DS.CONFIG = {
 
   // ----------------------------------------------------------------- Tutorial
   TUTORIAL_DRAIN_MULT: 0.5,   // idle drain is multiplied by this in the tutorials
-  TUTORIAL1_GOAL: 90,         // attention needed to pass the tutorial
+  // The tutorial has two steps. Step 1 (explore) ends when every topic has been tried. Step 2 (exploit) ends
+  // after this many watched posts in a row: a skip starts the count again, so showing what you know works is
+  // the way to finish. (It replaced an attention goal of 90, which step 1 often reached on its own.)
+  TUTORIAL_EXPLOIT_STREAK: 3,
+  PROFILE_RINGS: 5,           // the tutorial's profile radar: each watched post moves that topic out one ring,
+                              // full at this many (the same five rings as "Guess the profile")
   TUTORIAL_HINT_DELAY_SEC: 0.8, // after a push, wait this long before a tutorial hint pop-up, so the player
                               // sees the reaction first (a bit shorter than TUTORIAL_RESULT_DELAY_SEC)
 
@@ -49,13 +54,19 @@ DS.CONFIG = {
   // the game feel like luck. Fatigue now mostly cuts the gain (visible as a smaller "+12"), and only
   // nudges the like chance, as the brief asks ("slightly lower the like chance").
   FATIGUE_LIKE_PENALTY: 0.02,
+  // No skip streaks on good picks: right after a skip, a post whose like chance is at least this always lands, so
+  // a long spike on the radar is never skipped twice in a row. With pure dice, 55% of rounds had someone skip 2+
+  // posts in a row, which felt like failing for no reason; with 0.6 it's 17% (the rest are coin-flip "meh"
+  // topics). 0.5 cut it to 2% but let random play keep people (the first goal failed at 1 s per click).
+  // null = pure dice.
+  SKIP_STREAK_BREAK: 0.6,
 
   // -------------------------------------------------------------------- Drift
   // The filter-bubble mechanic. Each LIKED post pulls that topic's taste toward
   // TASTE_MAX and every other topic's taste toward TASTE_MIN.
   DRIFT_UP: 0.12,             // was 0.08. Stronger = a more visible bubble on the reveal screen
-  DRIFT_DOWN: 0.04,           // with 3 s watches each person sees more posts, so 0.05 squeezed even a player
-                              // who mixes topics on purpose. 0.04 keeps "mixing keeps variety" true.
+  DRIFT_DOWN: 0.04,           // with short watches each person sees more posts, so 0.05 squeezed even a player
+                              // who mixes topics on purpose. 0.04 keeps "mixing keeps variety" true (re-checked at 2 s).
   TASTE_MIN: 0.05,
   TASTE_MAX: 0.97,            // was 0.95: raised with TASTE_FAVORITE, which would otherwise be clamped to it
 
@@ -123,6 +134,15 @@ DS.CONFIG = {
                               // hidden or the laptop stalled, time does NOT jump ahead and
                               // unfairly drain attention.
   BUBBLE_VISIBLE_SEC: 3.5,    // how long a speech bubble stays before fading
+  // Reactions on a card's avatar after each post (ui.js): a ❤️ for a watch (plus a 💬 when the topic was fresh),
+  // a 👆 swipe for a skip. Pictures only; the speech bubble says the same in words. css/style.css gets these
+  // through --reaction-dur and --reaction-delay.
+  REACTION_LIKE_SEC: 1.7,     // the heart floats up and fades slowly, so it's still there when the eye comes back
+                              // from the other card. With the 💬 delay it ends at POST_DURATION_SEC, before the next post
+  REACTION_SKIP_SEC: 0.25,    // a skip is a quick flick: the buttons stay open, so it must be over before the next click
+  REACTION_TALK_DELAY_SEC: 0.3, // the 💬 comes a beat after the ❤️, so the two read as "watched it, then talked about it"
+  REACTION_STILL_SEC: 0.8,    // with prefers-reduced-motion nothing floats or swipes: the emoji just shows and fades
+                              // this fast (a skip keeps its shorter REACTION_SKIP_SEC)
   HISTORY_STRIP_MAX: 10,      // how many recent reactions the big tutorial card shows
   TUTORIAL_RESULT_DELAY_SEC: 1.2, // pause before the tutorial pop-up, so the player SEES the moment
                               // (the bar hitting the goal, or the AFK cover) before the text covers it

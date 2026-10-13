@@ -71,6 +71,15 @@
       if (p.topCount === 1) return head + 'No topic was shown more than once.';
       return head + joinLabels(p.topTopics) + ' were each shown ' + p.topCount + ' times.';
     },
+    // "You tried 3 of 6 topics." How much the player explored with this person, said as a plain count (the
+    // words "exploring" and "exploiting" only appear on the big-picture step). Empty when nothing was shown:
+    // feedLine already says so. Someone who left gets "before Maya left", because the tries ended there.
+    triedLine: function (p) {
+      if (!p.total) return '';
+      var all = DS.TOPIC_IDS.length;
+      return (p.topicsShown === all ? 'You tried all ' + all + ' topics' : 'You tried ' + p.topicsShown + ' of ' + all + ' topics') +
+             (p.gone ? ' before ' + p.name + ' left.' : '.');
+    },
     feedLegend: function (p) {
       return 'Bright = they watched it (' + p.likedCount + '). Faded = they skipped it (' + (p.total - p.likedCount) + ').';
     },
@@ -132,10 +141,17 @@
       return { value: o.enjoyedStart.toFixed(1) + ' → ' + o.enjoyedEnd.toFixed(1), sub: 'per person, start → end' };
     },
 
+    // The two words behind "You tried 3 of 6 topics". The tutorial introduces them (its two steps, in game.js,
+    // use these same lines) and the big-picture step brings them back. They define and judge nobody: the
+    // questions below do the asking. Never said during the round.
+    exploring: 'Exploring = trying something new to learn more.',
+    exploiting: 'Exploiting = showing what you know works.',
+    exploreDefinition: 'Exploiting = showing what you know works. Exploring = trying something new to learn more.',
+
     questions: [
       'Did anyone\'s feed get narrower? What did you do that caused it?',
       'The game only gave you points for attention. What did it never reward?',
-      'How could a real app keep people interested without trapping them in one topic?'
+      'If you always order your favorite food, you never find a new favorite. When should an app show something new?'
     ]
   };
   DS.revealText = text;
@@ -206,7 +222,9 @@
   function renderFeed(p) {
     var box = h('section', 'panel feedbox');
     box.appendChild(h('h3', 'panel__title', 'What you showed ' + p.name));
-    box.appendChild(h('p', 'panel__line', text.feedLine(p)));
+    // The "tried" count joins the feed sentence instead of taking a line of its own: each step must fit ~445px.
+    var tried = text.triedLine(p);
+    box.appendChild(h('p', 'panel__line', text.feedLine(p) + (tried ? ' ' + tried : '')));
 
     var row = h('div', 'feed');
     // The row is a picture for sighted users; give everyone else the summary instead of 40 emoji.
@@ -421,6 +439,7 @@
 
     var talk = h('section', 'panel talk');
     talk.appendChild(h('h3', 'panel__title', 'Talk about it'));
+    talk.appendChild(h('p', 'talk__def', text.exploreDefinition));
     var list = h('ol', 'talk__list');
     text.questions.forEach(function (q) { list.appendChild(h('li', null, q)); });
     talk.appendChild(list);

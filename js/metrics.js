@@ -164,6 +164,9 @@
         topTopics: summary.topCount > 0
           ? DS.TOPIC_IDS.filter(function (id) { return summary.byTopic[id] === summary.topCount; })
           : [],
+        // How many different topics were shown at least once (watched or skipped): how much the player
+        // explored with this person. 0 when nothing was shown.
+        topicsShown: DS.TOPIC_IDS.filter(function (id) { return summary.byTopic[id] > 0; }).length,
         // Copies, so nothing drawn later can change the VP.
         tastesStart: Object.assign({}, vp.tasteSnapshotStart),
         tastesEnd: Object.assign({}, vp.tastes),

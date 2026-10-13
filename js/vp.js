@@ -222,7 +222,13 @@
     // 2. Roll for like. Repeats make even a favorite topic a bit less likely.
     var likeChance = clamp(this.tastes[topicId] - C.FATIGUE_LIKE_PENALTY * fatigueCount,
                            C.TASTE_MIN, C.TASTE_MAX);
-    var liked = DS.rng.random() < likeChance;
+    // No skip streaks on good picks: right after a skip, a post they'd probably like (SKIP_STREAK_BREAK) always
+    // lands. Pure dice made a careful player feel like they kept failing. The dice are still rolled, so a
+    // seeded game uses the same numbers either way.
+    var prev = this.history[this.history.length - 1];
+    var roll = DS.rng.random();
+    var liked = roll < likeChance ||
+                (C.SKIP_STREAK_BREAK !== null && !!prev && !prev.liked && likeChance >= C.SKIP_STREAK_BREAK);
 
     this.history.push({ topic: topicId, liked: liked, t: this.clock });
 

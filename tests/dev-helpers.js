@@ -71,6 +71,9 @@
 
     return Promise.resolve().then(function () {
       if (DS.game.phase === 'title') { document.getElementById('btn-start').click(); return sleep(150); }
+      // From the results screen, a new round (like "Play again"). Without this, a second play() would
+      // re-read the finished round, and the next bot would never play at all.
+      if (DS.game.phase === 'reveal') { DS.game.startMain(); return sleep(150); }
     }).then(function () {
       if (DS.game.phase === 'tutorial1') { document.getElementById('btn-skip').click(); return sleep(150); }
     }).then(function () {

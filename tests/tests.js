@@ -21,8 +21,8 @@
   var PINNED = {
     ATTENTION_START: 60, ATTENTION_MAX: 100, LIKE_GAIN: 15, DISLIKE_PENALTY: 12,
     IDLE_DRAIN_PER_SEC: 2, POST_DURATION_SEC: 5, ROUND_SEC: 90,
-    TUTORIAL_DRAIN_MULT: 0.5, TUTORIAL1_GOAL: 90,
-    FATIGUE_WINDOW: 3, FATIGUE_MULTIPLIERS: [1, 0.7, 0.45, 0.3], FATIGUE_LIKE_PENALTY: 0.1,
+    TUTORIAL_DRAIN_MULT: 0.5,
+    FATIGUE_WINDOW: 3, FATIGUE_MULTIPLIERS: [1, 0.7, 0.45, 0.3], FATIGUE_LIKE_PENALTY: 0.1, SKIP_STREAK_BREAK: null,
     DRIFT_UP: 0.08, DRIFT_DOWN: 0.04, TASTE_MIN: 0.05, TASTE_MAX: 0.95,
     TASTE_FAVORITE: 0.85, TASTE_MEH: 0.5, TASTE_DISLIKED: 0.15, TASTE_JITTER: 0.04,
     LOW_ATTENTION_THRESHOLD: 25, FATIGUE_MESSAGE_MIN_COUNT: 2,
@@ -274,6 +274,34 @@
     eq(last.category, 'afk');
     var names = events.map(function (e) { return e.event; });
     eq(names.slice(-2).join(','), 'push,afk', 'push event comes before afk event');
+  });
+
+  // ------------------------------------------------------- No skip streaks
+  test('skip streak break: right after a skip, a post they like (chance >= SKIP_STREAK_BREAK) always lands', function () {
+    C.SKIP_STREAK_BREAK = 0.6; C.ATTENTION_START = 100; C.LIKED_LOCKS_BUTTONS = false;
+    var vp = makeVP();                                   // sports 0.85 (a favorite), food 0.5 (meh), the rest 0.15
+    DS.rng.use(DISLIKE);                                 // the dice say "skip" every time
+    eq(vp.push('sports').liked, false, 'the first post: pure dice, so a favorite can be skipped');
+    eq(vp.push('sports').liked, true, 'never twice in a row on a favorite');
+    eq(vp.push('sports').liked, false, 'after a like, the dice decide again');
+    eq(vp.push('food').liked, false, 'a coin-flip topic (0.5) is not protected');
+    eq(vp.push('sports').liked, true, 'the skip before can be on any topic');
+    eq(vp.push('dance').liked, false);
+    eq(vp.push('dance').liked, false, 'a disliked topic is never rescued');
+    C.SKIP_STREAK_BREAK = null;
+    var pure = makeVP();
+    eq(pure.push('sports').liked, false); eq(pure.push('sports').liked, false, 'null = pure dice');
+  });
+
+  test('skip streak break: the dice are rolled either way, so a seeded game uses the same numbers', function () {
+    C.ATTENTION_START = 100; C.LIKED_LOCKS_BUTTONS = false;
+    function rolls(guard) {
+      C.SKIP_STREAK_BREAK = guard;
+      var n = 0; DS.rng.use(function () { n++; return 0.999999; });
+      var vp = makeVP(); vp.push('sports'); vp.push('sports');
+      return n;
+    }
+    eq(rolls(0.6), rolls(null));
   });
 
   // -------------------------------------------------------------- Fatigue
@@ -715,6 +743,13 @@
     eq(empty.topTopics.length, 0);
   });
 
+  test('reveal: topicsShown counts the different topics shown, watched or skipped (0 when nothing was shown)', function () {
+    var vp = calmVP();
+    play(vp, [[1, 'sports', true], [1, 'music', false], [1, 'sports', true], [1, 'food', true], [1, 'sports', false]]);
+    eq(DS.metrics.buildReveal([vp], 40).vps[0].topicsShown, 3, 'Music was skipped, but it was still tried');
+    eq(DS.metrics.buildReveal([makeVP()], 40).vps[0].topicsShown, 0);
+  });
+
   test('reveal: it only claims a change when the change is big enough (steady / rose / unknown)', function () {
     function mk(first, second) {
       var vp = calmVP();
@@ -965,7 +1000,7 @@
   var T = function () { return DS.revealText; };
   function person(over) {
     return Object.assign({
-      name: 'Maya', total: 14, likedCount: 9, topTopic: 'sports', topTopics: ['sports'], topCount: 12,
+      name: 'Maya', total: 14, likedCount: 9, topTopic: 'sports', topTopics: ['sports'], topCount: 12, topicsShown: 2,
       gone: false, afkAt: null, finalAttention: 71.4, enjoyedStart: 3, enjoyedEnd: 1,
       variety: { first: 0.72, second: 0.18, firstCount: 6, secondCount: 5, trend: 'dropped' }
     }, over);
@@ -995,6 +1030,31 @@
       var line = T().feedLine(person({ total: 12, topCount: 5, topTopics: [id] }));
       ok(!/\b1 were\b/.test(line), line);
     });
+  });
+
+  test('reveal text: the "tried" line counts the topics you tried, honestly in every case', function () {
+    eq(T().triedLine(person({ total: 0, topTopic: null, topTopics: [], topCount: 0, topicsShown: 0 })), '',
+       'nothing shown: say nothing (the feed line already does)');
+    eq(T().triedLine(person({ total: 0, topicsShown: 0, gone: true, afkAt: 9 })), '', 'left before any post: still nothing');
+    eq(T().triedLine(person({ total: 1, topCount: 1, topicsShown: 1 })), 'You tried 1 of 6 topics.');
+    eq(T().triedLine(person({ topicsShown: 3 })), 'You tried 3 of 6 topics.');
+    eq(T().triedLine(person({ topicsShown: 6 })), 'You tried all 6 topics.');
+    eq(T().triedLine(person({ topicsShown: 2, gone: true, afkAt: 12 })), 'You tried 2 of 6 topics before Maya left.',
+       'someone who left: the tries ended when they did');
+    eq(T().triedLine(person({ topicsShown: 6, gone: true, afkAt: 25 })), 'You tried all 6 topics before Maya left.');
+  });
+
+  test('reveal text: the big picture names exploring and exploiting (no other results step does) and keeps exactly three questions', function () {
+    eq(T().exploreDefinition, 'Exploiting = showing what you know works. Exploring = trying something new to learn more.');
+    eq(T().exploreDefinition, T().exploiting + ' ' + T().exploring, 'the tutorial\'s two steps use these same words');
+    eq(T().questions.length, 3);
+    eq(T().questions[2], 'If you always order your favorite food, you never find a new favorite. When should an app show something new?');
+    // the words belong to the big-picture step: no per-person sentence, verdict or tile may use them
+    var elsewhere = [T().triedLine(person()), T().triedLine(person({ topicsShown: 6, gone: true, afkAt: 3 })),
+                     T().feedLine(person()), T().tasteLine(person()), T().winTease(1), T().closingTitle(2, 2)];
+    ['dropped', 'low', 'rose', 'steady', 'unknown'].forEach(function (trend) { elsewhere.push(T().verdict({ trend: trend })); });
+    elsewhere.forEach(function (line) { ok(!/explor|exploit/i.test(line), 'named outside the big picture: ' + line); });
+    ok(!/explor|exploit/i.test(T().questions.join(' ')), 'the questions ask in plain words; the definition line names the idea');
   });
 
   test('reveal text: variety sentence is honest for each trend (dropped / rose / steady / unknown)', function () {
@@ -1059,6 +1119,11 @@
     [person(), person({ total: 0, topTopic: null }), person({ total: 1, topCount: 1 }), person({ total: 5, topCount: 5, gone: true, afkAt: 12 })]
       .forEach(function (p) { pool.push(T().feedLine(p), T().feedLegend(p), T().tasteLine(p), T().statusLine(p)); });
     [0, 1, 2, 3, 4, 5, 6].forEach(function (n) { pool.push(T().winTitle(n, 6), T().winTease(n), T().closingTitle(n, 6)); });
+    // the "tried" line, as it reads joined to the feed line on the screen, for every case
+    [person({ total: 1, topCount: 1, topicsShown: 1 }), person({ topicsShown: 3 }), person({ topicsShown: 6 }),
+     person({ topicsShown: 6, gone: true, afkAt: 20 }), person({ name: 'Jordan', topicsShown: 4, gone: true, afkAt: 7 })]
+      .forEach(function (p) { pool.push(T().feedLine(p) + ' ' + T().triedLine(p)); });
+    pool.push(T().exploreDefinition);
     pool.push(T().varietyHint);
     T().questions.forEach(function (q) { pool.push(q); });
 

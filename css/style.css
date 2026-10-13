@@ -397,6 +397,15 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 .radar__spoke--untried { stroke: #cdc7e3; stroke-dasharray: 3 4; }
 .radar__learned { fill: rgba(91, 61, 245, 0.12); stroke: rgba(91, 61, 245, 0.45); stroke-width: 1.5; stroke-linejoin: round; }
 .radar__spike { stroke-width: 7; stroke-linecap: round; }
+/* The tutorial's profile radar (radarShows 'profile'): five rings, one per watched post, and the purple profile
+   shape from "Guess the profile", so the player watches a profile being built. */
+.card--profile .radar__ring { stroke-width: 1; }
+.card--profile .radar__ring--outer { stroke: #cfc8ee; stroke-width: 1.5; }
+.card--profile .radar__spike { stroke-width: 5; }
+.radar__profile { fill: rgba(91, 61, 245, 0.18); stroke: var(--primary); stroke-width: 2.5; stroke-linejoin: round; }
+.topic-btn__yes { color: var(--good); }
+.topic-btn__no { color: var(--bad); }
+.topic-btn__yes + .topic-btn__no { margin-left: 6px; }
 .radar__halo { stroke: #fff; stroke-width: 15; stroke-linecap: round; }
 .radar__dot  { stroke-width: 10; stroke-linecap: round; }
 
@@ -431,6 +440,27 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 /* Little reactions */
 .card--like { animation: pulse 0.35s ease-out; }
 .card--skip { animation: shake 0.3s ease-out; }
+
+/* Reactions on the avatar (ui.js showReaction): a ❤️ floats up for a watch (a 💬 joins it when the topic was
+   fresh), a smaller ❤️ for a repeat, a quick 👆 swipe for a skip. Placed absolutely inside the avatar, so the
+   card never changes size, and kept low enough that the card's overflow: hidden never clips them. No z-index on
+   purpose: the AFK cover comes later in the card, so it still covers a reaction. Timing comes from config.js
+   through --reaction-dur and --reaction-delay; --rise is how far an emoji floats. */
+.card__avatar { position: relative; }
+.reaction { position: absolute; inset: 0; pointer-events: none; --rise: -34px; }
+.reaction__emoji {
+  position: absolute; line-height: 1; font-size: 28px;
+  animation: reaction-float var(--reaction-dur) ease-out forwards;
+}
+.reaction__heart { right: -12px; bottom: 0; }
+.reaction--repeat .reaction__heart { font-size: 20px; }
+.reaction__talk { right: -12px; top: -9px; animation: reaction-pop var(--reaction-dur) ease-out var(--reaction-delay) both; }
+.reaction__swipe { left: 50%; bottom: 0; margin-left: -0.5em; animation: reaction-swipe var(--reaction-dur) ease-in forwards; }
+.card--compact .reaction { --rise: -22px; }
+.card--compact .reaction__emoji { font-size: 20px; }
+.card--compact .reaction--repeat .reaction__heart { font-size: 16px; }
+.card--compact .reaction__heart { right: -10px; }
+.card--compact .reaction__talk { right: -9px; top: -6px; }
 
 /* ----------------------------------------------------------------- Main game */
 
@@ -717,6 +747,7 @@ body.guarded .big__actions .btn { opacity: 0.55; }
 .tile__value { font-size: 30px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tile__sub { font-size: 16px; color: var(--muted); }
 .big__verdict { margin: 0; font-size: 20px; font-weight: 700; }
+.talk__def { margin: 2px 0 0; font-size: 18px; color: var(--muted); }    /* explore/exploit, named only here */
 .talk__list { margin: 4px 0 0; padding-left: 1.4em; font-size: 20px; }
 .talk__list li { margin: 4px 0; }
 .big__actions { grid-column: 1 / -1; display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
@@ -898,9 +929,33 @@ body.guarded .big__actions .btn { opacity: 0.55; }
   from { opacity: 0; transform: scale(0.4); }
   to   { transform: scale(1); }
 }
+@keyframes reaction-float {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.5); }
+  12%  { opacity: 1; transform: translateY(0) scale(1.15); }
+  25%  { transform: translateY(calc(var(--rise) * 0.2)) scale(1); }
+  100% { opacity: 0; transform: translateY(var(--rise)); }
+}
+@keyframes reaction-pop {
+  0%   { opacity: 0; transform: scale(0.4); }
+  15%  { opacity: 1; transform: scale(1.1); }
+  30%  { transform: scale(1); }
+  70%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(calc(var(--rise) * 0.3)); }
+}
+@keyframes reaction-swipe {
+  from { opacity: 0.9; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(var(--rise)); }
+}
+@keyframes reaction-still {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
 
 /* People who ask their computer for less motion get none. */
 @media (prefers-reduced-motion: reduce) {
   .overlay__spot { animation: none; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
+  /* ...except a reaction's short fade in place: no float, no swipe (ui.js shortens it to REACTION_STILL_SEC).
+     A class beats the * above, so this wins over its "animation: none". */
+  .reaction__emoji { animation: reaction-still var(--reaction-dur) linear var(--reaction-delay, 0s) both !important; }
 }

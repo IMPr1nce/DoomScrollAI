@@ -19,6 +19,43 @@ results wording, labels.
   Alex, the tutorial person, has none.
 - **Tutorial pop-ups must not hint at the narrowing.** They may say that repeats get boring (each repeat gains
   less: the player can see that in the +). They may not say that a person's tastes change.
+
+## Tutorial pop-ups (explore, then exploit)
+Alex is a new user, so the profile radar starts empty and no tutorial line may talk about long spikes or point
+at a favorite. Each line is only said when it is true for the version being played (`tests/e2e.js` checks all
+four versions). The grid has no radar, so its lines talk about the buttons' counts instead.
+- **The header** names the step: "Step 1 of 2 · Explore", "Find out what Alex likes"; then "Step 2 of 2 ·
+  Exploit", "Show Alex what works". The goal pill counts what is left: "Goal: try all 6 topics (2/6)", then
+  "Goal: 3 watches in a row (1/3)".
+- **The intro:** "Meet Alex" (Alex just joined the app), "This is attention", "This is a radar plot" ("It's
+  Alex's profile: each post they watch adds a ring. It's empty, because you don't know Alex yet."), and
+  "Step 1: Explore".
+- **The two words are defined exactly as on the results:** "Exploring = trying something new to learn more."
+  (step 1) and "Exploiting = showing what you know works." (step 2). Both come from `DS.revealText`, so they can't
+  drift apart.
+- **Hints:** a watch is "That topic grew one ring on the radar. Apps count a watch as 'interested'."; a skip is
+  "No ring, and attention drops. A skip is a signal too: 'not interested'."; a repeat is "Repeats gain less, so
+  the + is smaller. Mix it up!"
+- **Between the steps:** "You explored!" says which topics Alex watched (never anything about the tastes),
+  "The skips were the price of finding out." (only if there were skips), and "Every new user starts empty like
+  this, so apps explore to learn them." Then "Step 2: Exploit".
+- **The win pop-up:** "You explored to learn what Alex likes, then exploited it to keep Alex watching. Real apps
+  do both with every user." Then, **only when the round's radars come filled in**, "Now the radars come filled
+  in. Can you keep two people hooked?", with the real number of people. Then the line about people leaving at
+  0. Its buttons: **Start the game** (first, so it gets the focus) and **Replay the tutorial**, the same words
+  as the link on the results screen.
+- **"Alex left":** "Each skip costs attention, and waiting drains it. Try again."
+- **The round never says "exploring" or "exploiting".** Only the tutorial and the results' big-picture step do.
+
+## Reactions on the avatar
+After each post, the card's avatar reacts: a ❤️ floats up for a watch, a 💬 joins it a beat later when the
+topic was fresh (not shown in that person's last 3 posts, so `fatigue_mult` is 1), a repeat gets a smaller ❤️
+alone, and a skip gets a quick 👆 swipe.
+- **Pictures only, `aria-hidden`.** The speech bubble (and the tutorial's history strip) say the same thing in
+  words, so this is the one emoji that needs no word beside it.
+- **Built only from the push event's `liked` and `fatigueMult`.** Never from the tastes, and no class or
+  attribute that says anything about them.
+- **Never a pop-up:** nothing freezes or blocks the round, and the card doesn't change size.
 - **Order matters** in `DS.VP_DEFS`: the first `PROFILE_COUNT` people play, and the first four must love
   all six topics between them (tested).
 
@@ -40,11 +77,20 @@ results wording, labels.
 - **Ties are said as ties** ("Sports and Music were each shown 4 times"). Never pick a winner, and never
   write "1 were".
 - **No fake numbers:** show "—" or "too few watched posts", never a made-up 0.
+- **"You tried 3 of 6 topics."** joins the feed sentence on each person's step (no extra height). "All 6"
+  when every topic was tried, "…before Maya left." for someone who left, and nothing at all when nothing was
+  shown (the feed line already says so).
+- **Exploring and exploiting come back on the big-picture step:** "Exploiting = showing what you know works.
+  Exploring = trying something new to learn more." The tutorial introduced them with the same words. It
+  defines; it doesn't judge the player.
+- **Exactly three discussion questions.** The third is "If you always order your favorite food, you never find
+  a new favorite. When should an app show something new?"
 - **A new outcome needs** a sentence in `DS.revealText` and a "reveal text: …" test in `tests/tests.js`.
 - **The discussion questions ask; they don't preach.**
 
 ## Accessibility
 - **Emoji + words, never color alone:** topics, status chips, watched vs skipped in the feed, the +/− pills.
+  (The avatar reactions are the one exception: they are `aria-hidden` pictures, and the speech bubble says it.)
 - **Text is at least 16px** everywhere (body text is 18px), with at least 4.5:1 contrast. The status
   colors `--good` and `--bad` were darkened to meet it.
 - **Keyboard:** Esc pauses and resumes; ← → move through the results; pop-ups put focus on their main
@@ -52,15 +98,16 @@ results wording, labels.
 - **Screen readers:** the radar is a picture (`aria-hidden`), so each topic button says it in words
   ("Show Sports to Maya. They like it about 9 times in 10."). Only the big tutorial card announces speech
   bubbles; four cards talking at once would be noise.
-- **Motion:** everything respects `prefers-reduced-motion`.
+- **Motion:** everything respects `prefers-reduced-motion`. The avatar reactions then neither float nor swipe:
+  they show in place and fade in `REACTION_STILL_SEC`.
 
 ## Where the words live
 | Words | File | Tested? |
 |---|---|---|
 | People, topics, speech bubbles | `js/content.js` | yes |
 | Results sentences | `DS.revealText` in `js/reveal.js` | yes |
-| Tutorial header and pop-ups, the "ready?" card, pause | `js/game.js` | no: follow the rules by hand |
-| Card labels and status chips ("Waiting", "Needs a post!", "AFK — closed the app") | `js/ui.js` | no |
+| Tutorial header and pop-ups, the "ready?" card, pause | `js/game.js` | the tutorial's key lines, per version, in `tests/e2e.js`; otherwise follow the rules by hand |
+| Card labels and status chips ("Waiting", "Needs a post!", "AFK — closed the app"), the avatar reactions | `js/ui.js` | the reactions, in `tests/e2e.js` |
 | Results labels, captions and legends | the drawing half of `js/reveal.js` | no |
 | "Guess the profile" sentences (summary, per-topic lines, hints, win) | `DS.guessModel.text` in `js/guess.js` | yes |
 | "Guess the profile" labels and the "How it works" list | the drawing half of `js/guess.js` | no |

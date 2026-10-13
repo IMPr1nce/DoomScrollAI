@@ -13,7 +13,7 @@ js/vp.js               the person model (DS.VP), the dice (DS.rng), createCast a
 js/metrics.js          diversity, score, observed(), buildReveal(): every number the results show
 js/logger.js           the event log, the CSV, flush()
 js/radar.js            radar geometry (pure) and SVG drawing
-js/ui.js               screens, pop-up, click guard, scoreboard, banner, the profile card
+js/ui.js               screens, pop-up, click guard, scoreboard, banner, the profile card (and its avatar reactions)
 js/reveal.js           the results screen: DS.revealText (pure wording) + DS.reveal (drawing)
 js/guess.js            "Guess the profile": DS.guessModel (pure: hidden profile, simulate, wording) + DS.guess (screen)
 js/game.js             the conductor: loop, phases, pause, round end, playtest switches, lockdown
@@ -43,7 +43,15 @@ tests load it without the page code.
 - **A click.** Topic button → `opts.onPush(topic)` → `vp.push(topic)`. The model decides everything (like
   or skip, fatigue, drift, AFK) and refuses pushes it doesn't allow (`canPush()`).
 - **Events.** Each VP emits `push`, `watch_end`, `afk` and `message` to its listeners: the card (speech
-  bubble, flash, the +/− pill, the history strip) and the logger. The VP doesn't know either exists.
+  bubble, flash, the +/− pill, the avatar reaction, the history strip) and the logger. The VP doesn't know
+  either exists.
+- **Avatar reactions** (`showReaction` in `ui.js`, the `.reaction` rules in `style.css`). A `push` puts one
+  `span.reaction` (`aria-hidden`) inside `.card__avatar`, built only from the event's `liked` and
+  `fatigueMult`: `reaction--like reaction--fresh` (❤️ + 💬), `reaction--like reaction--repeat` (a smaller ❤️) or
+  `reaction--skip` (👆). It's absolutely placed, so the card never changes size. One per card: the next push
+  replaces it. One timer removes it; `destroy()` clears that timer, so a thrown-away card never runs it.
+  `REACTION_*_SEC` in `config.js` reach the CSS as `--reaction-dur` and `--reaction-delay`. With
+  `prefers-reduced-motion`, the duration is cut to `REACTION_STILL_SEC` and the CSS swaps in a fade in place.
 - **Round end.** `endRound()` logs `round_end`, flushes the log, shows the banner, then calls
   `DS.reveal.show(DS.metrics.buildReveal(vps, elapsed))`. The results screen only draws: every number and
   verdict comes from `buildReveal()`.
@@ -57,9 +65,22 @@ tests load it without the page code.
   `limitSec` and `check`.
 - **Delayed callbacks** capture `active` as a token and do nothing if it changed, because the player may
   have restarted in the meantime.
+- **The tutorial has two steps, explore then exploit** (`startTutorial1`). It passes `radarShows:
+  TUTORIAL_RADAR_SHOWS` (`'profile'`) to `ui.createCard`, so Alex starts as an empty profile whatever the round's
+  `RADAR_SHOWS` is. It's a card option, not a settings change, because play mode freezes `DS.CONFIG`.
+  `step` is 1 until every topic has been tried (`untriedTopics` is empty); then `check()` queues the pop-ups
+  between the steps (`exploredPages`), and step 2 begins as its pop-up appears. Step 2 counts its run of watches
+  (`streak()`, only posts since `step2From`) and ends at `TUTORIAL_EXPLOIT_STREAK`. `header()` rewrites the header
+  and the goal pill after every push.
 - **The tutorial's pop-ups** (`game.js`): an intro chain (`introPages` → `showPopupChain`) that freezes the
-  round, then one-time hints (`attachHints`, listening to Alex's `push` events) and the win pop-up. None may
-  mention the narrowing of tastes. Each pop-up can pass `target` to `ui.showOverlay`: the target is ringed,
+  round, one-time hints (`attachHints`, listening to Alex's `push` events), the pop-ups between the steps, the
+  win pop-up (`winText`; its second button, "Replay the tutorial", calls `startTutorial1`) and the "Alex left"
+  pop-up. Hints and the step change go through `whenFree`: it waits a beat so the player sees the reaction,
+  then waits for any pop-up already up instead of dropping, and gives up once the player leaves the
+  tutorial. The pop-ups follow the tutorial's own card (the profile radar, or the grid's counts), never
+  `ui.showsInterests()`. The one exception is the win pop-up's "Now the radars come filled in" line, which is
+  about the round. The definitions of the two words come from `DS.revealText.exploring` / `.exploiting`. None
+  may mention the narrowing of tastes. Each pop-up can pass `target` to `ui.showOverlay`: the target is ringed,
   the rest dimmed, and a small panel with an arrow sits beside it (`placeSpot` in `ui.js`). Keep that text to
   one or two short lines: the highlight does the explaining. The board is one row of two cards for 2 people (`--rows` set by
   `ui.mountCards`), a 2 × 2 for 4, and 3 × 2 for 6.
@@ -76,10 +97,12 @@ It lives in two places that must agree.
   sizes the SVG to 2rx × 2ry, and places button i at `--dx * --rx`, `--dy * --ry`. `--btn-w`, `--btn-h`
   and `--rx-min` are the room one button needs. In windows 1001–1180px wide, smaller values go with
   narrower buttons (emoji over word). At 1000px and under, the radar moves under the person's info.
-- **What it draws** depends on `RADAR_SHOWS`: `'interests'` draws `vp.tasteSnapshotStart` once, when the
-  card is made; `'learned'` redraws `metrics.observed(vp.history)` after every push, with "?" for topics
-  not tried yet. Both use `DS.radar.spikes()`. `ui.showsInterests()` tells `game.js` and `reveal.js` which
-  one is in use.
+- **What it draws** depends on `RADAR_SHOWS`, unless the card passes its own `opts.radarShows` (the tutorial
+  passes `'profile'`): `'interests'` draws `vp.tasteSnapshotStart` once, when the card is made; `'learned'`
+  redraws `metrics.observed(vp.history)` after every push, with "?" for topics not tried yet. Both use
+  `DS.radar.spikes()`. `'profile'` (the tutorial only) draws `PROFILE_RINGS` rings (`DS.radar.frame(n, rings)`)
+  and `DS.radar.profile()`: each topic reaches the ring of its watch count, joined by a purple shape like
+  "Guess the profile"; its buttons read "✓2 ✗1" (the `.card--profile` rules in `style.css`). `ui.showsInterests()` tells `game.js` and `reveal.js` which one the round uses.
 - Six people always get the button grid instead (decided in `game.js`), because six radars don't fit.
 
 ## How to add…

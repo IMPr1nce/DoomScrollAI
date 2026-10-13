@@ -31,8 +31,8 @@ commands, what to run after a change, and how the data leaves the game.
 ## Commands
 ```bash
 node tests/run-node.js        # unit tests: model, logger, results wording, radar geometry. Exit 1 on failure
-node tests/run-node.js sim    # balance simulator: the results table and the 7 goals. Exit 1 if a goal fails
-node tests/e2e.js             # the real game in headless Chrome from file://, about 50 checks. Needs Node 22+ and Chrome
+node tests/run-node.js sim    # balance simulator: the results table, the 7 goals and a tutorial line. Exit 1 if a goal fails
+node tests/e2e.js             # the real game in headless Chrome from file://, about 85 checks. Needs Node 22+ and Chrome
 ```
 No terminal? Open `tests.html` and `sim.html` in Chrome. They run the same code.
 
@@ -41,7 +41,7 @@ No terminal? Open `tests.html` and `sim.html` in Chrome. They run the same code.
 
 **Dev mode:** `index.html?dev=1` keeps the console handles open and loads `tests/dev-helpers.js`:
 - `DS.dev.play({ bot: 'spam' })` plays a whole round instantly and lands on the results (bots: `learner`,
-  `spam`, `mix`, `random`, `none`).
+  `spam`, `mix`, `random`, `none`). Called from the results screen, it starts a new round first.
 - `DS.dev.measureReveal()` reports whether each results step fits the current window.
 - `DS.dev.round()` returns the live round, hidden tastes included.
 
@@ -60,8 +60,10 @@ What to run after a change:
 - The **simulator** plays hundreds of 30-second rounds with robot players, without real timers, and checks
   the goals in [balance.md](balance.md).
 - **`tests/e2e.js`** drives real Chrome through the DevTools protocol using Node's built-in WebSocket, so
-  there's nothing to install. It covers the play-mode lockdown, both radar versions, the 6-person grid, the
-  fit at 1366 × 600 and 1024 × 768, the results text, the CSV, and the frantic-click and pause loopholes.
+  there's nothing to install. It covers the play-mode lockdown, the tutorial's two steps, its profile radar
+  and its words in every version, both radar versions, the 6-person grid, the avatar reactions (they come and go, never move
+  the layout or say anything about the tastes, and fade in place with reduced motion), the fit at
+  1366 × 600 and 1024 × 768, the results text, the CSV, and the frantic-click and pause loopholes.
 
 ## Data and logging
 - Every event flows `logger` → pending → `flush(records)` → stored → `exportCSV()`. `flush()` is the

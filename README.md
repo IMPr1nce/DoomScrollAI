@@ -30,23 +30,31 @@ still work; the page just scrolls.
 ## What the student does (about 3 minutes)
 
 1. **Title screen** → Start.
-2. **The tutorial, "Hook them":** one person, Alex. A chain of pop-ups first explains the radar plot, what
-   a like and a skip do, and that a long spike is *not* a reason to show the same topic again and
-   again. Then the student gets Alex's attention up to 90; one-time hint pop-ups appear after their
-   first like, skip and repeat. Real apps keep a profile like Alex's radar for every user, built from
-   everything they watch. The last pop-up says that at 0 attention a person leaves, the worst outcome
-   for a platform.
+2. **The tutorial:** one person, Alex, a brand-new user, in two named steps. The radar is Alex's
+   **profile**, drawn like *Guess the profile*: it starts empty, and each post Alex watches moves that topic
+   out one ring (each button reads like "✓2 ✗1": watched twice, skipped once).
+   - **Step 1 · Explore:** try all 6 topics to find out what Alex likes. "Exploring = trying something new
+     to learn more." Some posts get skipped: that's the cost of exploring.
+   - **Step 2 · Exploit:** get 3 watches in a row. "Exploiting = showing what you know works." A skip starts
+     the count again, so the safe pick, a topic Alex is known to watch, wins.
+   - Hint pop-ups appear after the first watch, skip and repeat. The last pop-up says real apps do both with
+     every user, that the game's radars come filled in, and that at 0 attention a person leaves, the worst
+     outcome for a platform. It has two buttons: **Start the game** and **Replay the tutorial**. (A student
+     who is unlucky with their first few picks may lose Alex and get *Try again*.)
 3. **The game:** two people, 30 seconds. Everyone's attention drains when you ignore them. Show each
    person posts they like. At 0 they leave for good ("AFK"). The score is *still scrolling* and
-   *average attention*.
+   *average attention*. A liked post is watched for 2 seconds. After every post the person's avatar reacts:
+   ❤️ for a watch (with 💬 when the topic was fresh), 👆 for a skip.
    Each person's six topic buttons sit around a **radar**, with a spike pointing at each button. The
    longer the spike, the more that person is into the topic, so a glance shows what to show them. The
    radar shows who they were **at the start of the round** and never changes. Every post they like
    quietly shifts their tastes toward it, but that stays hidden until the results.
-5. **Results:** the score first (the win), then one screen per person: what you showed them, how much
-   variety they saw, and their radar twice: at the start (the one you played with) and at the end,
-   usually shrunk into a single spike. That's the filter bubble, and the student's own feed made it.
-   Then the big picture and three questions for the class.
+5. **Results:** the score first (the win), then one screen per person: what you showed them and how many
+   of the six topics you tried, how much variety they saw, and their radar twice: at the start (the one you
+   played with) and at the end, usually shrunk into a single spike. That's the filter bubble, and the
+   student's own feed made it. Then the big picture: one line that names the idea ("Exploiting = showing
+   what you know works. Exploring = trying something new to learn more.") and three questions for the class.
+   The tutorial introduced these two words; the round never uses them.
 6. **Bonus: Guess the profile** (the button next to *Download data*): a random person, an empty radar and
    10 points to share across the topics. Drag each dot out or in, then press **Simulate**. The person sees one
    post per point, watches what they want and skips the rest. A skip means "too much of this"; a topic you
@@ -93,12 +101,13 @@ Edit the file, save it, reload the page.
 | A **harder** game | the opposite |
 | A **longer or shorter** round | `ROUND_SEC` (30). The balance was tuned for 30 s and 2 people: see `steering/balance.md` |
 | "Guess the profile": more or fewer **points**, a bigger radar, when the answer is offered | `GUESS_POINTS` (10), `GUESS_MAX_PER_TOPIC` (5), `GUESS_ANSWER_AFTER` (4) |
-| A **stronger filter bubble** on the results screen | raise `DRIFT_UP` (how fast a liked topic is learned) or `DRIFT_DOWN` (how fast other topics fade). Careful with `DRIFT_DOWN`: above about 0.04 (with 3-second watches) even a player who mixes topics on purpose gets squeezed, which weakens "you had a choice". The simulator checks this. |
+| A **stronger filter bubble** on the results screen | raise `DRIFT_UP` (how fast a liked topic is learned) or `DRIFT_DOWN` (how fast other topics fade). Careful with `DRIFT_DOWN`: above about 0.04 (with 2-second watches) even a player who mixes topics on purpose gets squeezed, which weakens "you had a choice". The simulator checks this. |
 | Spamming one topic to be **less rewarding** | lower `FATIGUE_MULTIPLIERS`. Careful: too harsh and mixing topics beats spamming, which flips the lesson. The simulator warns you. |
 | Buttons to **stay live** while someone watches | `LIKED_LOCKS_BUTTONS: false` (a new post then cuts the current watch short) |
-| A **longer or easier tutorial** | `TUTORIAL1_GOAL`, `TUTORIAL_DRAIN_MULT` |
+| A **longer or easier tutorial** | `TUTORIAL_EXPLOIT_STREAK` (3 watches in a row in step 2), `TUTORIAL_DRAIN_MULT`. Step 1 always asks for every topic. `PROFILE_RINGS` (5) sets how many watches fill a spike on the tutorial's profile radar. |
+| A **faster or slower game** | `POST_DURATION_SEC` (2): how long a liked post is watched. Check the simulator after changing it. |
 | The **same game every time** (for a demo) | `RNG_SEED: 42` (any number; `null` = different every time) |
-| **More or less luck** | `TASTE_FAVORITE` (0.92) and `TASTE_DISLIKED` (0.08): the closer to 1 and 0, the more a right choice is rewarded. `FATIGUE_LIKE_PENALTY` (0.02) adds a little luck back for repeated topics. |
+| **More or less luck** | `TASTE_FAVORITE` (0.95) and `TASTE_DISLIKED` (0.08): the closer to 1 and 0, the more a right choice is rewarded. `SKIP_STREAK_BREAK` (0.6): right after a skip, a topic with at least this like chance always lands, so long spikes are never skipped twice in a row (`null` = pure dice). `FATIGUE_LIKE_PENALTY` (0.02) adds a little luck back for repeated topics. |
 | The `learned` radar to **trust one lucky like less** | raise `RADAR_SMOOTHING` (1) |
 | The results screen to be **more or less strict** about calling a change real | `REVEAL_TREND_DELTA`, `REVEAL_LOW_VARIETY` |
 
@@ -112,7 +121,8 @@ robot players and tells you whether the game still teaches the lesson:
   random (it reports how often that happens; it was 15% before the dice were made fairer, it's ~1–3% now).
 
 (The same thing from a terminal: `node tests/run-node.js sim`.) The simulator also lets you try
-changes without editing any file.
+changes without editing any file. Below the goals it reports how often a careful player who can't see
+Alex's tastes finishes the tutorial's two steps (about 97% today; the rest lose Alex once and try again).
 
 To change the **words and people**, edit `js/content.js`: the six topics (emoji and color), the
 people (name, animal avatar, bio, which topics they love or find "meh", and `clue`: the topic their bio
@@ -211,12 +221,13 @@ the page, so the tests and the simulator can run them without a browser.
 - **`sim.html`**: the balance report described above.
 - **Terminal (optional, needs Node):** `node tests/run-node.js` and `node tests/run-node.js sim`.
 - **Real-browser check (optional, needs Node 22+ and Chrome):** `node tests/e2e.js`. It opens the actual
-  game from `file://` in a headless Chrome, plays whole rounds with robot players, and checks about 50
-  things in every version (both radars, and 6 people with buttons): every screen fits a short laptop
+  game from `file://` in a headless Chrome, plays whole rounds with robot players, and checks about 85
+  things in every version (both radars, and 6 people with buttons): the tutorial's two steps, its profile
+  radar and what its pop-ups say, the avatar reactions, every screen fits a short laptop
   window (and the board a 1024 × 768 one), no radar button overlaps another, the interests radar matches
   each person and never changes mid-round, the results text is sane (no "undefined"), the CSV is
   well-formed and says which version was played, the console doors are closed, and the frantic-click and
-  pause loopholes stay closed. Run it after tuning `config.js` or editing `content.js`. It takes about a minute.
+  pause loopholes stay closed. Run it after tuning `config.js` or editing `content.js`. It takes 2–3 minutes.
 - **Developer mode:** open `index.html?dev` (add `?dev` to the file's address). This leaves the
   console handles open and loads `tests/dev-helpers.js`. In the console (F12):
   - `DS.dev.play()` skips the tutorials, plays a whole round with a robot in an instant, and lands
@@ -237,12 +248,13 @@ the page, so the tests and the simulator can run them without a browser.
   was narrow from the first post gets its own wording; people who left early are shown as "too few
   watched posts" instead of a made-up number. All of this is tested.
 - **Why it no longer feels like luck.** Favorites used to be skipped 23% of the time, even for a player
-  who knew every answer. Now it's under 10%, so "even favorites get skipped sometimes" is still true but
-  rare. Only a handful of ideas fit on the screen at once, so the game uses 2 people (it was 4, and 6 before that: six
+  who knew every answer. Now it's under 10%, and never twice in a row (`SKIP_STREAK_BREAK`), so "even
+  favorites get skipped sometimes" is still true but rare. Only a handful of ideas fit on the screen at once, so the game uses 2 people (it was 4, and 6 before that: six
   made players click at random), and the radar shows at a glance what each person is into.
 - **The radar shows interests on purpose (the team lead's call).** It turns the game from "guess what
   they like" into "keep two people happy at once", and the narrowing still stays hidden because the
-  radar never updates mid-round. Speed is now the skill: in the simulator, a robot that always shows
+  radar never updates mid-round. The tutorial is the exception: Alex's profile starts empty, so the student
+  first sees how such a profile is learned. Speed is now the skill: in the simulator, a robot that always shows
   the longest spike averages about 94 attention at one click a second, 84 at one every 1.5 s, and 64 at
   one every 2 s (a random clicker gets 20–26). The cost is that nobody has to *learn* each person. To
   make discovery part of the game again, use `?radar=learned`.

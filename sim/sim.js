@@ -176,6 +176,91 @@
     };
   }
 
+  // --------------------------------------------------------- The tutorial
+  // The tutorial is a cold start: Alex's radar starts empty, so the player finds out what Alex likes from
+  // watches and skips alone. This checks that is fair: a player who can't see Alex's tastes, but plays
+  // sensibly, finishes both steps before Alex leaves, as game.js counts them: every topic tried (explore),
+  // then TUTORIAL_EXPLOIT_STREAK watches in a row (exploit). The bot only uses what the card shows (the
+  // profile radar and the +/- pill):
+  //   1. it tries each topic once, in a random order;
+  //   2. then it repeats a topic Alex watched, as long as it paid in full (the + didn't shrink);
+  //   3. when a repeat stops paying (a smaller +, or a skip) it switches to another topic Alex watched more
+  //      often than skipped, the one with the best record, shown longest ago. With no other, it keeps the
+  //      one that worked. (Not "any topic with a like": one lucky like on a topic Alex dislikes would have
+  //      it alternate between that and a favorite forever, which no sensible player does.)
+  function tutorialTopic(vp) {
+    var h = vp.history;
+    var untried = DS.TOPIC_IDS.filter(function (id) { return !h.some(function (x) { return x.topic === id; }); });
+    if (untried.length) return randomPick(untried);
+
+    var last = h[h.length - 1];
+    // Was the last post a repeat? The same count vp.push() uses for fatigue (fatigueCountFor), taken before it.
+    var before = h.slice(Math.max(0, h.length - 1 - C.FATIGUE_WINDOW), h.length - 1);
+    var paidInFull = last.liked && !before.some(function (x) { return x.topic === last.topic; });
+    if (paidInFull) return last.topic;
+
+    var seen = DS.metrics.observed(h);
+    function lastShown(id) { for (var i = h.length - 1; i >= 0; i--) if (h[i].topic === id) return i; return -1; }
+    function best(ids) {
+      return ids.reduce(function (a, b) {
+        var d = seen[b].estimate - seen[a].estimate;
+        return d > 1e-9 || (Math.abs(d) <= 1e-9 && lastShown(b) < lastShown(a)) ? b : a;
+      });
+    }
+    function works(id) { return seen[id].likes > seen[id].tries - seen[id].likes; }   // more watches than skips
+    var others = DS.TOPIC_IDS.filter(function (id) { return id !== last.topic && works(id); });
+    if (others.length) return best(others);
+    return works(last.topic) ? last.topic : best(DS.TOPIC_IDS);
+  }
+
+  // One tutorial: Alex alone, no clock, until it is finished or Alex leaves. `thinkSec` is how long the player
+  // takes to pick once Alex is free again (right after a skip, or when a watch ends). Pop-ups freeze the real
+  // tutorial, so they cost nothing here. TUTORIAL_SIM_LIMIT_SEC stops a run that never ends.
+  var TUTORIAL_SIM_LIMIT_SEC = 300;
+  // Watches in a row at the end of the history, counting only from index `from`.
+  function run(history, from) {
+    var n = 0;
+    for (var i = history.length - 1; i >= from && history[i].liked; i--) n++;
+    return n;
+  }
+  function playTutorial(seed, thinkSec) {
+    DS.rng.seed(seed);
+    var vp = DS.createTutorialVP();
+    var dt = C.SIM_TICK_SEC, freeAt = 0, step2From = null;
+    for (var step = 0; step * dt < TUTORIAL_SIM_LIMIT_SEC; step++) {
+      var t = step * dt;
+      if (vp.state === 'idle' && t >= freeAt + thinkSec - 1e-9) {
+        vp.push(tutorialTopic(vp));
+        if (vp.state !== 'watching') freeAt = t;       // a skip: free again at once
+      }
+      var wasWatching = vp.state === 'watching';
+      vp.tick(dt);
+      if (wasWatching && vp.state === 'idle') freeAt = t + dt;
+      // the same order of checks as the tutorial's check() in game.js. Step 2 counts only the posts shown
+      // after every topic was tried; the pop-ups in between freeze the real game, so they cost no time here.
+      if (step2From !== null && run(vp.history, step2From) >= C.TUTORIAL_EXPLOIT_STREAK) {
+        return { outcome: 'goal', sec: t + dt, pushes: vp.history.length };
+      }
+      if (vp.state === 'afk') return { outcome: 'left', sec: t + dt, pushes: vp.history.length };
+      if (step2From === null && DS.TOPIC_IDS.every(function (id) { return vp.history.some(function (x) { return x.topic === id; }); })) {
+        step2From = vp.history.length;
+      }
+    }
+    return { outcome: 'stuck', sec: TUTORIAL_SIM_LIMIT_SEC, pushes: vp.history.length };
+  }
+
+  // Called by runAll with its settings in place. Seeds SIM_SEED + i, like the rounds.
+  function runTutorial(runs, thinkSec) {
+    var out = { runs: runs, thinkSec: thinkSec, goal: 0, left: 0, stuck: 0, secs: [], pushes: [] };
+    for (var i = 0; i < runs; i++) {
+      var r = playTutorial(C.SIM_SEED + i, thinkSec);
+      out[r.outcome]++;
+      if (r.outcome === 'goal') { out.secs.push(r.sec); out.pushes.push(r.pushes); }
+    }
+    return { runs: runs, thinkSec: thinkSec, goal: out.goal, left: out.left, stuck: out.stuck,
+             goalShare: out.goal / runs, avgSec: mean(out.secs), avgPushes: mean(out.pushes) };
+  }
+
   // ----------------------------------------------------------- Statistics
   function mean(xs) { return xs.length ? xs.reduce(function (a, b) { return a + b; }, 0) / xs.length : null; }
   function sd(xs) {
@@ -252,7 +337,9 @@
         for (var i = 0; i < C.SIM_RUNS; i++) rounds.push(playRound(strategy, C.SIM_SEED + i));
         return summarize(strategy, rounds);
       });
-      return { results: results, goals: checkGoals(results), settings: describeSettings() };
+      // A report, not one of the goals: the goals are about the round.
+      var tutorial = runTutorial(C.SIM_RUNS, C.SIM_CLICK_INTERVAL_SEC);
+      return { results: results, goals: checkGoals(results), tutorial: tutorial, settings: describeSettings() };
     } finally {
       Object.keys(C).forEach(function (k) { delete C[k]; });
       Object.assign(C, saved);
@@ -330,7 +417,16 @@
     });
     lines.push('');
     out.goals.forEach(function (g) { lines.push((g.pass ? '[ok]   ' : '[FAIL] ') + g.text + ' - ' + g.detail); });
+    lines.push('', tutorialLine(out.tutorial));
     return lines.join('\n');
+  }
+
+  // One line on the tutorial, shared by formatText and sim.html.
+  function tutorialLine(t) {
+    return 'Tutorial (explore, then exploit; a blind but sensible player, ' + t.thinkSec + ' s to pick): finished in ' +
+           t.goal + ' of ' + t.runs + ' runs (' + (100 * t.goalShare).toFixed(1) + '%); Alex left in ' + t.left +
+           (t.stuck ? ', ' + t.stuck + ' never finished' : '') +
+           (t.avgSec === null ? '' : '. Average to finish: ' + t.avgSec.toFixed(1) + ' s, ' + t.avgPushes.toFixed(1) + ' posts.');
   }
 
   // Experiments to paste into sim.html's "Config overrides" box. These are NOT
@@ -354,5 +450,5 @@
     }
   };
 
-  DS.sim = { runAll: runAll, formatText: formatText, STRATEGIES: STRATEGIES, PRESETS: PRESETS };
+  DS.sim = { runAll: runAll, formatText: formatText, tutorialLine: tutorialLine, STRATEGIES: STRATEGIES, PRESETS: PRESETS };
 })();
