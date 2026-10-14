@@ -35,10 +35,12 @@ still work; the page just scrolls.
 2. **The tutorial:** one person, Alex, a brand-new user, in two named steps. The radar is Alex's
    **profile**, drawn like *Guess the profile*: it starts empty, and each post Alex watches moves that topic
    out one ring (each button reads like "✓2 ✗1": watched twice, skipped once).
-   - **Step 1 · Explore:** try all 6 topics to find out what Alex likes. "Exploring = trying something new
-     to learn more." Some posts get skipped: that's the cost of exploring.
-   - **Step 2 · Exploit:** get 3 watches in a row. "Exploiting = showing what you know works." A skip starts
-     the count again, so the safe pick, a topic Alex is known to watch, wins.
+   - The first pop-up sets the job: "You are the algorithm: your job is to keep Alex on the app as long as
+     possible."
+   - **Step 1 · Explore:** push random topics as tests (does Alex watch, or skip?) until all 6 are tested.
+     "Exploring = trying something new to learn more." Some posts get skipped: that's the cost of exploring.
+   - **Step 2 · Exploit:** show only the topics that passed the tests, to keep Alex on the app; get 3 watches in
+     a row. "Exploiting = showing what you know works." A skip starts the count again.
    - Hint pop-ups appear after the first watch, skip and repeat. The last pop-up says real apps do both with
      every user, that the game's radars come filled in, and that at 0 attention a person leaves, the worst
      outcome for a platform. It has two buttons: **Start the game** and **Replay the tutorial**. (A student

@@ -127,10 +127,11 @@
 
   // --------------------------------------------------------------- Tutorial
   // One tutorial, one person (Alex), in two steps that introduce the idea the results come back to:
-  //   Step 1, EXPLORE  Alex is a new user, so their profile starts empty. Try every topic to learn what Alex
-  //                    likes. Some posts get skipped: that's the cost of exploring.
-  //   Step 2, EXPLOIT  use what you learned. Get TUTORIAL_EXPLOIT_STREAK watches in a row. A skip starts the
-  //                    count again, so the topics you know Alex watches are the way to finish.
+  //   Step 1, EXPLORE  Alex is a new user, so their profile starts empty. Push random topics as tests ("watch or
+  //                    skip?") until every topic is tried. Some get skipped: that's the cost of exploring.
+  //   Step 2, EXPLOIT  show what passed the tests, because the algorithm's job is keeping Alex on the app. Get
+  //                    TUTORIAL_EXPLOIT_STREAK watches in a row; a skip starts the count again.
+  // The opening pop-up says that job first ("You are the algorithm..."), so both steps have a reason.
   // The radar is drawn like "Guess the profile" (radarShows 'profile'): each watched post moves that topic out
   // one ring, so the player sees the profile being built. It shows only what the player saw, never the tastes.
   // Pop-ups teach in three layers: an intro chain before anything moves, a one-time hint the first time
@@ -201,14 +202,16 @@
   // otherwise it is the grid, whose buttons count what was tried.
   function introPages(vp, profileRadar) {
     var pages = [
-      { title: 'Meet ' + vp.name, text: vp.name + ' just joined the app. Keep ' + vp.name + ' scrolling by showing posts they like.',
+      { title: 'Meet ' + vp.name, text: vp.name + ' just joined the app. You are the algorithm: your job is to keep ' +
+        vp.name + ' on the app as long as possible.',
         target: cardPart('.card__head') },
       { title: 'This is attention', text: 'Likes raise it. Skips drop it. At 0, ' + vp.name + ' leaves for good.',
         target: cardPart('.meter') }
     ];
     if (profileRadar) {
-      pages.push({ title: 'This is a radar plot',
-        text: 'It\'s ' + vp.name + '\'s profile: each post they watch adds a ring.\nIt\'s empty, because you don\'t know ' + vp.name + ' yet.',
+      // How the rings work is left to the first-watch hint ("That topic grew one ring"), when the player sees one grow.
+      pages.push({ title: 'This is ' + vp.name + '\'s Interest radar!',
+        text: 'Each post helps reveal what ' + vp.name + ' likes. Watch the radar fill in as you learn more about them.',
         target: cardPart('.radar') });
     } else {
       pages.push({ title: 'These are the topics',
@@ -216,7 +219,8 @@
         target: cardPart('.topics') });
     }
     pages.push({ title: 'Step 1: Explore',
-      text: DS.revealText.exploring + '\nTry all ' + DS.TOPIC_IDS.length + ' topics. Some will be skipped: that\'s the cost.',
+      text: DS.revealText.exploring + '\nPush random topics as tests: does ' + vp.name + ' watch, or skip? Test all ' +
+            DS.TOPIC_IDS.length + '. Skips are the cost.',
       target: cardPart(profileRadar ? '.radar' : '.topics') });
     return pages;
   }
@@ -231,11 +235,13 @@
     return [
       // A milestone with more to say than a spotlight panel holds, so it's the centered card (no target).
       { title: 'You explored!',
-        text: (watched.length ? vp.name + ' watched ' + topicWords(watched) + '.' : vp.name + ' hasn\'t watched anything yet.') +
+        text: 'Your tests are done. ' +
+              (watched.length ? vp.name + ' watched ' + topicWords(watched) + '.' : vp.name + ' hasn\'t watched anything yet.') +
               (skips ? ' The skips were the price of finding out.' : '') +
               '\nEvery new user starts empty like this, so apps explore to learn them.' },
       { title: 'Step 2: Exploit',
-        text: DS.revealText.exploiting + '\nGet ' + C.TUTORIAL_EXPLOIT_STREAK + ' watches in a row. A skip starts the count again.',
+        text: DS.revealText.exploiting + '\nNow show only topics that passed your tests. Get ' + C.TUTORIAL_EXPLOIT_STREAK +
+              ' watches in a row: a skip starts the count again.',
         target: where }
     ];
   }
@@ -277,8 +283,8 @@
   // radars decide the second (never promise filled-in radars to ?radar=learned or the grid), and the last says
   // the other way a round ends, since no tutorial shows it.
   function winText(vp) {
-    var lines = ['You explored to learn what ' + vp.name + ' likes, then exploited it to keep ' + vp.name +
-                 ' watching. Real apps do both with every user.'];
+    var lines = ['You explored: random topics tested what ' + vp.name + ' likes. Then you exploited what passed, to keep ' +
+                 vp.name + ' on the app. Real apps do both with every user.'];
     if (ui.showsInterests()) {
       lines.push('Now the radars come filled in. Can you keep ' +
                  String(NUMBER_WORDS[C.PROFILE_COUNT] || C.PROFILE_COUNT).toLowerCase() + ' people hooked?');
@@ -316,14 +322,14 @@
       var all = DS.TOPIC_IDS.length, need = C.TUTORIAL_EXPLOIT_STREAK;
       ui.setTutorialHeader(step === 1 ? {
         step: 'Step 1 of 2 · Explore',
-        title: 'Find out what ' + vp.name + ' likes',
-        text: vp.name + ' is new: you know nothing about them yet. Try topics and watch the ' +
+        title: 'Test what ' + vp.name + ' likes',
+        text: 'You know nothing about ' + vp.name + ' yet. Push random topics to test them, and watch the ' +
               (profileRadar ? 'radar' : 'counts') + ' fill in.',
-        goal: 'Goal: try all ' + all + ' topics (' + (all - untriedTopics(vp).length) + '/' + all + ')'
+        goal: 'Goal: test all ' + all + ' topics (' + (all - untriedTopics(vp).length) + '/' + all + ')'
       } : {
         step: 'Step 2 of 2 · Exploit',
-        title: 'Show ' + vp.name + ' what works',
-        text: 'Use what you learned: pick topics you know ' + vp.name + ' watches.',
+        title: 'Keep ' + vp.name + ' on the app',
+        text: 'You\'re the algorithm: show what passed your tests, so ' + vp.name + ' stays as long as possible.',
         goal: 'Goal: ' + need + ' watches in a row (' + Math.min(streak(), need) + '/' + need + ')'
       });
     }

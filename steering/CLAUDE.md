@@ -89,4 +89,6 @@ Paths in backticks are relative to the project root.
   shape instead of a line ([balance.md](balance.md#the-tutorial-explore-then-exploit)).
 - 2026-10-13: everyone in the round has 3 favorites side by side too (filled wedges on the radars), with a retune
   (skips 18, drain 4/s, softer fatigue). The tutorial keeps its old skip cost and drain ([balance.md](balance.md)).
+- 2026-10-13, later: the tutorial opens with the job ("You are the algorithm: keep Alex on the app as long as
+  possible"), explores with random topics as tests, then exploits what passed ([content.md](content.md)).
 - Not built, by design: the Flask endpoint (one `fetch` in `logger.flush`), sound, accounts.

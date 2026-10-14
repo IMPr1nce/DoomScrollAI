@@ -26,23 +26,30 @@ results wording, labels.
 Alex is a new user, so the profile radar starts empty and no tutorial line may talk about long spikes or point
 at a favorite. Each line is only said when it is true for the version being played (`tests/e2e.js` checks all
 four versions). The grid has no radar, so its lines talk about the buttons' counts instead.
-- **The header** names the step: "Step 1 of 2 · Explore", "Find out what Alex likes"; then "Step 2 of 2 ·
-  Exploit", "Show Alex what works". The goal pill counts what is left: "Goal: try all 6 topics (2/6)", then
-  "Goal: 3 watches in a row (1/3)".
-- **The intro:** "Meet Alex" (Alex just joined the app), "This is attention", "This is a radar plot" ("It's
-  Alex's profile: each post they watch adds a ring. It's empty, because you don't know Alex yet."), and
-  "Step 1: Explore".
+- **The why comes first:** the player is the algorithm, and its job is to keep Alex on the app as long as
+  possible. Exploring is testing (random topics, each one asking "watch or skip?"); exploiting is showing what
+  passed the tests, for that job. Each header text stays one line, so the card doesn't jump between the steps.
+- **The header** names the step: "Step 1 of 2 · Explore", "Test what Alex likes", "You know nothing about Alex
+  yet. Push random topics to test them, and watch the radar fill in."; then "Step 2 of 2 · Exploit", "Keep Alex
+  on the app", "You're the algorithm: show what passed your tests, so Alex stays as long as possible." The goal
+  pill counts what is left: "Goal: test all 6 topics (2/6)", then "Goal: 3 watches in a row (1/3)".
+- **The intro:** "Meet Alex" ("Alex just joined the app. You are the algorithm: your job is to keep Alex on the
+  app as long as possible."), "This is attention", "This is Alex's Interest radar!" ("Each post helps reveal what
+  Alex likes. Watch the radar fill in as you learn more about them."; the rings are left to the first-watch hint),
+  and "Step 1: Explore" (the definition, then
+  "Push random topics as tests: does Alex watch, or skip? Test all 6. Skips are the cost.").
 - **The two words are defined exactly as on the results:** "Exploring = trying something new to learn more."
   (step 1) and "Exploiting = showing what you know works." (step 2). Both come from `DS.revealText`, so they can't
   drift apart.
 - **Hints:** a watch is "That topic grew one ring on the radar. Apps count a watch as 'interested'."; a skip is
   "No ring, and attention drops. A skip is a signal too: 'not interested'."; a repeat is "Repeats gain less, so
   the + is smaller. Mix it up!"
-- **Between the steps:** "You explored!" says which topics Alex watched (never anything about the tastes),
-  "The skips were the price of finding out." (only if there were skips), and "Every new user starts empty like
-  this, so apps explore to learn them." Then "Step 2: Exploit".
-- **The win pop-up:** "You explored to learn what Alex likes, then exploited it to keep Alex watching. Real apps
-  do both with every user." Then, **only when the round's radars come filled in**, "Now the radars come filled
+- **Between the steps:** "You explored!" opens with "Your tests are done.", says which topics Alex watched (never
+  anything about the tastes), "The skips were the price of finding out." (only if there were skips), and "Every
+  new user starts empty like this, so apps explore to learn them." Then "Step 2: Exploit": the definition, then
+  "Now show only topics that passed your tests. Get 3 watches in a row: a skip starts the count again."
+- **The win pop-up:** "You explored: random topics tested what Alex likes. Then you exploited what passed, to
+  keep Alex on the app. Real apps do both with every user." Then, **only when the round's radars come filled in**, "Now the radars come filled
   in. Can you keep two people hooked?", with the real number of people. Then the line about people leaving at
   0. Its buttons: **Start the game** (first, so it gets the focus) and **Replay the tutorial**, the same words
   as the link on the results screen.

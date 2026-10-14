@@ -44,12 +44,14 @@ student built it by chasing attention. The class then discusses whether that was
 2. **The tutorial:** one person, Alex, a new user, in two named steps. An intro chain of pop-ups explains
    attention and the radar, which here is Alex's **profile**: drawn like "Guess the profile", it starts empty
    and each post Alex watches moves that topic out one ring (buttons read "✓2 ✗1").
-   - **Step 1 · Explore** ("Find out what Alex likes"): try all 6 topics. "Exploring = trying something new to
-     learn more." Some get skipped: that's the cost. One-time hints follow the first watch ("a ring, and apps
+   - **The first pop-up says why:** "You are the algorithm: your job is to keep Alex on the app as long as
+     possible."
+   - **Step 1 · Explore** ("Test what Alex likes"): push random topics as tests (does Alex watch, or skip?) until
+     all 6 are tested. "Exploring = trying something new to learn more." Some get skipped: that's the cost. One-time hints follow the first watch ("a ring, and apps
      count a watch as interested"), skip ("no ring; a skip is a signal too") and repeat. Then "You explored!"
-     says what Alex watched, and that every new user starts empty like this.
-   - **Step 2 · Exploit** ("Show Alex what works"): get 3 watches in a row. "Exploiting = showing what you know
-     works." A skip starts the count again, so the topics Alex is known to watch are the way to finish.
+     says the tests are done, what Alex watched, and that every new user starts empty like this.
+   - **Step 2 · Exploit** ("Keep Alex on the app"): show only topics that passed the tests, so Alex stays as long
+     as possible; get 3 watches in a row. "Exploiting = showing what you know works." A skip starts the count again.
    - **The last pop-up** says the player explored, then exploited, as real apps do with every user; that the
      round's radars come filled in (only in versions where they do); and that at 0 a person leaves: for a
      platform the worst outcome, no attention, no ads. Its buttons: **Start the game** and **Replay the
@@ -119,3 +121,4 @@ decisions here with the date and the reason.
 | 2026-10-12 | **A name screen comes first: the player's first and last name name the CSV** (`First_Last.csv`, cleaned for a file name, 20 characters each). Both are needed. The name is in no row of the data. | The team lead wants each student's data file to say whose it is. This relaxes principle 6 ("no personal data"): the name stays on the laptop and only names the file, so the rows stay anonymous and a future server wouldn't receive it. Without a name (tests, dev helpers) the file keeps `doomscroll_<session_id>.csv`. |
 | 2026-10-12 | **Alex has 3 favorites, side by side on the radar** (Dance, Music, Comics; Sports is "meh"). Was Music and Food, with 2 "meh". | The team lead found the tutorial's finished profile looked like a straight line: Music and Food sit opposite each other. A topic with no watches sits at the center, so only neighbors enclose an area; spread-out favorites made a thin "Y". In the simulator a finished profile is now a filled shape 97–98% of the time (was 76%) and a line under 1% (was 21%). The tutorial gets a little easier: a blind player finishes 100% of runs at 1–2 s per pick (was 96.5–97.5%), in 10.9 posts (was 11.5). |
 | 2026-10-13 | **Everyone in the round has 3 favorites side by side and 1 "meh"**, like Alex, with a retune: `DISLIKE_PENALTY` 18 (was 12), `IDLE_DRAIN_PER_SEC` 4.0 (was 3.0), `FATIGUE_MULTIPLIERS` 1, 0.95, 0.9, 0.85 (was 1, 0.85, 0.7, 0.6). The tutorial keeps skips at 12 and Alex's drain at 1.5/s. | The team lead wanted the round's radars to be filled shapes too, so the player reads each person at a glance with three near-sure picks instead of coin-flip "meh" topics. Without the retune, random play kept people and mixing tied spamming (the lesson flipped). With it, all 7 goals pass at 1, 1.5 and 2 s per click; each mistake costs more, and repeats cost less. Trade-off: at 3 s per click spam averages 52 (goal 55; was 57). The results' start radars are now wide wedges, so the shrink to one spike shows more. Checked in the simulator; the cheaper option (moving the "meh" next to the favorites, no balance change) was declined because coin-flip picks would remain. |
+| 2026-10-13 | **The tutorial says why, and frames exploring as testing.** The first pop-up: "You are the algorithm: your job is to keep Alex on the app as long as possible." Step 1 pushes random topics as tests ("does Alex watch, or skip?"); step 2 shows only what passed the tests, to keep Alex on the app. | The team lead wanted it clearer that exploring means testing topics at random, and that exploiting what passed serves the algorithm's goal: time on the app. The definitions stay word for word, and nothing hints at the narrowing. |

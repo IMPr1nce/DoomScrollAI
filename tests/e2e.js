@@ -234,13 +234,14 @@ async function main() {
       "await sleep(650); document.querySelectorAll('#overlay-buttons button')[1].click(); await sleep(300);" +
       "out.replayed = DS.game.phase === 'tutorial1' && title() === 'Meet Alex' && DS.game.current().vps[0].history.length === 0;" +
       "return out; })()");
-    check('tutorial: four intro pop-ups first (attention, the radar plot, "Step 1: Explore"), and nothing moves behind them',
-          tut.titles.join(' / ') === 'Meet Alex / This is attention / This is a radar plot / Step 1: Explore' && tut.frozenDuringIntro, JSON.stringify(tut.titles));
-    check('tutorial: the radar pop-up calls it Alex\'s profile, empty; step 1 is named and defined as on the results',
-          /profile/.test(tut.texts[2]) && /empty/.test(tut.texts[2]) && tut.texts[3].indexOf('Exploring = trying something new to learn more.') === 0,
+    check('tutorial: four intro pop-ups first (attention, Alex\'s Interest radar, "Step 1: Explore"), and nothing moves behind them',
+          tut.titles.join(' / ') === "Meet Alex / This is attention / This is Alex's Interest radar! / Step 1: Explore" && tut.frozenDuringIntro, JSON.stringify(tut.titles));
+    check('tutorial: the radar pop-up says each post reveals what Alex likes; step 1 is named and defined as on the results',
+          tut.texts[2] === 'Each post helps reveal what Alex likes. Watch the radar fill in as you learn more about them.' &&
+          tut.texts[3].indexOf('Exploring = trying something new to learn more.') === 0,
           JSON.stringify(tut.texts));
-    check('tutorial: step 1 says what it is and counts the topics tried ("Step 1 of 2 · Explore", "(0/6)")',
-          tut.step1 === 'Step 1 of 2 · Explore' && tut.goal0 === 'Goal: try all 6 topics (0/6)', JSON.stringify([tut.step1, tut.goal0]));
+    check('tutorial: step 1 says what it is and counts the topics tested ("Step 1 of 2 · Explore", "(0/6)")',
+          tut.step1 === 'Step 1 of 2 · Explore' && tut.goal0 === 'Goal: test all 6 topics (0/6)', JSON.stringify([tut.step1, tut.goal0]));
     check('tutorial: Alex\'s profile starts empty: five rings, no spikes, every count "?", no bio star (the round\'s radars are filled in)',
           tut.blank.rings === 5 && tut.blank.spikes === 0 && tut.blank.counts === '? ? ? ? ? ?' && tut.blank.profile === 1 && tut.blank.interests === 0 && tut.blank.stars === 0,
           JSON.stringify(tut.blank));
@@ -252,8 +253,8 @@ async function main() {
           /^Alex watched it! \| That topic grew one ring/.test(tut.likeHint) && /"interested"/.test(tut.likeHint) &&
           /^Alex skipped it \| No ring/.test(tut.skipHint) && /"not interested"/.test(tut.skipHint) && tut.resumed, JSON.stringify([tut.likeHint, tut.skipHint]));
     check('tutorial: every topic tried brings "You explored!" (what Alex watched), then "Step 2: Exploit", defined as on the results',
-          tut.between.length === 2 && /^You explored! \| Alex watched [^.]+\.( The skips were the price of finding out\.)?\nEvery new user starts empty/.test(tut.between[0]) &&
-          tut.between[1].indexOf('Step 2: Exploit | Exploiting = showing what you know works.') === 0, JSON.stringify(tut.between));
+          tut.between.length === 2 && /^You explored! \| Your tests are done\. Alex watched [^.]+\.( The skips were the price of finding out\.)?\nEvery new user starts empty/.test(tut.between[0]) &&
+          tut.between[1].indexOf('Step 2: Exploit | Exploiting = showing what you know works.\nNow show only topics that passed your tests.') === 0, JSON.stringify(tut.between));
     check('tutorial: step 2 is named and counts watches in a row ("Step 2 of 2 · Exploit", "(0/3)")',
           tut.step2 === 'Step 2 of 2 · Exploit' && tut.goal2 === 'Goal: 3 watches in a row (0/3)', JSON.stringify([tut.step2, tut.goal2]));
     check('tutorial: a skip ends the run (2 watches, a skip, 2 watches is not enough); 3 in a row ends it with the game or a replay',
@@ -261,10 +262,16 @@ async function main() {
     check('tutorial: "Replay the tutorial" starts it again from the first pop-up, with a fresh Alex', tut.replayed === true, String(tut.replayed));
     var words = await b.eval(TUTORIAL_TEXTS);
     check('tutorial: the win pop-up says what was done (explored, then exploited), then (the round\'s radars being filled in) that two people come next',
-          /You explored to learn what Alex likes, then exploited it/.test(words.win.text) &&
+          /You explored: random topics tested what Alex likes\. Then you exploited what passed, to keep Alex on the app\./.test(words.win.text) &&
           /Now the radars come filled in\. Can you keep two people hooked\?/.test(words.win.text) && /leaves at 0/.test(words.win.text), words.win.text);
     check('tutorial: the "Alex left" pop-up says why (skips and waiting cost attention), with no talk of spikes',
           words.left.title === 'Alex left!' && /Each skip costs attention/.test(words.left.text) && !/spike/i.test(words.left.text), JSON.stringify(words.left));
+    check('tutorial: says why first (you are the algorithm, keep Alex on the app), explores with random tests, exploits what passed',
+          /^Alex just joined the app\. You are the algorithm: your job is to keep Alex on the app as long as possible\.$/.test(words.intro[0].text) &&
+          /Push random topics as tests: does Alex watch, or skip\?/.test(words.intro[3].text) &&
+          /^Step 1 of 2 · Explore \| You know nothing about Alex yet\. Push random topics to test them/.test(words.head1) &&
+          /^Step 2 of 2 · Exploit \| You're the algorithm: show what passed your tests, so Alex stays as long as possible\./.test(words.head2),
+          JSON.stringify([words.intro[0].text, words.intro[3].text, words.head1, words.head2]));
     check('tutorial: names both words, and no he/she anywhere', /Exploring =/.test(words.all) && /Exploiting =/.test(words.all) &&
           !/\b(he|she|him|her|his)\b/i.test(words.all), words.all.slice(0, 300));
     check('tutorial: no console errors', b.problems.length === 0, b.problems.join(' | '));
@@ -534,8 +541,8 @@ async function main() {
           learnedEnd.phase === 'reveal' && learnedEnd.steps.length === 4 && learnedEnd.steps.every(function (s) { return /fits$/.test(s); }), JSON.stringify(learnedEnd));
     var learnedWords = await b.eval(TUTORIAL_TEXTS);
     check('learned radar: the tutorial is the same two steps on the profile radar, and its win pop-up never promises filled-in radars',
-          learnedWords.intro.length === 4 && learnedWords.intro[2].title === 'This is a radar plot' && learnedWords.between.length === 2 &&
-          /You explored to learn/.test(learnedWords.win.text) && !/come filled in/.test(learnedWords.win.text), JSON.stringify(learnedWords.win));
+          learnedWords.intro.length === 4 && learnedWords.intro[2].title === "This is Alex's Interest radar!" && learnedWords.between.length === 2 &&
+          /You explored: random topics/.test(learnedWords.win.text) && !/come filled in/.test(learnedWords.win.text), JSON.stringify(learnedWords.win));
     check('learned radar: no console errors', b.problems.length === 0, b.problems.join(' | '));
 
     // Then: four people, the 2x2 board from before the 2-person default (?profiles=4)
@@ -547,7 +554,7 @@ async function main() {
           four.small.fits && four.small.overlaps === 0 && four.small.outside === 0, JSON.stringify(four));
     var fourWords = await b.eval(TUTORIAL_TEXTS);
     check('four-person radar board: the tutorial win pop-up counts the people right ("four people")',
-          /You explored to learn/.test(fourWords.win.text) && /Can you keep four people hooked\?/.test(fourWords.win.text), fourWords.win.text);
+          /You explored: random topics/.test(fourWords.win.text) && /Can you keep four people hooked\?/.test(fourWords.win.text), fourWords.win.text);
     check('four-person radar board: no console errors', b.problems.length === 0, b.problems.join(' | '));
 
     // Then: six people, grid buttons (?profiles=6&layout=grid)
@@ -564,7 +571,7 @@ async function main() {
           six.phase === 'reveal' && six.steps.length === 8 && six.steps.every(function (s) { return /fits$/.test(s); }), JSON.stringify(six.steps));
     var gridWords = await b.eval(TUTORIAL_TEXTS);
     check('six-person grid: the tutorial\'s two steps talk about the buttons\' counts, never a radar, and promise no filled-in radars',
-          gridWords.intro[2].title === 'These are the topics' && gridWords.between.length === 2 && /You explored to learn/.test(gridWords.win.text) &&
+          gridWords.intro[2].title === 'These are the topics' && gridWords.between.length === 2 && /You explored: random topics/.test(gridWords.win.text) &&
           !/radar|come filled in/i.test(gridWords.all), gridWords.all.slice(0, 300));
     check('six-person grid: no console errors', b.problems.length === 0, b.problems.join(' | '));
   } catch (e) {
