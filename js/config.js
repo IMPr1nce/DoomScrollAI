@@ -16,12 +16,14 @@ DS.CONFIG = {
                               // drain meant a random clicker rarely lost anyone (see balance.md)
   ATTENTION_MAX: 100,         // the bar is capped here (it's a 0–100 scale)
   LIKE_GAIN: 20,              // TOTAL attention gained over one watch (before fatigue). Was 15.
-  DISLIKE_PENALTY: 12,        // instant loss when a VP skips a post
-  IDLE_DRAIN_PER_SEC: 3.0,    // loss per second while idle. This is what forces juggling. (2 -> 1.5 for six
-                              // people; back to 2.0 for four; 3.0 for two people in a 30 s round, so that an
-                              // ignored person is gone in about 17 s and random play still loses people)
-  POST_DURATION_SEC: 3,       // how long a VP watches a liked post (its buttons are locked meanwhile). Was 5:
-                              // with four people, 3 s keeps the game moving and gives more decisions per minute
+  DISLIKE_PENALTY: 18,        // instant loss when a VP skips a post. Was 12: since everyone has 3 favorites (half
+                              // the topics), a random click lands on one half the time, so a skip must hurt more
+                              // for random play to still lose people (balance.md)
+  IDLE_DRAIN_PER_SEC: 4.0,    // loss per second while idle. This is what forces juggling. (2 -> 1.5 for six
+                              // people; back to 2.0 for four; 3.0 for two people in a 30 s round; 4.0 with 3
+                              // favorites each, so an ignored person is gone in about 12 s)
+  POST_DURATION_SEC: 2,       // how long a VP watches a liked post (its buttons are locked meanwhile). Was 5, then 3:
+                              // the team lead asked for 2 s so the game moves faster (all 7 sim goals still pass)
 
   // -------------------------------------------------------------------- Round
   ROUND_SEC: 30,              // main game length. Was 90 (the brief); the team lead asked for a 30 s round
@@ -31,8 +33,17 @@ DS.CONFIG = {
   TIMER_URGENT_SEC: 10,       // the clock turns red and pulses for the last N seconds
 
   // ----------------------------------------------------------------- Tutorial
-  TUTORIAL_DRAIN_MULT: 0.5,   // idle drain is multiplied by this in the tutorials
-  TUTORIAL1_GOAL: 90,         // attention needed to pass the tutorial
+  TUTORIAL_DRAIN_MULT: 0.375, // idle drain is multiplied by this in the tutorial. Was 0.5; with the round's drain at
+                              // 4.0 this keeps Alex's at 1.5/s, as before (at 2/s a blind player lost Alex more often)
+  TUTORIAL_DISLIKE_PENALTY: 12, // the tutorial keeps the old skip cost. Alex's profile starts empty, so the first
+                              // picks are blind: at DISLIKE_PENALTY (18) a blind player lost Alex in about 1
+                              // tutorial in 5 at 2 s per pick; at 12, almost never
+  // The tutorial has two steps. Step 1 (explore) ends when every topic has been tried. Step 2 (exploit) ends
+  // after this many watched posts in a row: a skip starts the count again, so showing what you know works is
+  // the way to finish. (It replaced an attention goal of 90, which step 1 often reached on its own.)
+  TUTORIAL_EXPLOIT_STREAK: 3,
+  PROFILE_RINGS: 5,           // the tutorial's profile radar: each watched post moves that topic out one ring,
+                              // full at this many (the same five rings as "Guess the profile")
   TUTORIAL_HINT_DELAY_SEC: 0.8, // after a push, wait this long before a tutorial hint pop-up, so the player
                               // sees the reaction first (a bit shorter than TUTORIAL_RESULT_DELAY_SEC)
 
@@ -41,21 +52,29 @@ DS.CONFIG = {
   // topic as the one being pushed now (0..FATIGUE_WINDOW). That count indexes
   // FATIGUE_MULTIPLIERS, so the array needs FATIGUE_WINDOW + 1 entries.
   // Softened from [1, 0.7, 0.45, 0.3] / 0.1 after the balance simulator showed the original
-  // made spamming a favorite LOSE to mixing topics (which flips the lesson).
+  // made spamming a favorite LOSE to mixing topics (which flips the lesson). Softened again from
+  // [1, 0.85, 0.7, 0.6] when everyone got 3 favorites: rotating three sure picks dodges most of the
+  // fatigue, so mixing caught up with spamming (it won at 2 s per click). Repeats now cost a little.
   FATIGUE_WINDOW: 3,
-  FATIGUE_MULTIPLIERS: [1, 0.85, 0.7, 0.6],
+  FATIGUE_MULTIPLIERS: [1, 0.95, 0.9, 0.85],
   // Subtracted from the like chance for each repeat in the window. Was 0.05: together with favorites at
   // 0.85, that made a player who KNEW the right answer get skipped on 23% of pushes, which is what made
   // the game feel like luck. Fatigue now mostly cuts the gain (visible as a smaller "+12"), and only
   // nudges the like chance, as the brief asks ("slightly lower the like chance").
   FATIGUE_LIKE_PENALTY: 0.02,
+  // No skip streaks on good picks: right after a skip, a post whose like chance is at least this always lands, so
+  // a long spike on the radar is never skipped twice in a row. With pure dice, 55% of rounds had someone skip 2+
+  // posts in a row, which felt like failing for no reason; with 0.6 it's 17% (the rest are coin-flip "meh"
+  // topics). 0.5 cut it to 2% but let random play keep people (the first goal failed at 1 s per click).
+  // null = pure dice.
+  SKIP_STREAK_BREAK: 0.6,
 
   // -------------------------------------------------------------------- Drift
   // The filter-bubble mechanic. Each LIKED post pulls that topic's taste toward
   // TASTE_MAX and every other topic's taste toward TASTE_MIN.
   DRIFT_UP: 0.12,             // was 0.08. Stronger = a more visible bubble on the reveal screen
-  DRIFT_DOWN: 0.04,           // with 3 s watches each person sees more posts, so 0.05 squeezed even a player
-                              // who mixes topics on purpose. 0.04 keeps "mixing keeps variety" true.
+  DRIFT_DOWN: 0.04,           // with short watches each person sees more posts, so 0.05 squeezed even a player
+                              // who mixes topics on purpose. 0.04 keeps "mixing keeps variety" true (re-checked at 2 s).
   TASTE_MIN: 0.05,
   TASTE_MAX: 0.97,            // was 0.95: raised with TASTE_FAVORITE, which would otherwise be clamped to it
 
@@ -123,6 +142,15 @@ DS.CONFIG = {
                               // hidden or the laptop stalled, time does NOT jump ahead and
                               // unfairly drain attention.
   BUBBLE_VISIBLE_SEC: 3.5,    // how long a speech bubble stays before fading
+  // Reactions on a card's avatar after each post (ui.js): a ❤️ for a watch (plus a 💬 when the topic was fresh),
+  // a 👆 swipe for a skip. Pictures only; the speech bubble says the same in words. css/style.css gets these
+  // through --reaction-dur and --reaction-delay.
+  REACTION_LIKE_SEC: 1.7,     // the heart floats up and fades slowly, so it's still there when the eye comes back
+                              // from the other card. With the 💬 delay it ends at POST_DURATION_SEC, before the next post
+  REACTION_SKIP_SEC: 0.25,    // a skip is a quick flick: the buttons stay open, so it must be over before the next click
+  REACTION_TALK_DELAY_SEC: 0.3, // the 💬 comes a beat after the ❤️, so the two read as "watched it, then talked about it"
+  REACTION_STILL_SEC: 0.8,    // with prefers-reduced-motion nothing floats or swipes: the emoji just shows and fades
+                              // this fast (a skip keeps its shorter REACTION_SKIP_SEC)
   HISTORY_STRIP_MAX: 10,      // how many recent reactions the big tutorial card shows
   TUTORIAL_RESULT_DELAY_SEC: 1.2, // pause before the tutorial pop-up, so the player SEES the moment
                               // (the bar hitting the goal, or the AFK cover) before the text covers it

@@ -87,6 +87,7 @@
     this.history = [];            // every push: { topic, liked, t }  (t = seconds on this VP's clock)
 
     this.drainMult = 1;           // game.js sets this lower in the tutorials
+    this.skipPenalty = null;      // null = DISLIKE_PENALTY; the tutorial's Alex uses TUTORIAL_DISLIKE_PENALTY
 
     // Time bookkeeping. clock keeps running even after AFK, so every VP in a
     // round has the same clock and the average below is fair.
@@ -222,7 +223,13 @@
     // 2. Roll for like. Repeats make even a favorite topic a bit less likely.
     var likeChance = clamp(this.tastes[topicId] - C.FATIGUE_LIKE_PENALTY * fatigueCount,
                            C.TASTE_MIN, C.TASTE_MAX);
-    var liked = DS.rng.random() < likeChance;
+    // No skip streaks on good picks: right after a skip, a post they'd probably like (SKIP_STREAK_BREAK) always
+    // lands. Pure dice made a careful player feel like they kept failing. The dice are still rolled, so a
+    // seeded game uses the same numbers either way.
+    var prev = this.history[this.history.length - 1];
+    var roll = DS.rng.random();
+    var liked = roll < likeChance ||
+                (C.SKIP_STREAK_BREAK !== null && !!prev && !prev.liked && likeChance >= C.SKIP_STREAK_BREAK);
 
     this.history.push({ topic: topicId, liked: liked, t: this.clock });
 
@@ -236,7 +243,8 @@
       this._drift(topicId);
     } else {
       // Skip: instant penalty. Fatigue doesn't change the penalty, only gains.
-      this.attention = Math.max(0, this.attention - C.DISLIKE_PENALTY);
+      var penalty = this.skipPenalty === null ? C.DISLIKE_PENALTY : this.skipPenalty;
+      this.attention = Math.max(0, this.attention - penalty);
       if (this.attention <= 0) { this._enterAfk(); wentAfk = true; }
     }
 
@@ -353,10 +361,11 @@
     return DS.VP_DEFS.slice(0, C.PROFILE_COUNT).map(DS.createVP);
   };
 
-  // Alex, with the slower drain the tutorials use.
+  // Alex, with the slower drain and the gentler skips the tutorial uses.
   DS.createTutorialVP = function () {
     var vp = new VP(DS.TUTORIAL_VP_DEF);
     vp.drainMult = C.TUTORIAL_DRAIN_MULT;
+    vp.skipPenalty = C.TUTORIAL_DISLIKE_PENALTY;
     return vp;
   };
 })();

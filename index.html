@@ -18,6 +18,29 @@
 
     <!-- Only one .screen is visible at a time. ui.showScreen('name') shows #screen-name. -->
 
+    <!-- The first screen: who is playing. The name only names the CSV file downloaded at the end
+         (logger.fileName); it is in none of the data's rows. game.js checks it and moves on to the title.
+         autocomplete is off so a shared school laptop doesn't suggest the last student's name. -->
+    <section id="screen-name" class="screen">
+      <form id="name-form" class="title-card name-card" novalidate autocomplete="off">
+        <div class="title-card__emoji" aria-hidden="true">👋</div>
+        <h1>Who's playing?</h1>
+        <p class="title-card__sub">Your name goes on the data file you save at the end, so your teacher knows it's yours.</p>
+        <div class="name-card__fields">
+          <label class="field">
+            <span class="field__label">First name</span>
+            <input id="name-first" class="field__input" type="text" maxlength="20" autocomplete="off" autocapitalize="words" spellcheck="false" required>
+          </label>
+          <label class="field">
+            <span class="field__label">Last name</span>
+            <input id="name-last" class="field__input" type="text" maxlength="20" autocomplete="off" autocapitalize="words" spellcheck="false" required>
+          </label>
+        </div>
+        <p id="name-error" class="name-card__error" aria-live="polite"></p>
+        <button id="btn-name" class="btn btn--primary btn--big" type="submit">Continue</button>
+      </form>
+    </section>
+
     <section id="screen-title" class="screen">
       <!-- Decoration only: the six topics drift around behind the card. -->
       <div class="title-bg" aria-hidden="true">
@@ -39,7 +62,7 @@
           <li><span class="how__icon" aria-hidden="true">⏱️</span>Don't let anyone leave</li>
         </ol>
         <button id="btn-start" class="btn btn--primary btn--big" type="button">Start</button>
-        <p class="title-card__fine">About 3 minutes. No sign-in. No names.</p>
+        <p class="title-card__fine">About 3 minutes. No sign-in.</p>
       </div>
     </section>
 

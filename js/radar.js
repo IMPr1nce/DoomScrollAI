@@ -4,7 +4,8 @@
  *   ui.js      on each profile card: the topic BUTTONS sit at the six corners, and spikes point at them.
  *              What the spikes show depends on RADAR_SHOWS (config.js): the person's interests at the
  *              start of the round, or only what the player has SEEN them like so far
- *              (DS.metrics.observed). Their current tastes, which drift, are never drawn during play.
+ *              (DS.metrics.observed). Their current tastes, which drift, are never drawn during play. The
+ *              tutorial card draws a profile instead (profile(), five rings): one ring per watched post.
  *   reveal.js  on the results screen: the person's real tastes at the start vs the end of the round
  *              (the shape shrinking into one spike is the filter bubble).
  *
@@ -58,15 +59,18 @@
     return e;
   }
 
-  // The empty frame: two hexagon rings and six spokes. Returns { svg, spokes } so callers can restyle
-  // a spoke (e.g. dashed when that topic hasn't been tried yet).
-  function frame(n) {
+  // The empty frame: hexagon rings and six spokes. Returns { svg, spokes } so callers can restyle
+  // a spoke (e.g. dashed when that topic hasn't been tried yet). `rings` evenly spaced rings (2 unless
+  // given); the tutorial's profile radar asks for one per watched post. The outermost is radar__ring--outer.
+  function frame(n, rings) {
+    rings = rings || 2;
     var svg = el('svg', { viewBox: (-R) + ' ' + (-R) + ' ' + (2 * R) + ' ' + (2 * R), preserveAspectRatio: 'none', 'class': 'radar__svg' });
     svg.setAttribute('aria-hidden', 'true');      // callers describe the chart in words; this is decoration for screen readers
-    var full = [], half = [];
-    for (var i = 0; i < n; i++) { full.push(1); half.push(0.5); }
-    svg.appendChild(el('polygon', { points: polygonPoints(full), 'class': 'radar__ring' }));
-    svg.appendChild(el('polygon', { points: polygonPoints(half), 'class': 'radar__ring' }));
+    for (var r = rings; r >= 1; r--) {
+      var at = [];
+      for (var i = 0; i < n; i++) at.push(r / rings);
+      svg.appendChild(el('polygon', { points: polygonPoints(at), 'class': 'radar__ring' + (r === rings ? ' radar__ring--outer' : '') }));
+    }
     var spokes = [];
     for (var k = 0; k < n; k++) {
       var end = point(k, n, 1);
@@ -98,18 +102,35 @@
         'class': 'radar__learned'
       }));
     }
-    known.forEach(function (i) {
-      var p = point(i, n, estimates[i]);
-      var line = el('line', { x1: 0, y1: 0, x2: p.x.toFixed(2), y2: p.y.toFixed(2), 'class': 'radar__spike' });
-      line.style.stroke = colors[i];
-      g.appendChild(line);
-      // A dot at the tip: a zero-length line with round caps stays a perfect circle even when the
-      // radar is stretched (a <circle> would turn into an oval). White halo first, then the color.
-      g.appendChild(el('line', { x1: p.x.toFixed(2), y1: p.y.toFixed(2), x2: p.x.toFixed(2), y2: p.y.toFixed(2), 'class': 'radar__halo' }));
-      var dot = el('line', { x1: p.x.toFixed(2), y1: p.y.toFixed(2), x2: p.x.toFixed(2), y2: p.y.toFixed(2), 'class': 'radar__dot' });
-      dot.style.stroke = colors[i];
-      g.appendChild(dot);
-    });
+    known.forEach(function (i) { spikeTo(g, i, n, estimates[i], colors[i]); });
+  }
+
+  // One spike from the middle to value v on axis i, with a dot at the tip.
+  function spikeTo(g, i, n, v, color) {
+    var p = point(i, n, v);
+    var line = el('line', { x1: 0, y1: 0, x2: p.x.toFixed(2), y2: p.y.toFixed(2), 'class': 'radar__spike' });
+    line.style.stroke = color;
+    g.appendChild(line);
+    // A dot at the tip: a zero-length line with round caps stays a perfect circle even when the
+    // radar is stretched (a <circle> would turn into an oval). White halo first, then the color.
+    g.appendChild(el('line', { x1: p.x.toFixed(2), y1: p.y.toFixed(2), x2: p.x.toFixed(2), y2: p.y.toFixed(2), 'class': 'radar__halo' }));
+    var dot = el('line', { x1: p.x.toFixed(2), y1: p.y.toFixed(2), x2: p.x.toFixed(2), y2: p.y.toFixed(2), 'class': 'radar__dot' });
+    dot.style.stroke = color;
+    g.appendChild(dot);
+  }
+
+  // A profile built from watches, the way "Guess the profile" builds one from points: topic i reaches ring
+  // watched[i] (of `rings`), and one shape joins all six, so the profile is a shape that grows with every
+  // watch. A topic never watched stays at the middle with no spike: a skip says "not interested", and its
+  // button says so (✗). Drawn only from what the player saw, never from the tastes.
+  function profile(g, watched, rings, colors) {
+    while (g.firstChild) g.removeChild(g.firstChild);
+    var n = watched.length;
+    var values = watched.map(function (w) { return Math.min(w, rings) / rings; });
+    if (values.some(function (v) { return v > 0; })) {
+      g.appendChild(el('polygon', { points: polygonPoints(values), 'class': 'radar__profile' }));
+    }
+    values.forEach(function (v, i) { if (v > 0) spikeTo(g, i, n, v, colors[i]); });
   }
 
   DS.radar = {
@@ -120,6 +141,7 @@
     frame: frame,
     shape: shape,
     spikes: spikes,
+    profile: profile,
     group: function (className) { return el('g', { 'class': className || '' }); }
   };
 })();

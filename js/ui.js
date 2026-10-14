@@ -159,6 +159,8 @@
     $('tut-text').textContent = o.text;
     $('tut-goal').textContent = o.goal;
   };
+  // The goal pill alone: the tutorial counts the topics tried there after every post.
+  ui.setTutorialGoal = function (text) { $('tut-goal').textContent = text; };
   ui.mountCard = function (slotId, card) {
     var slot = $(slotId);
     slot.innerHTML = '';
@@ -228,10 +230,17 @@
     return compact ? 'Waiting' : 'Waiting for a post';     // short on the small cards: the row is narrow
   }
 
-  // Does each card's radar show the person's interests (RADAR_SHOWS 'interests')? If not, the cards show
+  // Do the ROUND's radars show each person's interests (RADAR_SHOWS 'interests')? If not, the cards show
   // only what the player has seen so far. The grid layout always does that. game.js and reveal.js ask
-  // this too, so the tutorial text and the results screen match the cards.
+  // this too, so the "ready?" card, the tutorial's last pop-up and the results screen match the round.
+  // (The tutorial card doesn't follow it: it passes its own radarShows to createCard, see below.)
   ui.showsInterests = function () { return C.TOPIC_LAYOUT === 'radar' && C.RADAR_SHOWS === 'interests'; };
+
+  // People who asked their computer for less motion. The CSS turns animations off for them; this lets the
+  // card shorten the one fade they still get (REACTION_STILL_SEC).
+  function reducedMotion() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
 
   // "about 9 times in 10", for screen readers: the radar is a picture, so its buttons say it in words.
   function chanceWords(p) {
@@ -249,27 +258,37 @@
   //              'interests'  the person's tastes at the START of the round, drawn once and never
   //                           updated: the player sees what to show them, not how it changes them
   //              'learned'    only what the player has SEEN them like so far (never their tastes)
+  //              'profile'    (the tutorial only) a profile built from watches, like "Guess the profile":
+  //                           five rings, and each watched post moves that topic out one ring
   // Unless the radar shows interests, the buttons carry what the player has seen, the same way in both
   // layouts so a playtest that compares them compares only the layout: a "liked 4 of 5" count (or "?"
-  // if never tried) and a star on the topic the bio hints at.
+  // if never tried) and a star on the topic the bio hints at. The profile says "✓2 ✗1" (watched, skipped).
   //
   // opts: size ('large' | 'compact'), showHistory (bool), goalMarker (number | null),
+  //       radarShows ('interests' | 'learned' | 'profile') — what THIS card's radar draws, instead of
+  //                        RADAR_SHOWS. The tutorial passes 'profile', so Alex starts as an empty profile
+  //                        while the round keeps RADAR_SHOWS. A card option, not a settings change: play mode
+  //                        freezes DS.CONFIG. The grid layout has no radar, so it ignores this.
   //       onPush(topicId)  — called when a topic button is clicked
   ui.createCard = function (vp, opts) {
     opts = opts || {};
     var compact = opts.size === 'compact';
     var radar = C.TOPIC_LAYOUT === 'radar';
-    var interests = ui.showsInterests();
+    // The same rule as ui.showsInterests(), but with this card's own choice when it has one.
+    var shows = radar ? (opts.radarShows || C.RADAR_SHOWS) : 'grid';
+    var interests = shows === 'interests';
+    var profile = shows === 'profile';
     var locked = false;          // game.js sets this while a pop-up is showing
     var bubbleTimer = null;
     var last = {};               // last values written, so we only touch the DOM when something changed
 
     var root = h('article', 'card card--' + (opts.size || 'large') + (radar ? ' card--radar' : '') +
-                            (interests ? ' card--interests' : ''));
+                            (interests ? ' card--interests' : '') + (profile ? ' card--profile' : ''));
 
     // Header: avatar, name + bio, status pill
     var head = h('header', 'card__head');
-    head.appendChild(h('div', 'card__avatar', vp.avatar));
+    var avatar = h('div', 'card__avatar', vp.avatar);    // reactions float up from here (showReaction)
+    head.appendChild(avatar);
     var who = h('div', 'card__who');
     who.appendChild(h('h3', 'card__name', vp.name));
     who.appendChild(h('p', 'card__bio', vp.bio));
@@ -322,7 +341,7 @@
     var buttons = [], counts = [], spokes = [], spikeLayer = null;
     var colors = DS.TOPICS.map(function (t) { return t.color; });
     if (radar) {
-      var frame = DS.radar.frame(DS.TOPICS.length);
+      var frame = DS.radar.frame(DS.TOPICS.length, profile ? C.PROFILE_RINGS : 2);
       spokes = frame.spokes;
       spikeLayer = DS.radar.group('radar__learned-layer');
       frame.svg.appendChild(spikeLayer);
@@ -379,16 +398,26 @@
       var seen = DS.metrics.observed(vp.history);
       var estimates = [];
       DS.TOPICS.forEach(function (t, i) {
-        var o = seen[t.id];
-        counts[i].textContent = o.tries ? o.likes + '/' + o.tries : '?';
+        var o = seen[t.id], skipped = o.tries - o.likes;
+        if (profile) {
+          // "✓2 ✗1": watched, skipped. The symbol carries it; the green and red are only a bonus.
+          counts[i].textContent = o.tries ? '' : '?';
+          if (o.likes) counts[i].appendChild(h('span', 'topic-btn__yes', '✓' + o.likes));
+          if (skipped) counts[i].appendChild(h('span', 'topic-btn__no', '✗' + skipped));
+        } else {
+          counts[i].textContent = o.tries ? o.likes + '/' + o.tries : '?';
+        }
         buttons[i].classList.toggle('topic-btn--untried', !o.tries);
         buttons[i].setAttribute('aria-label', 'Show ' + t.label + ' to ' + vp.name + '. ' +
-          (o.tries ? 'Liked ' + o.likes + ' of ' + o.tries + ' so far.' : 'Not tried yet.') +
+          (!o.tries ? 'Not tried yet.'
+           : profile ? 'Watched ' + o.likes + ', skipped ' + skipped + ' so far.'
+           : 'Liked ' + o.likes + ' of ' + o.tries + ' so far.') +
           (vp.clue === t.id ? ' Their bio hints at this one.' : ''));
         if (radar) spokes[i].classList.toggle('radar__spoke--untried', !o.tries);
         estimates.push(o.estimate);
       });
-      if (radar) DS.radar.spikes(spikeLayer, estimates, colors);
+      if (radar && profile) DS.radar.profile(spikeLayer, DS.TOPICS.map(function (t) { return seen[t.id].likes; }), C.PROFILE_RINGS, colors);
+      else if (radar) DS.radar.spikes(spikeLayer, estimates, colors);
     }
     refreshLearned();
 
@@ -438,14 +467,53 @@
       deltaTimers.push(setTimeout(function () { if (pill.parentNode) pill.parentNode.removeChild(pill); }, 1100));
     }
 
+    // A reaction on the avatar, like the ones on a real video app: a ❤️ floats up for a watch, with a 💬 a
+    // beat later when the topic was fresh (fatigueMult 1 = not shown in this person's last FATIGUE_WINDOW posts,
+    // so the like paid in full), a smaller ❤️ alone for a repeat, and a quick 👆 swipe for a skip.
+    // Built only from the push event's liked and fatigueMult, never from the tastes. aria-hidden, because the
+    // speech bubble (and the tutorial's history strip) already say it in words. It sits inside the avatar,
+    // absolutely placed, so the card never changes size.
+    var reactionTimer = null;
+    var lastReaction = null;
+    function showReaction(liked, fatigueMult) {
+      // One per card, like the +/- pill: a new post replaces the reaction to the last one.
+      clearTimeout(reactionTimer);
+      if (lastReaction && lastReaction.parentNode) lastReaction.parentNode.removeChild(lastReaction);
+      var fresh = liked && fatigueMult === 1;
+      var sec = liked ? C.REACTION_LIKE_SEC : C.REACTION_SKIP_SEC;
+      if (reducedMotion()) sec = Math.min(sec, C.REACTION_STILL_SEC);
+
+      var r = lastReaction = h('span', 'reaction ' +
+        (!liked ? 'reaction--skip' : fresh ? 'reaction--like reaction--fresh' : 'reaction--like reaction--repeat'));
+      r.setAttribute('aria-hidden', 'true');
+      r.style.setProperty('--reaction-dur', sec + 's');
+      if (!liked) {
+        r.appendChild(h('span', 'reaction__emoji reaction__swipe', '👆'));
+      } else {
+        r.appendChild(h('span', 'reaction__emoji reaction__heart', '❤️'));
+        if (fresh) {
+          var talk = h('span', 'reaction__emoji reaction__talk', '💬');
+          talk.style.setProperty('--reaction-delay', C.REACTION_TALK_DELAY_SEC + 's');
+          r.appendChild(talk);
+        }
+      }
+      avatar.appendChild(r);
+      // Removed by a timer (not on animationend) so it also goes when animations are off. destroy() clears
+      // it, so a card that was thrown away never runs it.
+      var total = sec + (fresh ? C.REACTION_TALK_DELAY_SEC : 0);
+      reactionTimer = setTimeout(function () { if (r.parentNode) r.parentNode.removeChild(r); }, total * 1000);
+    }
+
     function addHistory(topicId, liked) {
       var t = DS.TOPIC_BY_ID[topicId];
       var chip = h('span', 'history__chip history__chip--' + (liked ? 'yes' : 'no'),
                    t.emoji + (liked ? '👍' : '👎'));
       chip.setAttribute('aria-label', t.label + ', ' + (liked ? 'liked' : 'skipped'));
-      history.appendChild(chip);
+      // Newest first, right after "You showed:". The strip clips what doesn't fit, and beside the radar only
+      // three or four chips fit, so adding at the end would hide the post the player just showed.
+      history.insertBefore(chip, history.children[1] || null);
       // Keep only the newest few (+1 because the title span is also a child).
-      while (history.children.length > C.HISTORY_STRIP_MAX + 1) history.removeChild(history.children[1]);
+      while (history.children.length > C.HISTORY_STRIP_MAX + 1) history.removeChild(history.lastChild);
     }
 
     // The model tells us what happened; we only decide how it looks.
@@ -453,6 +521,7 @@
       if (e.event === 'push') {
         say(e.message, e.category);
         flash(e.liked ? 'card--like' : 'card--skip');
+        showReaction(e.liked, e.fatigueMult);
         if (history) addHistory(e.topic, e.liked);
         refreshLearned();
         showDelta(e.liked
@@ -520,6 +589,7 @@
       setLocked: function (v) { locked = v; update(); },
       destroy: function () {
         clearTimeout(bubbleTimer);
+        clearTimeout(reactionTimer);
         deltaTimers.forEach(clearTimeout);
         vp.offEvent(onVPEvent);
         if (root.parentNode) root.parentNode.removeChild(root);

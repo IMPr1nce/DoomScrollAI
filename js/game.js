@@ -1,9 +1,12 @@
 /*
  * game.js — the conductor. It owns the clock, the phases, and what a click MEANS.
  *
- *   title -> tutorial1 ("Hook them") -> main -> reveal
- *                                         ^        |
- *                                         +--------+  "Play again"
+ *   (name screen) -> title -> tutorial1 (explore, then exploit) -> main -> reveal
+ *                                                                  ^        |
+ *                                                                  +--------+  "Play again"
+ *
+ * The name screen comes first but isn't a phase: nothing is played or logged there. The name only
+ * names the CSV file (logger.fileName).
  *
  * How it fits together:
  *   vp.js      the rules (no DOM)        game.js asks it to tick and to push
@@ -123,24 +126,30 @@
   }
 
   // --------------------------------------------------------------- Tutorial
-  // One tutorial, one person (Alex), a goal of TUTORIAL1_GOAL. It used to be two (hook them, then lose
-  // them); the team lead cut it to one and asked for more pop-ups that explain what the player sees. So
-  // the tutorial teaches in three layers:
-  //   1. an intro chain of pop-ups before anything moves (the radar, the attention bar, "don't overdo it"),
-  //   2. a one-time hint the first time each thing happens (a like, a skip, a repeat), and
-  //   3. the win pop-up, which also says what happens when attention hits 0.
-  // None of it mentions the narrowing of tastes: that stays hidden until the results screen.
-  function topicWord(id) { return DS.TOPIC_BY_ID[id].label; }
+  // One tutorial, one person (Alex), in two steps that introduce the idea the results come back to:
+  //   Step 1, EXPLORE  Alex is a new user, so their profile starts empty. Push random topics as tests ("watch or
+  //                    skip?") until every topic is tried. Some get skipped: that's the cost of exploring.
+  //   Step 2, EXPLOIT  show what passed the tests, because the algorithm's job is keeping Alex on the app. Get
+  //                    TUTORIAL_EXPLOIT_STREAK watches in a row; a skip starts the count again.
+  // The opening pop-up says that job first ("You are the algorithm..."), so both steps have a reason.
+  // The radar is drawn like "Guess the profile" (radarShows 'profile'): each watched post moves that topic out
+  // one ring, so the player sees the profile being built. It shows only what the player saw, never the tastes.
+  // Pop-ups teach in three layers: an intro chain before anything moves, a one-time hint the first time
+  // something happens (a like, a skip, a repeat), and a pop-up at the end of each step. None of it mentions
+  // the narrowing of tastes: that stays hidden until the results screen. The round never names the two words.
+  //
+  // The tutorial's words follow its own card (a profile radar, or the grid's counts), never
+  // ui.showsInterests(). Only the last pop-up asks about the round, to say what comes next.
+  var TUTORIAL_RADAR_SHOWS = 'profile';
 
-  // The topics Alex's radar shows with the longest spikes, as words ("Music and Food"). Only used with the
-  // interests radar, which draws exactly this snapshot already, so naming them tells the player nothing the
-  // radar doesn't. Spikes within 0.1 of the longest count: the starting tastes carry a small random wobble,
-  // so two favorites are never exactly equal, and "the longest" alone would hide a near-tie.
-  function longestSpikes(vp) {
-    var max = 0;
-    DS.TOPIC_IDS.forEach(function (id) { max = Math.max(max, vp.tasteSnapshotStart[id]); });
-    var ids = DS.TOPIC_IDS.filter(function (id) { return vp.tasteSnapshotStart[id] >= max - 0.1; });
-    return { ids: ids, words: ids.map(topicWord).join(' and '), plural: ids.length > 1 };
+  // The topics not shown to this person yet (the radar's "?"s).
+  function untriedTopics(vp) {
+    return DS.TOPIC_IDS.filter(function (id) { return !vp.history.some(function (h) { return h.topic === id; }); });
+  }
+  // ['music'] -> "Music", two -> "Music and Food", more -> "Music, Food and Movies"
+  function topicWords(ids) {
+    var names = ids.map(function (id) { return DS.TOPIC_BY_ID[id].label; });
+    return names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
   }
 
   // What a tutorial pop-up can point at. Each returns a function (not an element), because the card is
@@ -156,11 +165,13 @@
   }
 
   // Show pop-ups one after another. Each has a "Next" button; the last one calls `done`. `token` is the
-  // game state we started from: if the player skipped the tutorial meanwhile, the chain stops.
+  // game state we started from: if the player skipped the tutorial meanwhile, the chain stops. A page's
+  // optional onShow runs as it appears (the header behind it can change with it).
   function showPopupChain(pages, token, done) {
     function show(i) {
       if (active !== token) return;
       var last = i === pages.length - 1;
+      if (pages[i].onShow) pages[i].onShow();
       ui.showOverlay({
         title: pages[i].title,
         text: pages[i].text,
@@ -174,59 +185,82 @@
     show(0);
   }
 
+  // Run fn once the screen is free: after delaySec (so the player first SEES what just happened, the bubble
+  // and the +/- pill), and after any pop-up that is already up, rather than dropping it. Once the player
+  // leaves the tutorial, active changes and fn never runs.
+  function whenFree(token, delaySec, fn) {
+    function go() {
+      if (active !== token) return;
+      if (token.frozen) { setTimeout(go, 300); return; }
+      fn();
+    }
+    setTimeout(go, delaySec * 1000);
+  }
+
   // The intro: each page points at the thing it talks about and says it in a line or two, so the player
-  // looks at the card instead of reading a wall of text.
-  function introPages(vp, interests) {
-    var spikes = interests ? longestSpikes(vp) : null;
+  // looks at the card instead of reading a wall of text. `profileRadar` = the card has the profile radar;
+  // otherwise it is the grid, whose buttons count what was tried.
+  function introPages(vp, profileRadar) {
     var pages = [
-      { title: 'Meet ' + vp.name, text: 'Keep ' + vp.name + ' scrolling by showing posts they like.',
+      { title: 'Meet ' + vp.name, text: vp.name + ' just joined the app. You are the algorithm: your job is to keep ' +
+        vp.name + ' on the app as long as possible.',
         target: cardPart('.card__head') },
-      { title: 'This is attention', text: 'Likes raise it. Skips drop it. At 0, ' + vp.name + ' leaves for good.\nGet it to the goal line.',
+      { title: 'This is attention', text: 'Likes raise it. Skips drop it. At 0, ' + vp.name + ' leaves for good.',
         target: cardPart('.meter') }
     ];
-    if (interests) {
-      pages.push({ title: 'This is a radar plot',
-        text: 'A longer spike means ' + vp.name + ' likes that topic more.\n' + spikes.words + (spikes.plural ? ' are' : ' is') + ' longest.',
-        target: cardPart('.radar') });
-      pages.push({ title: 'Don\'t overdo it',
-        text: 'A long spike doesn\'t mean you can show it again and again. Each repeat gains less.',
-        // point at one of the longest spikes: the button the player will be tempted to press over and over
-        target: topicButton(spikes.ids[0]) });
-    } else if (C.TOPIC_LAYOUT === 'radar') {
-      pages.push({ title: 'This is a radar plot',
-        text: 'You don\'t know what ' + vp.name + ' likes yet. Try a topic: the spike grows when they like it.',
-        target: cardPart('.radar') });
-      pages.push({ title: 'Don\'t overdo it',
-        text: 'Even a topic ' + vp.name + ' likes gets old if you repeat it. Each repeat gains less.',
+    if (profileRadar) {
+      // How the rings work is left to the first-watch hint ("That topic grew one ring"), when the player sees one grow.
+      pages.push({ title: 'This is ' + vp.name + '\'s Interest radar!',
+        text: 'Each post helps reveal what ' + vp.name + ' likes. Watch the radar fill in as you learn more about them.',
         target: cardPart('.radar') });
     } else {
-      pages.push({ title: 'Find what ' + vp.name + ' likes',
-        text: 'Try a topic and watch the reaction. The counts show how often it worked.',
-        target: cardPart('.topics') });
-      pages.push({ title: 'Don\'t overdo it',
-        text: 'Even a topic ' + vp.name + ' likes gets old if you repeat it. Each repeat gains less.',
+      pages.push({ title: 'These are the topics',
+        text: 'Each badge counts how often ' + vp.name + ' watched that topic, out of how often you showed it.',
         target: cardPart('.topics') });
     }
+    pages.push({ title: 'Step 1: Explore',
+      text: DS.revealText.exploring + '\nPush random topics as tests: does ' + vp.name + ' watch, or skip? Test all ' +
+            DS.TOPIC_IDS.length + '. Skips are the cost.',
+      target: cardPart(profileRadar ? '.radar' : '.topics') });
     return pages;
   }
 
+  // The pop-ups between the steps: what exploring found (only what the player saw: watches), then step 2.
+  function exploredPages(vp, profileRadar) {
+    var seen = DS.metrics.observed(vp.history);
+    var watched = DS.TOPIC_IDS.filter(function (id) { return seen[id].likes > 0; })
+                              .sort(function (a, b) { return seen[b].likes - seen[a].likes; });
+    var skips = vp.history.some(function (h) { return !h.liked; });
+    var where = cardPart(profileRadar ? '.radar' : '.topics');
+    return [
+      // A milestone with more to say than a spotlight panel holds, so it's the centered card (no target).
+      { title: 'You explored!',
+        text: 'Your tests are done. ' +
+              (watched.length ? vp.name + ' watched ' + topicWords(watched) + '.' : vp.name + ' hasn\'t watched anything yet.') +
+              (skips ? ' The skips were the price of finding out.' : '') +
+              '\nEvery new user starts empty like this, so apps explore to learn them.' },
+      { title: 'Step 2: Exploit',
+        text: DS.revealText.exploiting + '\nNow show only topics that passed your tests. Get ' + C.TUTORIAL_EXPLOIT_STREAK +
+              ' watches in a row: a skip starts the count again.',
+        target: where }
+    ];
+  }
+
   // One-time hints while Alex is being played. `seen` makes each fire once per tutorial run. Each points at
-  // what just happened: the meter for a like, the button that was pressed for a repeat.
-  function attachHints(vp, token, interests) {
+  // what just happened: the radar for a watch, the button that was pressed for a skip or a repeat. The like
+  // and the skip are said as signals ("interested", "not interested"), because that is all an app learns from.
+  function attachHints(vp, token, profileRadar) {
     var seen = {};
     function hint(key, title, text, target) {
       if (seen[key]) return;
       seen[key] = true;
-      // Wait a moment so the player SEES the reaction (the bubble, the +/- pill) before the text covers it.
-      setTimeout(function () {
-        // The goal or an AFK pop-up may have taken over in the meantime, or the player may have left.
-        if (active !== token || token.frozen) return;
+      whenFree(token, C.TUTORIAL_HINT_DELAY_SEC, function () {
         freeze();
         ui.showOverlay({ title: title, text: text, target: target, buttons: [{
           label: 'Got it', primary: true,
           onClick: function () { if (active === token && !token.ended) unfreeze(); }
         }] });
-      }, C.TUTORIAL_HINT_DELAY_SEC * 1000);
+      });
     }
     vp.onEvent(function (e) {
       if (e.event !== 'push') return;
@@ -234,14 +268,29 @@
         hint('repeat', 'Same topic again',
              'Repeats gain less, so the + is smaller. Mix it up!', topicButton(e.topic));
       } else if (e.liked) {
-        hint('liked', vp.name + ' liked it!',
-             'Attention rises while ' + vp.name + ' watches. Buttons lock until the post ends.', cardPart('.meter'));
+        hint('liked', vp.name + ' watched it!',
+             (profileRadar ? 'That topic grew one ring on the radar.' : 'So attention goes up.') + ' Apps count a watch as "interested".',
+             cardPart(profileRadar ? '.radar' : '.meter'));
       } else {
         hint('skipped', vp.name + ' skipped it',
-             'A skip costs attention right away.' + (interests ? ' Aim for the long spikes.' : ' Try something else.'),
-             cardPart('.meter'));
+             (profileRadar ? 'No ring, and attention drops.' : 'Attention drops.') + ' A skip is a signal too: "not interested".',
+             topicButton(e.topic));
       }
     });
+  }
+
+  // The win pop-up. Each line is only said when it is true for the version being played: the ROUND's
+  // radars decide the second (never promise filled-in radars to ?radar=learned or the grid), and the last says
+  // the other way a round ends, since no tutorial shows it.
+  function winText(vp) {
+    var lines = ['You explored: random topics tested what ' + vp.name + ' likes. Then you exploited what passed, to keep ' +
+                 vp.name + ' on the app. Real apps do both with every user.'];
+    if (ui.showsInterests()) {
+      lines.push('Now the radars come filled in. Can you keep ' +
+                 String(NUMBER_WORDS[C.PROFILE_COUNT] || C.PROFILE_COUNT).toLowerCase() + ' people hooked?');
+    }
+    lines.push('In the game, an ignored person leaves at 0. For a platform, that\'s the worst outcome: no attention, no ads.');
+    return lines.join('\n');
   }
 
   function startTutorial1() {
@@ -255,42 +304,66 @@
     var card = ui.createCard(vp, {
       size: 'large',
       showHistory: true,
-      goalMarker: C.TUTORIAL1_GOAL,
+      radarShows: TUTORIAL_RADAR_SHOWS,       // an empty profile, whatever the round's radars show
       onPush: function (topicId) { vp.push(topicId); }
     });
     ui.mountCard('tut-card-slot', card);
 
-    var interests = ui.showsInterests();
-    ui.setTutorialHeader({
-      step: 'Tutorial',
-      title: 'Hook them',
-      text: 'Pick posts to show ' + vp.name + '. Keep ' + vp.name + ' scrolling.',
-      goal: 'Goal: get ' + vp.name + '\'s attention up to ' + C.TUTORIAL1_GOAL
-    });
+    var profileRadar = C.TOPIC_LAYOUT === 'radar';
+    var step = 1, step2From = 0, exploredShown = false;
+    // Watches in a row since step 2 began (a skip ends the run).
+    function streak() {
+      var n = 0;
+      for (var i = vp.history.length - 1; i >= step2From && vp.history[i].liked; i--) n++;
+      return n;
+    }
+    // The header and the goal, which counts what is left of the step ("3/6", "1/3") after every post.
+    function header() {
+      var all = DS.TOPIC_IDS.length, need = C.TUTORIAL_EXPLOIT_STREAK;
+      ui.setTutorialHeader(step === 1 ? {
+        step: 'Step 1 of 2 · Explore',
+        title: 'Test what ' + vp.name + ' likes',
+        text: 'You know nothing about ' + vp.name + ' yet. Push random topics to test them, and watch the ' +
+              (profileRadar ? 'radar' : 'counts') + ' fill in.',
+        goal: 'Goal: test all ' + all + ' topics (' + (all - untriedTopics(vp).length) + '/' + all + ')'
+      } : {
+        step: 'Step 2 of 2 · Exploit',
+        title: 'Keep ' + vp.name + ' on the app',
+        text: 'You\'re the algorithm: show what passed your tests, so ' + vp.name + ' stays as long as possible.',
+        goal: 'Goal: ' + need + ' watches in a row (' + Math.min(streak(), need) + '/' + need + ')'
+      });
+    }
+    header();
+    vp.onEvent(function (e) { if (e.event === 'push') header(); });
     ui.showScreen('tutorial');
 
     var tutorial = active = {
       vps: [vp], cards: [card], frozen: false, elapsed: 0,
       check: function () {
-        if (vp.attention >= C.TUTORIAL1_GOAL) {
+        if (step === 2 && streak() >= C.TUTORIAL_EXPLOIT_STREAK) {
           showResultAfterDelay({
             title: 'You did it!',
-            // With the interests radar the player didn't have to figure Alex out, so say where such a
-            // radar comes from instead: that is the AI idea behind it. Then say what the other way to
-            // end a round is, since there is no longer a second tutorial that makes Alex leave.
-            text: (interests
-              ? 'Real apps keep a profile like this radar on every user. They build it from every post you watch or skip.\n'
-              : 'You figured out what Alex likes. That\'s what a recommender algorithm does. It learns from what you click.\n') +
-              'In the game, an ignored person leaves at 0. For a platform, that\'s the worst outcome: no attention, no ads.',
-            buttons: [{ label: 'Start the game', primary: true, onClick: startMain }]
+            text: winText(vp),
+            buttons: [{ label: 'Start the game', primary: true, onClick: startMain },
+                      { label: 'Replay the tutorial', onClick: startTutorial1 }]
           });
         } else if (vp.state === 'afk') {
-          // Pushed too many posts they hate. Let them try again with a fresh Alex.
+          // Too many skips, or left waiting. Let them try again with a fresh Alex.
           showResultAfterDelay({
-            title: 'Alex left!',
-            text: 'Alex got bored and closed the app. Try again. ' +
-                  (interests ? 'Show Alex the topics with long spikes.' : 'Look for the posts Alex likes.'),
+            title: vp.name + ' left!',
+            text: vp.name + ' got bored and closed the app. Each skip costs attention, and waiting drains it. Try again.',
             buttons: [{ label: 'Try again', primary: true, onClick: startTutorial1 }]
+          });
+        } else if (step === 1 && !exploredShown && !untriedTopics(vp).length) {
+          // Every topic tried: say what exploring found, then start step 2 once the player has read it.
+          exploredShown = true;
+          whenFree(tutorial, C.TUTORIAL_HINT_DELAY_SEC, function () {
+            freeze();
+            var pages = exploredPages(vp, profileRadar);
+            // Step 2 begins as its pop-up appears, so the header behind it already says so. Nothing can be
+            // pushed while the pop-ups are up, so its run counts from here.
+            pages[1].onShow = function () { step = 2; step2From = vp.history.length; header(); };
+            showPopupChain(pages, tutorial, function () { if (active === tutorial) unfreeze(); });
           });
         }
       }
@@ -298,8 +371,8 @@
 
     // Nothing moves until the intro has been read (Alex's attention would drain behind the pop-ups).
     freeze();
-    attachHints(vp, tutorial, interests);
-    showPopupChain(introPages(vp, interests), tutorial, function () {
+    attachHints(vp, tutorial, profileRadar);
+    showPopupChain(introPages(vp, profileRadar), tutorial, function () {
       if (active === tutorial) unfreeze();
     });
   }
@@ -463,6 +536,32 @@
   }
 
   // ---------------------------------------------------------------- Start-up
+  // The first screen: who is playing. Both names are needed, because the teacher sorts the files by them.
+  // The check uses the CLEANED name, so "???" counts as empty instead of making a file called "_.csv".
+  function askName() {
+    var form = document.getElementById('name-form');
+    var inputs = [document.getElementById('name-first'), document.getElementById('name-last')];
+    var error = document.getElementById('name-error');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();                    // a real submit would reload the page
+      var missing = inputs.filter(function (input) { return !logger.cleanName(input.value); });
+      inputs.forEach(function (input) { input.setAttribute('aria-invalid', String(missing.indexOf(input) !== -1)); });
+      if (missing.length) {
+        error.textContent = 'Type your first and last name.';
+        missing[0].focus();
+        return;
+      }
+      error.textContent = '';
+      logger.setPlayer(inputs[0].value, inputs[1].value);
+      ui.showScreen('title');
+      // A double-click (or a held Enter) on Continue must not land on Start and skip the title.
+      ui.armGuard();
+      document.getElementById('btn-start').focus();
+    });
+    ui.showScreen('name');
+    inputs[0].focus();
+  }
+
   var game = {
     phase: 'title',
     startTutorial1: startTutorial1,
@@ -471,7 +570,7 @@
     resume: resume,
 
     init: function () {
-      document.getElementById('btn-start').addEventListener('click', startTutorial1);
+      document.getElementById('btn-start').addEventListener('click', ui.guarded(startTutorial1));
       document.getElementById('btn-skip').addEventListener('click', function () { ui.hideOverlay(); startMain(); });
       document.getElementById('btn-pause').addEventListener('click', function () { pause('button'); });
       DS.reveal.init();
@@ -487,7 +586,7 @@
       // came back, mid-action. (pause() ignores the call if a pop-up is already showing.)
       document.addEventListener('visibilitychange', function () { if (document.hidden) pause('tab_hidden'); });
 
-      ui.showScreen('title');
+      askName();
       requestAnimationFrame(frame);
     }
   };

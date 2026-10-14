@@ -28,7 +28,12 @@ Paths in backticks are relative to the project root.
 ## Things that are easy to get wrong
 - **The current tastes (`vp.tastes`) never appear during play** (not in the DOM, aria-labels or classes).
   They drift, and the drift is the hidden lesson. The interests radar reads only `vp.tasteSnapshotStart`,
-  drawn once when the card is made (`tests/e2e.js` checks that it doesn't change after a push).
+  drawn once when the card is made (`tests/e2e.js` checks that it doesn't change after a push). The avatar
+  reactions read only the push event's `liked` and `fatigueMult`.
+- **The tutorial's radar changes on purpose; the round's never does.** The tutorial card passes
+  `radarShows: 'profile'` (an empty profile that grows a ring per watch), so its pop-ups must follow the
+  tutorial's card, not `ui.showsInterests()`. Only the win pop-up's "Now the radars come filled in" line asks
+  about the round.
 - **The state machine in `game.js`:** `active.frozen` stops everything (pop-ups, the "ready?" card, pause, a
   finished round); `active.paused` means only a real pause, so `resume()` can't unfreeze the others. Stale
   `setTimeout`s must check `active === token` ([structure.md](structure.md#game-state)).
@@ -46,11 +51,17 @@ Paths in backticks are relative to the project root.
 - **The radar lives in two places that must agree:** `js/radar.js` and the `.radar` rules in
   `css/style.css` ([structure.md](structure.md#the-radar)).
 - **Words have rules** (results must be honest; no he/she; sentences of 24 words or fewer; speech bubbles
-  of 40 characters or fewer): [content.md](content.md). A new results outcome needs new wording and a new test.
-- **Balance was tuned for 2 people and a 30-second round.** Changing `PROFILE_COUNT`, the dice, the drain or the drift means
-  re-running the simulator ([balance.md](balance.md)).
+  of 40 characters or fewer; "exploring" and "exploiting" in the tutorial and the big-picture step, never in the
+  round): [content.md](content.md).
+  A new results outcome needs new wording and a new test.
+- **Balance was tuned for 2 people with 3 favorites each, a 30-second round and a 2-second watch.** Changing
+  anyone's tastes, `PROFILE_COUNT`, the
+  dice (including `SKIP_STREAK_BREAK`), the watch, the drain or the drift means re-running the simulator
+  ([balance.md](balance.md)).
 - **The first 11 CSV columns are the agreed set.** Add new ones at the end. Everything leaves through
   `logger.flush()`.
+- **The player's name only names the CSV file** (`logger.fileName()`). Never put it in a row or a column: the rows
+  are what a future server receives.
 - When editing a file with a script, **don't slice by a comment string that appears twice** (it once
   clobbered half of `reveal.js`). Prefer exact multi-line edits, then re-run the tests.
 
@@ -64,4 +75,20 @@ Paths in backticks are relative to the project root.
   starting attention were retuned for it ([balance.md](balance.md)).
 - 2026-10-07: tutorial pop-ups point at what they explain (a spotlight), favorites liked ~95% of the time, and
   the "Guess the profile" bonus puzzle (`js/guess.js`) on the last results step.
+- 2026-10-11: exploring vs exploiting. The tutorial is a cold start (Alex's radar starts empty; the round's
+  radars are unchanged). Each card's avatar reacts to every post (❤️, 💬, 👆). The results say "You tried 3 of
+  6 topics" per person and define both words on the big-picture step. The simulator now reports how often a
+  blind player finishes the tutorial ([balance.md](balance.md#the-tutorial-explore-then-exploit)).
+- 2026-10-11, later: the tutorial ends only when every topic is tried and Alex is at 90 (its win pop-up adds
+  "Replay the tutorial"), a 2-second watch, and no skip streaks on good picks (`SKIP_STREAK_BREAK`).
+- 2026-10-12: the tutorial is two named steps on a profile radar drawn like "Guess the profile": Explore (try
+  all 6 topics), then Exploit (3 watches in a row). The two words are now said in the tutorial too.
+- 2026-10-12, later: a name screen first. The player's first and last name name the CSV (`Kai_Moreno.csv`), and
+  nothing else: the name is in no row.
+- 2026-10-12, later: Alex has 3 favorites side by side on the radar, so the tutorial's profile ends as a filled
+  shape instead of a line ([balance.md](balance.md#the-tutorial-explore-then-exploit)).
+- 2026-10-13: everyone in the round has 3 favorites side by side too (filled wedges on the radars), with a retune
+  (skips 18, drain 4/s, softer fatigue). The tutorial keeps its old skip cost and drain ([balance.md](balance.md)).
+- 2026-10-13, later: the tutorial opens with the job ("You are the algorithm: keep Alex on the app as long as
+  possible"), explores with random topics as tests, then exploits what passed ([content.md](content.md)).
 - Not built, by design: the Flask endpoint (one `fetch` in `logger.flush`), sound, accounts.
