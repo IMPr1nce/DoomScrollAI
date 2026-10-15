@@ -42,7 +42,7 @@ Paths in backticks are relative to the project root.
 - **Play-mode lockdown:** unless `?dev` / `DEV_MODE`, `game.js` freezes `DS`, `DS.CONFIG`, `DS.rng`,
   `DS.metrics`, `DS.logger` and `VP.prototype`, and leaves out `DS.game.current`. So game code must never
   write to `DS.CONFIG` at runtime. (`tests.html` and `sim.html` don't load `game.js`, so they can.)
-- **The log is sealed during play:** `logger.stored()` is `[]` and `exportCSV()` is `null` during the
+- **The log is sealed during play:** `logger.stored()` and `files()` are `[]` and `exportCSV()` is `null` during the
   tutorials and the round, because the log holds the drifting tastes. Tests read it through `openLog()`.
 - **Tests pin their own config** (`PINNED` in `tests/tests.js`), so tuning never breaks them. A new key that
   a test depends on goes into `PINNED`.
@@ -59,8 +59,8 @@ Paths in backticks are relative to the project root.
   dice (including `SKIP_STREAK_BREAK`), the watch, the drain or the drift means re-running the simulator
   ([balance.md](balance.md)).
 - **The first 11 CSV columns are the agreed set.** Add new ones at the end. Everything leaves through
-  `logger.flush()`.
-- **The player's name only names the CSV file** (`logger.fileName()`). Never put it in a row or a column: the rows
+  `logger.flush()`. Each session saves one file per part: the tutorial, then each round (`logger.files()`).
+- **The player's name only names the CSV files** (`logger.fileName(part)`). Never put it in a row or a column: the rows
   are what a future server receives.
 - When editing a file with a script, **don't slice by a comment string that appears twice** (it once
   clobbered half of `reveal.js`). Prefer exact multi-line edits, then re-run the tests.
@@ -74,14 +74,14 @@ Paths in backticks are relative to the project root.
   gone), a 30-second round, and 2 people by default (`?profiles=4` and `?profiles=6` still work). Drain and
   starting attention were retuned for it ([balance.md](balance.md)).
 - 2026-10-07: tutorial pop-ups point at what they explain (a spotlight), favorites liked ~95% of the time, and
-  the "Guess the profile" bonus puzzle (`js/guess.js`) on the last results step.
+  the "Guess the profile" bonus puzzle (`js/guess.js`) on the last results step (removed 2026-10-15).
 - 2026-10-11: exploring vs exploiting. The tutorial is a cold start (Alex's radar starts empty; the round's
   radars are unchanged). Each card's avatar reacts to every post (❤️, 💬, 👆). The results say "You tried 3 of
   6 topics" per person and define both words on the big-picture step. The simulator now reports how often a
   blind player finishes the tutorial ([balance.md](balance.md#the-tutorial-explore-then-exploit)).
 - 2026-10-11, later: the tutorial ends only when every topic is tried and Alex is at 90 (its win pop-up adds
   "Replay the tutorial"), a 2-second watch, and no skip streaks on good picks (`SKIP_STREAK_BREAK`).
-- 2026-10-12: the tutorial is two named steps on a profile radar drawn like "Guess the profile": Explore (try
+- 2026-10-12: the tutorial is two named steps on a profile radar: Explore (try
   all 6 topics), then Exploit (3 watches in a row). The two words are now said in the tutorial too.
 - 2026-10-12, later: a name screen first. The player's first and last name name the CSV (`Kai_Moreno.csv`), and
   nothing else: the name is in no row.
@@ -91,4 +91,7 @@ Paths in backticks are relative to the project root.
   (skips 18, drain 4/s, softer fatigue). The tutorial keeps its old skip cost and drain ([balance.md](balance.md)).
 - 2026-10-13, later: the tutorial opens with the job ("You are the algorithm: keep Alex on the app as long as
   possible"), explores with random topics as tests, then exploits what passed ([content.md](content.md)).
+- 2026-10-15: "Guess the profile" removed; **Log out** on the big-picture step saves the unsaved files and starts
+  a new session on the name screen. One CSV per part (`Kai_Moreno_tutorial.csv`, `Kai_Moreno_round1.csv`…), and
+  new columns at the end: `post_no`, `clock_time`, `taste_<topic>` ([tech.md](tech.md#data-and-logging)).
 - Not built, by design: the Flask endpoint (one `fetch` in `logger.flush`), sound, accounts.

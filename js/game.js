@@ -2,11 +2,12 @@
  * game.js — the conductor. It owns the clock, the phases, and what a click MEANS.
  *
  *   (name screen) -> title -> tutorial1 (explore, then exploit) -> main -> reveal
- *                                                                  ^        |
- *                                                                  +--------+  "Play again"
+ *         ^                                                        ^        |
+ *         |                                                        +--------+  "Play again"
+ *         +---------------------------------------------------------------+  "Log out" (the next player)
  *
  * The name screen comes first but isn't a phase: nothing is played or logged there. The name only
- * names the CSV file (logger.fileName).
+ * names the CSV files (logger.fileName).
  *
  * How it fits together:
  *   vp.js      the rules (no DOM)        game.js asks it to tick and to push
@@ -67,9 +68,10 @@
   var roundNo = 0;        // counts main rounds in this sitting; 0 = still in the tutorials
 
   // The phase also goes to the logger, so every logged row says which phase and round it is from.
+  // Tutorial rows are round 0 even when the tutorial is replayed after a round: they go in the tutorial's file.
   function setPhase(name) {
     game.phase = name;
-    logger.setContext({ phase: name, round: roundNo });
+    logger.setContext({ phase: name, round: name === 'main' ? roundNo : 0 });
   }
 
   // ---------------------------------------------------------------- Game loop
@@ -132,7 +134,7 @@
   //   Step 2, EXPLOIT  show what passed the tests, because the algorithm's job is keeping Alex on the app. Get
   //                    TUTORIAL_EXPLOIT_STREAK watches in a row; a skip starts the count again.
   // The opening pop-up says that job first ("You are the algorithm..."), so both steps have a reason.
-  // The radar is drawn like "Guess the profile" (radarShows 'profile'): each watched post moves that topic out
+  // The radar is a profile built from watches (radarShows 'profile'): each watched post moves that topic out
   // one ring, so the player sees the profile being built. It shows only what the player saw, never the tastes.
   // Pop-ups teach in three layers: an intro chain before anything moves, a one-time hint the first time
   // something happens (a like, a skip, a repeat), and a pop-up at the end of each step. None of it mentions
@@ -484,7 +486,8 @@
       DS.reveal.show(DS.metrics.buildReveal(round.vps, round.elapsed), {
         onDownload: function () { return logger.exportCSV(); },
         onPlayAgain: startMain,
-        onReplayTutorial: startTutorial1
+        onReplayTutorial: startTutorial1,
+        onLogOut: logOut
       });
     }, C.ROUND_END_DELAY_SEC * 1000);
   }
@@ -535,12 +538,35 @@
     Object.freeze(DS);          // last: nobody can replace DS.rng, DS.metrics, ... with their own
   }
 
+  // ---------------------------------------------------------------- Log out
+  // From the results screen: the player is done, and the laptop goes to the next student. Their files are
+  // saved first (only the ones with rows not downloaded yet), because a new session starts with an empty log.
+  // Then everything about this player is forgotten: the round count, the session id and the name.
+  function logOut() {
+    logger.saveUnsaved();
+    retire();
+    roundNo = 0;
+    logger.reset();
+    game.phase = 'title';
+    ui.hideOverlay();
+    ui.hideBanner();
+    showNameScreen();
+  }
+
   // ---------------------------------------------------------------- Start-up
   // The first screen: who is playing. Both names are needed, because the teacher sorts the files by them.
   // The check uses the CLEANED name, so "???" counts as empty instead of making a file called "_.csv".
+  var nameInputs = [];
+  function showNameScreen() {
+    nameInputs.forEach(function (input) { input.value = ''; input.removeAttribute('aria-invalid'); });
+    document.getElementById('name-error').textContent = '';
+    ui.showScreen('name');
+    nameInputs[0].focus();
+  }
+
   function askName() {
     var form = document.getElementById('name-form');
-    var inputs = [document.getElementById('name-first'), document.getElementById('name-last')];
+    var inputs = nameInputs = [document.getElementById('name-first'), document.getElementById('name-last')];
     var error = document.getElementById('name-error');
     form.addEventListener('submit', function (e) {
       e.preventDefault();                    // a real submit would reload the page
@@ -558,14 +584,14 @@
       ui.armGuard();
       document.getElementById('btn-start').focus();
     });
-    ui.showScreen('name');
-    inputs[0].focus();
+    showNameScreen();
   }
 
   var game = {
     phase: 'title',
     startTutorial1: startTutorial1,
     startMain: startMain,
+    logOut: logOut,
     pause: pause,
     resume: resume,
 

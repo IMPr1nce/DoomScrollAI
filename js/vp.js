@@ -124,6 +124,7 @@
       vpId: this.id,
       t: this.clock,
       topic: null,
+      postNo: null,   // which of this person's posts the event is about: 1, 2, 3... (push, watch_end, afk on a skip)
       liked: null,
       attentionBefore: this.attention,
       attentionAfter: this.attention,
@@ -259,12 +260,13 @@
     var message = this._pickMessage(category, topicId);
 
     var info = {
-      topic: topicId, liked: liked,
+      topic: topicId, postNo: this.history.length, liked: liked,
       attentionBefore: attentionBefore, attentionAfter: this.attention,
       fatigueMult: fatigueMult, message: message, category: category
     };
     this._emit('push', info);
     if (wentAfk) this._emit('afk', { message: message, category: 'afk', reason: 'skip',
+                                     topic: topicId, postNo: this.history.length,
                                      attentionBefore: attentionBefore, attentionAfter: 0 });
 
     return Object.assign({ ok: true, likeChance: likeChance, fatigueCount: fatigueCount, wentAfk: wentAfk }, info);
@@ -294,7 +296,11 @@
     var startedAt = this.watchStartAttention;
     this.state = 'idle';
     this.watchRemaining = 0;
+    // The post being watched is always the last one pushed (an interrupting push ends this watch BEFORE
+    // it joins the history), so the log can say which post ended without anyone matching rows by hand.
+    var post = this.history[this.history.length - 1];
     this._emit('watch_end', {
+      topic: post.topic, postNo: this.history.length,
       attentionBefore: startedAt, attentionAfter: this.attention,
       category: reason          // 'complete' or 'interrupted'
     });

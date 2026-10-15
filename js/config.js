@@ -43,7 +43,7 @@ DS.CONFIG = {
   // the way to finish. (It replaced an attention goal of 90, which step 1 often reached on its own.)
   TUTORIAL_EXPLOIT_STREAK: 3,
   PROFILE_RINGS: 5,           // the tutorial's profile radar: each watched post moves that topic out one ring,
-                              // full at this many (the same five rings as "Guess the profile")
+                              // full at this many
   TUTORIAL_HINT_DELAY_SEC: 0.8, // after a push, wait this long before a tutorial hint pop-up, so the player
                               // sees the reaction first (a bit shorter than TUTORIAL_RESULT_DELAY_SEC)
 
@@ -165,12 +165,6 @@ DS.CONFIG = {
   // false = buttons stay live; a new push cuts the current watch short
   //         (the unused part of the gain is lost).
   LIKED_LOCKS_BUTTONS: true,
-
-  // ------------------------------------------- "Guess the profile" (the bonus on the last results step)
-  GUESS_POINTS: 10,           // points the player shares across the six topics. The cap is the puzzle: without
-                              // it, every topic would be dragged to the top and the feed would teach nothing
-  GUESS_MAX_PER_TOPIC: 5,     // the radar's outer ring
-  GUESS_ANSWER_AFTER: 4,      // after this many tries, a "Show me the answer" link appears
 
   // --------------------------------------------------------------------- Dev
   RNG_SEED: null,             // null = different every play. A number = same game every time.

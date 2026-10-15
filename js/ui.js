@@ -258,8 +258,8 @@
   //              'interests'  the person's tastes at the START of the round, drawn once and never
   //                           updated: the player sees what to show them, not how it changes them
   //              'learned'    only what the player has SEEN them like so far (never their tastes)
-  //              'profile'    (the tutorial only) a profile built from watches, like "Guess the profile":
-  //                           five rings, and each watched post moves that topic out one ring
+  //              'profile'    (the tutorial only) a profile built from watches: five rings, and each
+  //                           watched post moves that topic out one ring
   // Unless the radar shows interests, the buttons carry what the player has seen, the same way in both
   // layouts so a playtest that compares them compares only the layout: a "liked 4 of 5" count (or "?"
   // if never tried) and a star on the topic the bio hints at. The profile says "✓2 ✗1" (watched, skipped).

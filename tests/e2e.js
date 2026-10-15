@@ -187,7 +187,7 @@ async function main() {
     check('play mode: no console errors', b.problems.length === 0, b.problems.join(' | '));
 
     // ---- 2b. The one tutorial, in two named steps. Step 1, explore: Alex's profile starts empty and every topic
-    // has to be tried; each watched post adds a ring (like "Guess the profile"), a skip adds none. Step 2, exploit:
+    // has to be tried; each watched post adds a ring, a skip adds none. Step 2, exploit:
     // TUTORIAL_EXPLOIT_STREAK watches in a row. An intro chain comes first, one-time hints follow the first like and
     // skip, and the win pop-up offers the game or a replay. The round's radars still come filled in.
     b.problems.length = 0;
@@ -429,64 +429,63 @@ async function main() {
       }
     }
 
-    // ---- 4b. "Guess the profile", opened from the real button next to Download CSV. A solver plays it with
-    // the keyboard (arrow keys on each topic's slider) using only what the screen says, so this also proves
-    // the puzzle can be solved from its feedback alone.
-    var guess = await b.eval("(async function () {" +
+    // ---- 5. The CSV files that the real Download button produces: one per part of the session (the tutorial,
+    // then each round), all named after the player. Downloads are caught instead of saved.
+    var CATCH = "var saved = [], oc = URL.createObjectURL, ok = HTMLAnchorElement.prototype.click, blobs = {};" +
+      "URL.createObjectURL = function (x) { blobs.last = x; return oc.call(URL, x); };" +
+      "HTMLAnchorElement.prototype.click = function () { saved.push({ name: this.download, blob: blobs.last }); };" +
+      "var release = async function () { URL.createObjectURL = oc; HTMLAnchorElement.prototype.click = ok;" +
+      "  var out = []; for (var k = 0; k < saved.length; k++) out.push({ name: saved[k].name, text: await saved[k].blob.text() }); return out; };" +
       "var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
-      "var out = {}; var st = [].slice.call(document.querySelectorAll('#reveal-steps .step')); st[st.length - 1].click(); await sleep(700);" +
-      "var btns = [].slice.call(document.querySelectorAll('.big__actions .btn')); out.order = btns.map(function (x) { return x.textContent; });" +
-      "btns.filter(function (x) { return /Guess/.test(x.textContent); })[0].click(); await sleep(700);" +
-      "out.screen = document.body.dataset.screen; out.fits = document.documentElement.scrollHeight <= innerHeight;" +
-      "var ids = DS.TOPIC_IDS, handles = [].slice.call(document.querySelectorAll('.guess__handle'));" +
-      "var val = function (i) { return +handles[i].getAttribute('aria-valuenow'); };" +
-      "var key = function (i, k) { handles[i].dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); };" +
-      "var setTo = function (i, v) { var guard = 0; while (val(i) < v && guard++ < 9) key(i, 'ArrowUp'); while (val(i) > v && guard++ < 18) key(i, 'ArrowDown'); };" +
-      // the budget: push one topic to its cap, then try to go past 10 points in total
-      "setTo(0, 5); setTo(1, 5); key(2, 'ArrowUp'); out.capped = val(2) === 0 && /No points left/.test(document.querySelector('.guess__left').textContent);" +
-      "for (var z = 0; z < ids.length; z++) setTo(z, 0);" +
-      // the solver: exact[i] once a topic showed skips; low[i] = the most it ever watched without skipping
-      "var exact = {}, low = {}; ids.forEach(function (id, i) { low[i] = 0; });" +
-      "for (var t = 0; t < 15; t++) {" +
-      "  var plan = {}, left = 10; ids.forEach(function (id, i) { plan[i] = exact[i] !== undefined ? exact[i] : low[i]; left -= plan[i]; });" +
-      "  for (var guard = 0; left > 0 && guard < 60; guard++) { var i2 = guard % ids.length; if (exact[i2] === undefined && plan[i2] < 5) { plan[i2]++; left--; } }" +
-      "  for (var d = 0; d < ids.length; d++) setTo(d, 0); for (var u = 0; u < ids.length; u++) setTo(u, plan[u]);" +
-      "  document.querySelector('.guess__bar .btn--primary').click(); await sleep(80);" +
-      "  var lines = [].slice.call(document.querySelectorAll('.guess__topic')).map(function (li) { return li.textContent; });" +
-      "  if (document.querySelector('.guess__win')) { out.solvedIn = t + 1; break; }" +
-      "  lines.forEach(function (line, i) { var m = /watched (\\d+), skipped/.exec(line); if (m) exact[i] = +m[1]; else if (/skipped all/.test(line)) exact[i] = 0; else if (/watched all/.test(line)) low[i] = Math.max(low[i], plan[i]); });" +
-      "}" +
-      "out.winText = document.querySelector('.guess__win') ? document.querySelector('.guess__win').textContent : null;" +
-      "out.fitsAfter = document.documentElement.scrollHeight <= innerHeight;" +
-      "out.text = document.getElementById('screen-guess').innerText;" +
-      "await sleep(600); [].slice.call(document.querySelectorAll('.guess__foot .btn')).filter(function (x) { return /Back/.test(x.textContent); })[0].click(); await sleep(400);" +
-      "out.backTo = document.body.dataset.screen + ' / ' + document.getElementById('reveal-progress').textContent;" +
-      "return out; })()");
-    check('guess: the button sits next to Download CSV and opens the puzzle, which fits the window',
-          guess.order[0].indexOf('Download') !== -1 && /Guess the profile/.test(guess.order[1]) && guess.screen === 'guess' && guess.fits, JSON.stringify(guess.order) + ' ' + guess.screen + ' fits=' + guess.fits);
-    check('guess: the 10-point budget holds (no topic can take a point once all 10 are placed)', guess.capped === true, JSON.stringify(guess.capped));
-    check('guess: a solver that only reads the watches and skips finds the perfect profile', guess.solvedIn > 0 && guess.solvedIn <= 8 && /You built/.test(guess.winText),
-          'solved in ' + guess.solvedIn + ': ' + guess.winText);
-    check('guess: still fits after results, no "undefined"/"NaN", no he/she', guess.fitsAfter && !/undefined|NaN|\[object/.test(guess.text) && !/\b(he|she|him|her|his)\b/i.test(guess.text), guess.text.slice(0, 200));
-    check('guess: "Back to results" returns to the last results step', /^reveal \/ (\d+) of \1$/.test(guess.backTo), guess.backTo);
-
-    // ---- 5. The CSV that the real Download button produces
-    var csv = await b.eval("(async function () {" +
-      "var name = null, blob = null, oc = URL.createObjectURL, ok = HTMLAnchorElement.prototype.click;" +
-      "URL.createObjectURL = function (x) { blob = x; return oc.call(URL, x); }; HTMLAnchorElement.prototype.click = function () { name = this.download; };" +
-      "var step = [].slice.call(document.querySelectorAll('#reveal-steps .step')); step[step.length - 1].click(); await new Promise(function (r) { setTimeout(r, 700); });" +
-      "[].slice.call(document.querySelectorAll('button')).filter(function (x) { return x.textContent.indexOf('Download data') !== -1; })[0].click();" +
-      "URL.createObjectURL = oc; HTMLAnchorElement.prototype.click = ok;" +
-      "var text = await blob.text(); return { name: name, text: text, session: DS.logger.sessionId, columns: DS.logger.COLUMNS }; })()");
-    var lines = csv.text.trim().split('\r\n');
-    check('CSV: named after the player from the first screen (Zebedee_Quimby.csv)', csv.name === 'Zebedee_Quimby.csv', csv.name);
-    check('CSV: the player\'s name is in no row (it only names the file)', !/Zebedee|Quimby/.test(csv.text), 'the name is in the data');
-    check('CSV: header is the agreed columns', lines[0] === csv.columns.join(','), lines[0]);
-    check('CSV: has rows for pushes, round starts and round ends', ['push', 'round_start', 'round_end'].every(function (e) { return lines.some(function (l) { return l.split(',')[4] === e; }); }), 'missing an event type');
-    check('CSV: one session id on every row', lines.slice(1).every(function (l) { return l.split(',')[0] === csv.session; }), 'mixed session ids');
-    var starts = lines.filter(function (l) { return l.split(',')[4] === 'round_start'; });
+      "var bigStep = async function () { var st = [].slice.call(document.querySelectorAll('#reveal-steps .step')); st[st.length - 1].click(); await sleep(700); };" +
+      "var press = function (re) { [].slice.call(document.querySelectorAll('.big__actions .btn')).filter(function (x) { return re.test(x.textContent); })[0].click(); };";
+    var csv = await b.eval("(async function () {" + CATCH +
+      "await bigStep(); var order = [].slice.call(document.querySelectorAll('.big__actions .btn')).map(function (x) { return x.textContent; });" +
+      "press(/Download data/); await sleep(50); var label = document.querySelector('.big__actions .btn').textContent;" +
+      "return { files: await release(), order: order, label: label, session: DS.logger.sessionId, columns: DS.logger.COLUMNS }; })()");
+    var names = csv.files.map(function (f) { return f.name; });
+    check('results: the big picture\'s buttons are Download, Log out and Play again (no "Guess the profile")',
+          csv.order.length === 3 && /Download/.test(csv.order[0]) && /Log out/.test(csv.order[1]) && /Play again/.test(csv.order[2]), JSON.stringify(csv.order));
+    // This run skipped the tutorial before any post, so it has no tutorial file (an empty part saves nothing).
+    // The unit tests cover the tutorial's file.
+    check('CSV: one file per round, in order, named after the player (Zebedee_Quimby_round1.csv); no empty tutorial file',
+          names.length >= 3 && names.every(function (n, k) { return n === 'Zebedee_Quimby_round' + (k + 1) + '.csv'; }), names.join(' '));
+    check('CSV: the button says how many files it saved', csv.label === '✓ Saved ' + names.length + ' files', csv.label);
+    var allRows = [];
+    csv.files.forEach(function (f) {
+      var lines = f.text.trim().split('\r\n');
+      var rows = lines.slice(1).map(function (l) { return l.split(','); });   // tastes_json has commas, so read only the columns before it
+      allRows = allRows.concat(rows);
+      f.ok = lines[0] === csv.columns.join(',') && rows.length > 0 && !/Zebedee|Quimby/.test(f.text) &&
+             rows.every(function (r) { return r[0] === csv.session; }) &&
+             (f.name.indexOf('tutorial') !== -1 ? rows.every(function (r) { return r[2] === 'tutorial1'; })
+                                                : rows.every(function (r) { return r[2] === 'main'; }));
+    });
+    check('CSV: every file has the header, one session id, only its own part\'s rows, and never the player\'s name',
+          csv.files.every(function (f) { return f.ok; }), csv.files.filter(function (f) { return !f.ok; }).map(function (f) { return f.name; }).join(' '));
+    check('CSV: has rows for pushes, round starts and round ends', ['push', 'round_start', 'round_end'].every(function (e) { return allRows.some(function (r) { return r[4] === e; }); }), 'missing an event type');
+    var round1 = csv.files[1].text;
     check('CSV: round_start rows say which version was played ("radar-interests/2")',
-          starts.length > 0 && starts.every(function (l) { return /,radar-interests\/2$/.test(l); }), starts.slice(0, 2).join(' | '));
+          /round_start/.test(round1) && round1.split('\r\n').filter(function (l) { return /,round_start,/.test(l); }).every(function (l) { return /,radar-interests\/2,/.test(l); }),
+          round1.split('\r\n').filter(function (l) { return /,round_start,/.test(l); }).slice(0, 2).join(' | '));
+    check('CSV: a watch_end row says which topic ended, and the readable columns are filled in (post_no, clock_time, taste_*)',
+          /,watch_end,[a-z]+,,[\d.]+,[\d.]+,,"\{.*\}",\d+,[\d.]+,complete,\d+,\d\d:\d\d:\d\d(,[\d.]+){6}\r\n/.test(round1), round1.split('\r\n').filter(function (l) { return /watch_end/.test(l); })[0]);
+
+    // ---- 5b. Log out: saves only what wasn't downloaded yet (a new round), then the next player starts from
+    // an empty name screen with a fresh session.
+    await b.eval("DS.dev.play({ bot: 'spam' })");
+    var logout = await b.eval("(async function () {" + CATCH +
+      "var before = DS.logger.sessionId; await bigStep(); await sleep(600); press(/Log out/); await sleep(300);" +
+      "var out = { files: (await release()).map(function (f) { return f.name; }), screen: document.body.dataset.screen," +
+      "  empty: document.getElementById('name-first').value === '' && document.getElementById('name-last').value === ''," +
+      "  focused: document.activeElement === document.getElementById('name-first'), newSession: DS.logger.sessionId !== before," +
+      "  anonymous: /^doomscroll_/.test(DS.logger.fileName('round1')), log: DS.logger.counts().stored + DS.logger.counts().pending };" +
+      "document.getElementById('name-first').value = 'Ada'; document.getElementById('name-last').value = 'Lovelace'; document.getElementById('btn-name').click();" +
+      "await sleep(100); out.next = document.body.dataset.screen + ' ' + DS.logger.fileName('round1'); return out; })()");
+    check('log out: saves only the round that was never downloaded', logout.files.length === 1 && /^Zebedee_Quimby_round\d+\.csv$/.test(logout.files[0]), JSON.stringify(logout.files));
+    check('log out: back to an empty name screen, with a new session and an empty log',
+          logout.screen === 'name' && logout.empty && logout.focused && logout.newSession && logout.anonymous && logout.log === 0, JSON.stringify(logout));
+    check('log out: the next player\'s files carry the new name', logout.next === 'title Ada_Lovelace_round1.csv', logout.next);
 
     // ---- 6. Loopholes: frantic clicks, the pause state machine, stale timers
     var loop = await b.eval("(async function () {" +

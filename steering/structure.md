@@ -15,7 +15,6 @@ js/logger.js           the event log, the CSV, flush()
 js/radar.js            radar geometry (pure) and SVG drawing
 js/ui.js               screens, pop-up, click guard, scoreboard, banner, the profile card (and its avatar reactions)
 js/reveal.js           the results screen: DS.revealText (pure wording) + DS.reveal (drawing)
-js/guess.js            "Guess the profile": DS.guessModel (pure: hidden profile, simulate, wording) + DS.guess (screen)
 js/game.js             the conductor: loop, phases, pause, round end, playtest switches, lockdown
 tests.html             the unit tests in a browser (tests/tests.js)
 sim.html, sim/sim.js   the balance simulator
@@ -29,7 +28,7 @@ README.md              for teachers and the team lead: running, tuning, the data
 
 ## Two layers
 - **Model** (no DOM; runs in the browser and in Node): `config`, `content`, `vp`, `metrics`, `logger`
-  (records and CSV), the geometry in `radar.js`, `DS.revealText`, `DS.guessModel`, and `sim/sim.js`.
+  (records and CSV), the geometry in `radar.js`, `DS.revealText`, and `sim/sim.js`.
 - **Page:** `ui.js`, the drawing in `radar.js` and `reveal.js`, `game.js`, `tests/dev-helpers.js`.
 
 A file may only use what loaded before it. `reveal.js` looks up `DS.ui` when it first draws, because the
@@ -59,9 +58,9 @@ tests load it without the page code.
 ## Game state
 - **Phases:** `title → tutorial1 → main → reveal`. The name screen comes before the title (`askName()` in
   `game.js`), but it isn't a phase: nothing is played or logged there. Its Continue arms the click guard, so Start
-  is wrapped in `ui.guarded`. "Guess the profile" is a screen opened from the last results
-  step (`DS.guess.show`), not a phase: nothing ticks there and nothing is logged. **Play again** goes to `main`; **Replay
-  the tutorial** goes to `tutorial1`.
+  is wrapped in `ui.guarded`. **Play again** goes to `main`; **Replay the tutorial** goes to `tutorial1`; **Log out**
+  (`logOut()`) saves the unsaved files (`logger.saveUnsaved()`), starts a new session (`logger.reset()`: new id,
+  empty log, no name), sets `roundNo` back to 0 and shows the name screen, empty, for the next player.
 - **`active`** is whatever is being played: `vps`, `cards`, `frozen` (nothing ticks: a pop-up, the
   "ready?" card, a pause or a finished round), `paused` (only a real pause), `ended`, `elapsed`,
   `limitSec` and `check`.
@@ -103,8 +102,7 @@ It lives in two places that must agree.
   passes `'profile'`): `'interests'` draws `vp.tasteSnapshotStart` once, when the card is made; `'learned'`
   redraws `metrics.observed(vp.history)` after every push, with "?" for topics not tried yet. Both use
   `DS.radar.spikes()`. `'profile'` (the tutorial only) draws `PROFILE_RINGS` rings (`DS.radar.frame(n, rings)`)
-  and `DS.radar.profile()`: each topic reaches the ring of its watch count, joined by a purple shape like
-  "Guess the profile"; its buttons read "✓2 ✗1" (the `.card--profile` rules in `style.css`). `ui.showsInterests()` tells `game.js` and `reveal.js` which one the round uses.
+  and `DS.radar.profile()`: each topic reaches the ring of its watch count, joined by a purple shape; its buttons read "✓2 ✗1" (the `.card--profile` rules in `style.css`). `ui.showsInterests()` tells `game.js` and `reveal.js` which one the round uses.
 - Six people always get the button grid instead (decided in `game.js`), because six radars don't fit.
 
 ## How to add…

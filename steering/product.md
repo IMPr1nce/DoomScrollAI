@@ -40,9 +40,9 @@ student built it by chasing attention. The class then discusses whether that was
 
 ## How a session goes (about three minutes)
 1. **Who's playing?** First and last name (both needed), then **Title** → Start. The name only names the
-   data file saved at the end (`Kai_Moreno.csv`).
+   data files saved at the end (`Kai_Moreno_round1.csv`).
 2. **The tutorial:** one person, Alex, a new user, in two named steps. An intro chain of pop-ups explains
-   attention and the radar, which here is Alex's **profile**: drawn like "Guess the profile", it starts empty
+   attention and the radar, which here is Alex's **profile**: it starts empty
    and each post Alex watches moves that topic out one ring (buttons read "✓2 ✗1").
    - **The first pop-up says why:** "You are the algorithm: your job is to keep Alex on the app as long as
      possible."
@@ -65,8 +65,9 @@ student built it by chasing attention. The class then discusses whether that was
    many of the six topics you tried, the variety they watched in each half, and their radar at the start next
    to the end), then the big picture: one line defining exploiting and exploring, and three questions for the
    class. **Play again** starts a new round right away.
-5. **Bonus: Guess the profile** (next to *Download data*): build a random person's profile on a radar with 10
-   points, press Simulate, read the watches and skips, and adjust until every post is watched.
+5. **Download data or Log out** (on the big-picture step). Download saves one CSV per part of the session: the
+   tutorial, then each round. **Log out** saves any file not downloaded yet, then goes back to the name screen,
+   so the next student starts a new session on the same laptop.
 
 ## Principles every change has to keep
 1. **Fun first, lesson last.** Nothing during play explains the filter bubble, and the narrowing (the taste
@@ -79,7 +80,7 @@ student built it by chasing attention. The class then discusses whether that was
 5. **One screen, read at a glance.** Everything fits the target laptop without scrolling, and a
    13-year-old can follow it while busy.
 6. **Safe and private.** Age-appropriate, nothing leaves the browser, and the only personal data is the
-   player's name, which names the CSV file and is in none of its rows.
+   player's name, which names the CSV files and is in none of their rows.
 
 ## Not built, on purpose
 - **The Flask backend.** `logger.flush()` is ready for a single `fetch` ([tech.md](tech.md#data-and-logging)).
@@ -122,3 +123,5 @@ decisions here with the date and the reason.
 | 2026-10-12 | **Alex has 3 favorites, side by side on the radar** (Dance, Music, Comics; Sports is "meh"). Was Music and Food, with 2 "meh". | The team lead found the tutorial's finished profile looked like a straight line: Music and Food sit opposite each other. A topic with no watches sits at the center, so only neighbors enclose an area; spread-out favorites made a thin "Y". In the simulator a finished profile is now a filled shape 97–98% of the time (was 76%) and a line under 1% (was 21%). The tutorial gets a little easier: a blind player finishes 100% of runs at 1–2 s per pick (was 96.5–97.5%), in 10.9 posts (was 11.5). |
 | 2026-10-13 | **Everyone in the round has 3 favorites side by side and 1 "meh"**, like Alex, with a retune: `DISLIKE_PENALTY` 18 (was 12), `IDLE_DRAIN_PER_SEC` 4.0 (was 3.0), `FATIGUE_MULTIPLIERS` 1, 0.95, 0.9, 0.85 (was 1, 0.85, 0.7, 0.6). The tutorial keeps skips at 12 and Alex's drain at 1.5/s. | The team lead wanted the round's radars to be filled shapes too, so the player reads each person at a glance with three near-sure picks instead of coin-flip "meh" topics. Without the retune, random play kept people and mixing tied spamming (the lesson flipped). With it, all 7 goals pass at 1, 1.5 and 2 s per click; each mistake costs more, and repeats cost less. Trade-off: at 3 s per click spam averages 52 (goal 55; was 57). The results' start radars are now wide wedges, so the shrink to one spike shows more. Checked in the simulator; the cheaper option (moving the "meh" next to the favorites, no balance change) was declined because coin-flip picks would remain. |
 | 2026-10-13 | **The tutorial says why, and frames exploring as testing.** The first pop-up: "You are the algorithm: your job is to keep Alex on the app as long as possible." Step 1 pushes random topics as tests ("does Alex watch, or skip?"); step 2 shows only what passed the tests, to keep Alex on the app. | The team lead wanted it clearer that exploring means testing topics at random, and that exploiting what passed serves the algorithm's goal: time on the app. The definitions stay word for word, and nothing hints at the narrowing. |
+| 2026-10-15 | **"Guess the profile" is removed; a Log out button takes its place** on the big-picture step. Log out saves the player's unsaved files, then starts a new session on the name screen (a new session id, an empty log, no name). Replaces the 2026-10-07 puzzle row. | The team lead no longer needs the puzzle. Classes share laptops, so one student must be able to hand over to the next without reloading, and without losing data: Log out saves before it forgets. |
+| 2026-10-15 | **One CSV per part of the session:** `First_Last_tutorial.csv`, then `First_Last_round1.csv`, `_round2.csv`… Tutorial rows are always round 0. New columns at the end: `post_no`, `clock_time`, and `taste_<topic>` for each topic. A `watch_end` row (and an AFK after a skip) now says its topic. | The team lead wants each Play-again round stored separately, still named after the player. The new columns make the file readable in a spreadsheet: pair a push with its watch_end, read the time, and chart the tastes without parsing JSON. The first 11 columns are unchanged. Trade-off: the first download saves two files, so Chrome may ask to allow multiple downloads. |
