@@ -449,21 +449,21 @@
     var dl = h('button', 'btn btn--ghost btn--big', '⬇ Download data (CSV)');
     dl.type = 'button';
     dl.addEventListener('click', ui.guarded(function () {
-      var name = state.handlers.onDownload();          // null if the log refused (it is sealed during play)
-      dl.textContent = name ? '✓ Saved ' + name : 'Could not save. Try again.';
+      var names = state.handlers.onDownload();         // null if the log refused (it is sealed during play)
+      dl.textContent = !names ? 'Could not save. Try again.'
+                     : names.length === 1 ? '✓ Saved ' + names[0]
+                     : '✓ Saved ' + names.length + ' files';
       setTimeout(function () { dl.textContent = '⬇ Download data (CSV)'; }, 3000);
     }));
-    // The bonus puzzle: build a random person's profile on a radar (guess.js).
-    var guessBtn = h('button', 'btn btn--ghost btn--big', '🧩 Guess the profile');
-    guessBtn.type = 'button';
-    guessBtn.addEventListener('click', ui.guarded(function () {
-      DS.guess.show({ onBack: function () { ui.showScreen('reveal'); ui.armGuard(); goTo(state.step); } });
-    }));
+    // The player is done: save their files and hand the laptop to the next student (the name screen).
+    var out = h('button', 'btn btn--ghost btn--big', '🚪 Log out');
+    out.type = 'button';
+    out.addEventListener('click', ui.guarded(function () { state.handlers.onLogOut(); }));
     var again = h('button', 'btn btn--primary btn--big', '▶ Play again');
     again.type = 'button';
     again.addEventListener('click', ui.guarded(function () { state.handlers.onPlayAgain(); }));
     actions.appendChild(dl);
-    actions.appendChild(guessBtn);
+    actions.appendChild(out);
     actions.appendChild(again);
     box.appendChild(actions);
 
@@ -534,7 +534,7 @@
 
   // ---------------------------------------------------------------------- Public
   // data: DS.metrics.buildReveal(...)
-  // handlers: { onDownload() -> file name, onPlayAgain(), onReplayTutorial() }
+  // handlers: { onDownload() -> file names, onPlayAgain(), onReplayTutorial(), onLogOut() }
   reveal.show = function (data, handlers) {
     ui = DS.ui;
     state = { data: data, handlers: handlers, steps: buildSteps(data), step: 0 };

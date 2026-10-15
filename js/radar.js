@@ -119,7 +119,7 @@
     g.appendChild(dot);
   }
 
-  // A profile built from watches, the way "Guess the profile" builds one from points: topic i reaches ring
+  // A profile built from watches: topic i reaches ring
   // watched[i] (of `rings`), and one shape joins all six, so the profile is a shape that grows with every
   // watch. A topic never watched stays at the middle with no spike: a skip says "not interested", and its
   // button says so (✗). Drawn only from what the player saw, never from the tastes.

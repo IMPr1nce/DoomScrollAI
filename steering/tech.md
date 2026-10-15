@@ -8,7 +8,7 @@ commands, what to run after a change, and how the data leaves the game.
 - **It must run by double-clicking `index.html`** (a `file://` page, offline). So: no ES modules, no
   `fetch` or XHR, and no data files loaded at runtime. Data lives in `.js` files.
 - **Classic `<script>` tags in dependency order, sharing one global, `window.DS`:**
-  `config → content → vp → metrics → logger → radar → ui → reveal → guess → game`. Each file is an IIFE
+  `config → content → vp → metrics → logger → radar → ui → reveal → game`. Each file is an IIFE
   (`(function () { 'use strict'; … })()`) that adds to `DS`; `config.js` and `content.js` just set data.
 - **ES5 style** in everything the browser loads: `var` and function expressions, with no arrow functions,
   `let`/`const`, classes or template literals. (`tests/run-node.js` and `tests/e2e.js` run in Node.)
@@ -18,7 +18,7 @@ commands, what to run after a change, and how the data leaves the game.
   or replace the object, only change its keys.
 - **All randomness goes through `DS.rng`**, which can be seeded: `RNG_SEED` replays the same game.
 - No LLM calls, no network, no cookies or browser storage. The only personal data is the player's name, and it
-  only names the CSV file ([Data and logging](#data-and-logging)): never put it in a row or a column.
+  only names the CSV files ([Data and logging](#data-and-logging)): never put it in a row or a column.
 
 ## Browser support
 - **Target:** current Chrome on a 1366 × 768 school laptop (about 600px of page height).
@@ -33,7 +33,7 @@ commands, what to run after a change, and how the data leaves the game.
 ```bash
 node tests/run-node.js        # unit tests: model, logger, results wording, radar geometry. Exit 1 on failure
 node tests/run-node.js sim    # balance simulator: the results table, the 7 goals and a tutorial line. Exit 1 if a goal fails
-node tests/e2e.js             # the real game in headless Chrome from file://, about 85 checks. Needs Node 22+ and Chrome
+node tests/e2e.js             # the real game in headless Chrome from file://, about 95 checks. Needs Node 22+ and Chrome
 ```
 No terminal? Open `tests.html` and `sim.html` in Chrome. They run the same code.
 
@@ -67,20 +67,32 @@ What to run after a change:
   1366 × 600 and 1024 × 768, the results text, the CSV, and the frantic-click and pause loopholes.
 
 ## Data and logging
-- Every event flows `logger` → pending → `flush(records)` → stored → `exportCSV()`. `flush()` is the
-  **only exit**; the CSV download on the last results step reads what it stored.
+- Every event flows `logger` → pending → `flush(records)` → stored → `files()` → `exportCSV()` / `saveUnsaved()`.
+  `flush()` is the **only exit**; the CSV downloads read what it stored.
 - **CSV columns.** The first 11 are the agreed set, in this order: `session_id, timestamp_ms, phase, vp_id,
   event, topic, liked, attention_before, attention_after, fatigue_mult, tastes_json`. After them come
-  `round_no, round_time_sec, detail`. New columns go at the end only.
+  `round_no, round_time_sec, detail, post_no, clock_time`, then `taste_<topic>` for each topic in topic order
+  (`tastes_json` as plain numbers). New columns go at the end only.
+- **`topic` and `post_no`** are filled on `push`, on `watch_end` (the post that ended) and on an `afk` caused by a
+  skip; an idle `afk` has neither. A push and its watch_end share `post_no`, which restarts with each new person
+  (each round, each tutorial "Try again").
 - **Events:** `push`, `watch_end`, `afk`, `round_start`, `round_end`, `pause`, `resume`. On `round_start`,
   `detail` says which version was played.
-- **Sealed during play:** while a tutorial or a round is running, `stored()` returns `[]` and `exportCSV()`
-  returns `null`, because the log holds the drifting tastes.
-- **The file's name:** the first screen asks for a first and last name, and the CSV is saved as `First_Last.csv`
-  (`logger.fileName()`). `logger.cleanName()` drops what a file name can't hold (`/ \ : * ? " < > |`), turns spaces
-  into `-`, and cuts each name at 20 characters. Without a name it falls back to `doomscroll_<session_id>.csv`.
+- **Sealed during play:** while a tutorial or a round is running, `stored()` and `files()` return `[]`, and
+  `exportCSV()` and `saveUnsaved()` return `null`, because the log holds the drifting tastes.
+- **One file per part of a session** (`logger.files()`): every tutorial row goes in `First_Last_tutorial.csv` (round
+  0, replays included), and round n in `First_Last_round<n>.csv`. A part with no rows has no file. The Download
+  button (`exportCSV()`) saves every file with rows not yet downloaded plus the latest file; Log out
+  (`saveUnsaved()`) saves only the former. Both return the saved names. `logger.download` is replaceable, so the
+  tests can catch the files.
+- **A session** is one player, from the name screen to Log out. `logger.reset()` starts the next one. `sessionId` is
+  a getter, so it can change even though play mode freezes the logger.
+- **The files' names:** the first screen asks for a first and last name, and the files are saved as
+  `First_Last_<part>.csv` (`logger.fileName(part)`). `logger.cleanName()` drops what a file name can't hold
+  (`/ \ : * ? " < > |`), turns spaces into `-`, and cuts each name at 20 characters. Without a name it falls back
+  to `doomscroll_<session_id>_<part>.csv`. Chrome may ask once to allow multiple downloads.
 - **Privacy:** the session id is random (like `20261004-153012-a3f9c1`), and no row identifies the player. The
-  name is on the file only, so a future server that receives `flush()`'s records never gets it.
+  name is on the files only, so a future server that receives `flush()`'s records never gets it.
 - **Adding the Flask server:** put one `fetch` POST inside `logger.flush()` (the comment above it has the
   code) and keep the line that stores the records. The server needs CORS, because the page is opened from
   a file.

@@ -31,9 +31,9 @@ still work; the page just scrolls.
 ## What the student does (about 3 minutes)
 
 1. **Who's playing?** The student types their first and last name (both needed), then the **title
-   screen** → Start. The name names the data file saved at the end.
+   screen** → Start. The name names the data files saved at the end.
 2. **The tutorial:** one person, Alex, a brand-new user, in two named steps. The radar is Alex's
-   **profile**, drawn like *Guess the profile*: it starts empty, and each post Alex watches moves that topic
+   **profile**: it starts empty, and each post Alex watches moves that topic
    out one ring (each button reads like "✓2 ✗1": watched twice, skipped once).
    - The first pop-up sets the job: "You are the algorithm: your job is to keep Alex on the app as long as
      possible."
@@ -53,17 +53,15 @@ still work; the page just scrolls.
    longer the spike, the more that person is into the topic, so a glance shows what to show them. The
    radar shows who they were **at the start of the round** and never changes. Every post they like
    quietly shifts their tastes toward it, but that stays hidden until the results.
-5. **Results:** the score first (the win), then one screen per person: what you showed them and how many
+4. **Results:** the score first (the win), then one screen per person: what you showed them and how many
    of the six topics you tried, how much variety they saw, and their radar twice: at the start (the one you
    played with) and at the end, usually shrunk into a single spike. That's the filter bubble, and the
    student's own feed made it. Then the big picture: one line that names the idea ("Exploiting = showing
    what you know works. Exploring = trying something new to learn more.") and three questions for the class.
    The tutorial introduced these two words; the round never uses them.
-6. **Bonus: Guess the profile** (the button next to *Download data*): a random person, an empty radar and
-   10 points to share across the topics. Drag each dot out or in, then press **Simulate**. The person sees one
-   post per point, watches what they want and skips the rest. A skip means "too much of this"; a topic you
-   never show tells you nothing. Move points until every post gets watched. It's the recommender's real
-   job: learning a profile from watches and skips. After 4 tries, *Show me the answer* appears.
+5. **Download data, Log out or Play again** (on the big-picture step). *Play again* starts a new round.
+   *Log out* saves any of the student's files not downloaded yet, then goes back to the name screen for the
+   next student.
 
 Teacher tips:
 
@@ -72,6 +70,8 @@ Teacher tips:
 - After the first round, try **Play again** with a rule: "never show the same topic twice in a row".
   Compare the score and the variety numbers.
 - Switching to another tab pauses the game automatically.
+- **Sharing a laptop:** when a student is done, press **Log out** on the last results step. Their files are
+  saved, and the next student starts on an empty name screen.
 
 ### Comparing versions in a playtest
 
@@ -104,7 +104,6 @@ Edit the file, save it, reload the page.
 | An **easier** game | raise `ATTENTION_START` or `LIKE_GAIN`; lower `IDLE_DRAIN_PER_SEC` or `DISLIKE_PENALTY` |
 | A **harder** game | the opposite |
 | A **longer or shorter** round | `ROUND_SEC` (30). The balance was tuned for 30 s and 2 people: see `steering/balance.md` |
-| "Guess the profile": more or fewer **points**, a bigger radar, when the answer is offered | `GUESS_POINTS` (10), `GUESS_MAX_PER_TOPIC` (5), `GUESS_ANSWER_AFTER` (4) |
 | A **stronger filter bubble** on the results screen | raise `DRIFT_UP` (how fast a liked topic is learned) or `DRIFT_DOWN` (how fast other topics fade). Careful with `DRIFT_DOWN`: above about 0.04 (with 2-second watches) even a player who mixes topics on purpose gets squeezed, which weakens "you had a choice". The simulator checks this. |
 | Spamming one topic to be **less rewarding** | lower `FATIGUE_MULTIPLIERS`. Careful: too harsh and mixing topics beats spamming, which flips the lesson. The simulator warns you. |
 | Buttons to **stay live** while someone watches | `LIKED_LOCKS_BUTTONS: false` (a new post then cuts the current watch short) |
@@ -145,13 +144,19 @@ Everything the game does is written to a log in the browser's memory: every post
 was liked, attention before and after, each person's tastes as they change, who left and why, pauses,
 and the start and end of each round.
 
-On the last results step, **Download data (CSV)** saves a file named after the student, like
-`Kai_Moreno.csv`, so you can tell whose file is whose. Spaces in a name become `-`, characters a file name
-can't hold are dropped, and each name is cut at 20 characters. (The log holds
-the people's tastes as they drift, which the player must not see until the end, so it can't be read or
-downloaded in the middle of a game, only from the results screen.)
+On the last results step, **Download data (CSV)** saves one file per part of the session, named after the
+student: `Kai_Moreno_tutorial.csv` for the tutorial (every try and replay), then `Kai_Moreno_round1.csv`,
+`Kai_Moreno_round2.csv`… for each round, so *Play again* never mixes two rounds. Each press saves every file
+with new rows, plus the latest round again. **Log out** saves whatever wasn't downloaded yet, then starts a
+fresh session for the next student. A part with no rows (a tutorial skipped before any post) has no file.
+Spaces in a name become `-`, characters a file name can't hold are dropped, and each name is cut at 20
+characters. (The log holds the people's tastes as they drift, which the player must not see until the
+end, so it can't be read or downloaded in the middle of a game, only from the results screen.)
 
-**Privacy:** the student's name is on the file's name only. Inside, nothing is about the player: no
+Saving two files at once can make Chrome ask whether this page may **download multiple files**. Choose
+*Allow*: if it's blocked, the extra files are lost.
+
+**Privacy:** the student's name is on the files' names only. Inside, nothing is about the player: no
 name, no account, no device information. The session id is a random code like `20261004-153012-a3f9c1`,
 and the log describes what the pretend people did. The name never leaves the laptop, and a future server
 (below) would not receive it. Closing the tab without downloading discards it all. Check your school's
@@ -164,17 +169,21 @@ rules before collecting files with students' names.
 | `phase` | `tutorial1`, `main` |
 | `vp_id` | which person (blank for pause/resume) |
 | `event` | `push`, `watch_end`, `afk`, `round_start`, `round_end`, `pause`, `resume` |
-| `topic` | topic pushed (push events) |
+| `topic` | the topic of the post: pushed (`push`), finished watching (`watch_end`), or the skip that made them leave (`afk`) |
 | `liked` | `1` liked, `0` skipped (push events) |
 | `attention_before`, `attention_after` | the person's attention (0–100) around the event |
 | `fatigue_mult` | how much "same topic again" reduced the gain (1 = no penalty) |
 | `tastes_json` | the person's like-chances for the 6 topics, right after the event (they drift as posts are liked) |
-| `round_no` | 1, 2, 3… for each main round (0 in the tutorials) |
+| `round_no` | 1, 2, 3… for each main round (0 in the tutorial, even a replay) |
 | `round_time_sec` | seconds of play since the round started. Unlike `timestamp_ms`, it does not run during a pause. |
 | `detail` | extra word: the reaction type on `push`; `complete`/`interrupted` on `watch_end`; `skip`/`idle` on `afk` (why they left); the version played on `round_start` (`radar-interests/4`, `radar-learned/4`, `grid/6`, ...); `time_up`/`all_afk` on `round_end`; `button`/`key`/`tab_hidden` on `pause` |
+| `post_no` | which of this person's posts the row is about: 1, 2, 3… A `push` and its `watch_end` share it. Starts again at 1 each round. Blank on rows that aren't about a post. |
+| `clock_time` | `timestamp_ms` as a time of day on the laptop, like `15:28:44` |
+| `taste_sports` … `taste_food` | `tastes_json` split into one number per topic, so a spreadsheet can sort or chart it. A line chart of one taste across a round shows the filter bubble forming. |
 
-The first 11 columns are the agreed set. The last three make the data usable (rounds, a pause-proof
-clock, and the extra word).
+The first 11 columns are the agreed set. The rest make the data usable: rounds, a pause-proof clock, the
+extra word, a post number to pair rows, a readable time, and the tastes as plain numbers. New columns only
+ever go at the end.
 
 ### Adding the Flask server later
 
@@ -209,7 +218,6 @@ js/logger.js          event log, CSV download, and flush(), the one exit for dat
 js/radar.js           draws the six-topic radar (on the cards and on the results screen)
 js/ui.js              screens, pop-up, scoreboard, profile cards (radar or button layout)
 js/reveal.js          the results screen: the wording (pure, tested) + the drawing
-js/guess.js           "Guess the profile", the bonus puzzle: the model and wording (pure, tested) + the drawing
 js/game.js            the conductor: clock, phases, pause, round end, logging hooks
 tests.html            open in Chrome: the model, logger and results-wording tests
 sim.html              open in Chrome: the balance simulator
@@ -232,7 +240,7 @@ the page, so the tests and the simulator can run them without a browser.
 - **`sim.html`**: the balance report described above.
 - **Terminal (optional, needs Node):** `node tests/run-node.js` and `node tests/run-node.js sim`.
 - **Real-browser check (optional, needs Node 22+ and Chrome):** `node tests/e2e.js`. It opens the actual
-  game from `file://` in a headless Chrome, plays whole rounds with robot players, and checks about 85
+  game from `file://` in a headless Chrome, plays whole rounds with robot players, and checks about 95
   things in every version (both radars, and 6 people with buttons): the tutorial's two steps, its profile
   radar and what its pop-ups say, the avatar reactions, every screen fits a short laptop
   window (and the board a 1024 × 768 one), no radar button overlaps another, the interests radar matches
@@ -279,5 +287,6 @@ the page, so the tests and the simulator can run them without a browser.
 |---|---|
 | The page is blank, or you see "needs JavaScript" | turn JavaScript on, then reload |
 | Download data does nothing | the browser or the school's settings may block downloads. Allow downloads for this page. |
+| Only one file arrived | Chrome blocked the others as "multiple downloads", and those files are lost. Before the next class, allow multiple downloads for this page (the icon at the end of the address bar, or Chrome's site settings). |
 | The cards need scrolling | the window is narrower than 1000 px or shorter than 560 px. Maximize the window, or press Ctrl + minus to zoom out. |
 | Everything is too easy or too hard | see the tuning table above, then check `sim.html` |
