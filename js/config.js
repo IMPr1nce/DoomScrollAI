@@ -136,6 +136,12 @@ DS.CONFIG = {
   // their feeds "stayed mixed", which would be false.
   REVEAL_LOW_VARIETY: 0.25,
   REVEAL_FEED_MAX: 160,       // most emoji drawn in one person's feed row (a safety cap; a normal round is far below it)
+  // The leaderboard step (before the big picture). Every round played on this laptop is a row of
+  // data/leaderboard/leaderboard.csv; the step shows the best LEADERBOARD_TOP, plus your own row if it is lower.
+  // 10 rows fit the ~445px a results step has as two columns of 5.
+  LEADERBOARD_TOP: 10,
+  GAMER_TAG_MAX: 16,          // characters. Fits a leaderboard row and a narrow card without cutting it off
+  GRADE_MAX: 12,              // characters of a typed grade ("7th", "High school"), which goes in every CSV row
 
   // --------------------------------------------------------- Game loop / screen
   MAX_FRAME_DT_SEC: 0.25,     // longest step the game loop will take at once. If the tab was

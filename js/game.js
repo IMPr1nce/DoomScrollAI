@@ -6,8 +6,12 @@
  *         |                                                        +--------+  "Play again"
  *         +---------------------------------------------------------------+  "Log out" (the next player)
  *
- * The name screen comes first but isn't a phase: nothing is played or logged there. The name only
- * names the CSV files (logger.fileName).
+ * The name screen comes first but isn't a phase: nothing is played or logged there. It asks for the
+ * player's name (it names their folder and CSV files, logger.fileName), their grade (a CSV column), a gamer
+ * tag (the leaderboard only) and, once per visit, the data folder the files are saved in (datafolder.js).
+ *
+ * Saving: each part of the session is written as soon as it ends (logger.saveFinished): the tutorial when the
+ * game starts, each round when it ends. The round's leaderboard row is saved at the same moment.
  *
  * How it fits together:
  *   vp.js      the rules (no DOM)        game.js asks it to tick and to push
@@ -66,6 +70,7 @@
   //   check     called after each tick to look for "goal reached" / "lost them" / "time's up"
   var active = null;
   var roundNo = 0;        // counts main rounds in this sitting; 0 = still in the tutorials
+  var gamerTag = '';      // from the name screen; only the leaderboard sees it (never the data rows)
 
   // The phase also goes to the logger, so every logged row says which phase and round it is from.
   // Tutorial rows are round 0 even when the tutorial is replayed after a round: they go in the tutorial's file.
@@ -386,6 +391,7 @@
   function startMain() {
     roundNo++;
     setPhase('main');
+    saveFinished();                         // the tutorial has ended: its file can be written now
     ui.hideOverlay();                       // e.g. the tutorial's "Start the game" pop-up
     ui.hideBanner();
     retire();
@@ -455,6 +461,21 @@
     });
   }
 
+  // ----------------------------------------------------------------- Saving
+  // What the big picture says about the player's files ({ where: 'folder' | 'pending' | 'failed' | 'none' }).
+  // Each call replaces it, so an older save that finishes late can't overwrite a newer answer.
+  var saving = { where: 'none' };
+  function saveFinished() {
+    if (!logger.hasFolder()) { saving = { where: 'none' }; return; }
+    var mine = saving = { where: 'pending' };
+    Promise.resolve().then(function () { return logger.saveFinished(); }).then(function () {
+      if (saving === mine) saving = { where: 'folder', folder: logger.folderName() };
+    }, function () {
+      // A failed part stays unsaved, so the next save (or "Log out") tries it again.
+      if (saving === mine) saving = { where: 'failed' };
+    });
+  }
+
   // Two ways a round ends: the timer runs out, or every VP has left.
   function endRound(reason) {
     var round = active;
@@ -475,20 +496,31 @@
     }
     updateHud();
 
+    // The round is over, so its rows may leave the log now: their hidden tastes are what the results are about
+    // to show. 'reveal' unseals the log, and the round's file is written while the banner is up.
+    setPhase('reveal');
+    saveFinished();
+    // The halves of the round are halves of the time that REALLY passed (round.elapsed),
+    // which is shorter than ROUND_SEC when everyone left early.
+    var data = DS.metrics.buildReveal(round.vps, round.elapsed);
+    // Its leaderboard row, saved now too, so the board is usually ready long before its step comes up.
+    var entry = DS.leaderboard.entry(gamerTag || 'Player', data.points, roundNo, versionLabel());
+    Promise.resolve().then(function () { return DS.leaderboard.add(entry, versionLabel()); }).then(function (board) {
+      round.board = board;
+      DS.reveal.setBoard(data, board);       // in case the results are already up
+    });
+
     // Let the player see the final board (who left, who stayed) for a moment first.
     ui.showBanner(reason === 'all_afk' ? 'Everyone left!' : 'Time\'s up!');
     setTimeout(function () {
       if (active !== round) return;          // they restarted in the meantime: drop this
       ui.hideBanner();
-      setPhase('reveal');
-      // The halves of the round are halves of the time that REALLY passed (round.elapsed),
-      // which is shorter than ROUND_SEC when everyone left early.
-      DS.reveal.show(DS.metrics.buildReveal(round.vps, round.elapsed), {
-        onDownload: function () { return logger.exportCSV(); },
+      DS.reveal.show(data, {
         onPlayAgain: startMain,
         onReplayTutorial: startTutorial1,
-        onLogOut: logOut
-      });
+        onLogOut: logOut,
+        saveStatus: function () { return saving; }
+      }, round.board);
     }, C.ROUND_END_DELAY_SEC * 1000);
   }
 
@@ -535,17 +567,36 @@
     Object.freeze(DS.VP.prototype);
     Object.freeze(DS.metrics);
     Object.freeze(DS.logger);   // flush() can't be replaced with a function that prints the records
+    Object.freeze(DS.leaderboard);
+    Object.freeze(DS.dataFolder);
     Object.freeze(DS);          // last: nobody can replace DS.rng, DS.metrics, ... with their own
   }
 
   // ---------------------------------------------------------------- Log out
   // From the results screen: the player is done, and the laptop goes to the next student. Their files are
-  // saved first (only the ones with rows not downloaded yet), because a new session starts with an empty log.
-  // Then everything about this player is forgotten: the round count, the session id and the name.
+  // saved first (the parts not saved yet; usually none, as each part saves when it ends), because a new session
+  // starts with an empty log. Then everything about this player is forgotten: the round count, the session id,
+  // the name, grade and gamer tag. The data folder stays chosen: it's the laptop's, not the player's.
   function logOut() {
-    logger.saveUnsaved();
+    var result = logger.saveUnsaved();
+    if (!result || typeof result.then !== 'function') { forgetPlayer(); return; }
+    // Writing takes a moment: nothing can be clicked meanwhile (a "Play again" would start a round that the
+    // log-out then throws away).
+    ui.showOverlay({ title: 'Saving your files…', text: 'One moment.', buttons: [] });
+    result.then(forgetPlayer, function () {
+      ui.showOverlay({
+        title: 'Could not save',
+        text: 'Your files didn\'t reach the data folder. Check that it is still there, then try again.\nOr download them instead.',
+        buttons: [{ label: 'Try again', primary: true, onClick: logOut },
+                  { label: 'Download them', onClick: function () { logger.downloadUnsaved(); forgetPlayer(); } }]
+      });
+    });
+  }
+  function forgetPlayer() {
     retire();
     roundNo = 0;
+    gamerTag = '';
+    saving = { where: 'none' };
     logger.reset();
     game.phase = 'title';
     ui.hideOverlay();
@@ -554,31 +605,76 @@
   }
 
   // ---------------------------------------------------------------- Start-up
-  // The first screen: who is playing. Both names are needed, because the teacher sorts the files by them.
-  // The check uses the CLEANED name, so "???" counts as empty instead of making a file called "_.csv".
-  var nameInputs = [];
+  // The first screen: who is playing. Everything is needed: both names (the teacher sorts the folders by them),
+  // a grade (8th, or typed), a gamer tag, and the data folder (in a browser that can write to one).
+  // The checks use the CLEANED values, so "???" counts as an empty name instead of making a folder called "_".
+  var form = null;                           // the first screen's fields, found once (askName)
+
+  function folderStatus() {
+    var folder = DS.dataFolder;
+    form.folderBtn.hidden = !folder.supported();
+    form.folderStatus.textContent = !folder.supported()
+      ? 'This browser can\'t save to a folder. Your files will download when you log out.'
+      : folder.ready() ? '✓ Saving to the data folder.' : 'Not chosen yet.';
+    form.folderStatus.classList.toggle('folder__status--ok', folder.ready());
+  }
+
   function showNameScreen() {
-    nameInputs.forEach(function (input) { input.value = ''; input.removeAttribute('aria-invalid'); });
-    document.getElementById('name-error').textContent = '';
+    [form.first, form.last, form.gradeOther, form.tag].forEach(function (input) { input.value = ''; input.removeAttribute('aria-invalid'); });
+    form.grade8.checked = false;
+    form.grade.classList.remove('grade--invalid');
+    form.error.textContent = '';
+    folderStatus();
     ui.showScreen('name');
-    nameInputs[0].focus();
+    form.first.focus();
   }
 
   function askName() {
-    var form = document.getElementById('name-form');
-    var inputs = nameInputs = [document.getElementById('name-first'), document.getElementById('name-last')];
-    var error = document.getElementById('name-error');
-    form.addEventListener('submit', function (e) {
+    var $ = function (id) { return document.getElementById(id); };
+    form = {
+      el: $('name-form'), first: $('name-first'), last: $('name-last'),
+      grade: $('grade'), grade8: $('grade-8th'), gradeOther: $('grade-other'), tag: $('gamer-tag'),
+      folderBtn: $('btn-folder'), folderStatus: $('folder-status'), error: $('name-error')
+    };
+    form.tag.maxLength = C.GAMER_TAG_MAX;
+    form.gradeOther.maxLength = C.GRADE_MAX;
+    // One grade or the other: ticking 8th clears a typed grade, and typing one unticks 8th.
+    form.grade8.addEventListener('change', function () { if (form.grade8.checked) form.gradeOther.value = ''; });
+    form.gradeOther.addEventListener('input', function () { if (form.gradeOther.value) form.grade8.checked = false; });
+
+    form.folderBtn.addEventListener('click', function () {
+      DS.dataFolder.choose().then(folderStatus, function () {
+        form.folderStatus.textContent = 'That folder can\'t be used. Pick the game\'s data folder.';
+      });
+    });
+
+    // Says what is missing (the first thing only), marks it and puts the cursor there.
+    function problem(message, focus, invalid) {
+      form.error.textContent = message;
+      (invalid || []).forEach(function (input) { input.setAttribute('aria-invalid', 'true'); });
+      focus.focus();
+    }
+
+    form.el.addEventListener('submit', function (e) {
       e.preventDefault();                    // a real submit would reload the page
-      var missing = inputs.filter(function (input) { return !logger.cleanName(input.value); });
-      inputs.forEach(function (input) { input.setAttribute('aria-invalid', String(missing.indexOf(input) !== -1)); });
-      if (missing.length) {
-        error.textContent = 'Type your first and last name.';
-        missing[0].focus();
-        return;
+      var names = [form.first, form.last];
+      var missing = names.filter(function (input) { return !logger.cleanName(input.value); });
+      [form.first, form.last, form.gradeOther, form.tag].forEach(function (input) { input.setAttribute('aria-invalid', 'false'); });
+      names.forEach(function (input) { input.setAttribute('aria-invalid', String(missing.indexOf(input) !== -1)); });
+      var grade = form.grade8.checked ? '8th' : logger.cleanGrade(form.gradeOther.value);
+      form.grade.classList.toggle('grade--invalid', !missing.length && !grade);
+      var tag = DS.leaderboard.cleanTag(form.tag.value);
+
+      if (missing.length) return problem('Type your first and last name.', missing[0]);
+      if (!grade) return problem('Tick 8th grade, or type your grade.', form.grade8, [form.gradeOther]);
+      if (!tag) return problem('Pick a gamer tag for the leaderboard.', form.tag, [form.tag]);
+      if (!DS.leaderboard.tagAllowed(tag)) return problem('Pick a different gamer tag.', form.tag, [form.tag]);
+      if (DS.dataFolder.supported() && !DS.dataFolder.ready()) {
+        return problem('Choose the data folder first (ask your teacher).', form.folderBtn);
       }
-      error.textContent = '';
-      logger.setPlayer(inputs[0].value, inputs[1].value);
+      form.error.textContent = '';
+      logger.setPlayer(form.first.value, form.last.value, grade);
+      gamerTag = tag;
       ui.showScreen('title');
       // A double-click (or a held Enter) on Continue must not land on Start and skip the title.
       ui.armGuard();

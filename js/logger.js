@@ -3,21 +3,24 @@
  *
  * The data path, start to finish:
  *
- *   game / VP events --> log*()  --> pending --> flush(batch) --> store --> exportCSV()
- *                                  (waiting)    (THE one exit)   (kept)    (a file download)
+ *   game / VP events --> log*()  --> pending --> flush(batch) --> store --> saveFinished() / saveUnsaved()
+ *                                  (waiting)    (THE one exit)   (kept)    (CSV files in the data folder)
  *
  * flush() is the ONLY function that moves data out of the logger. Today it just files the
- * batch into `store`, which is what the CSV export writes. Later, to also send every batch to
+ * batch into `store`, which is what the CSV files are written from. Later, to also send every batch to
  * a small Python/Flask server, add ONE line inside flush() (an example is in the comment
  * there). Nothing else in the game has to change, because the game never talks to the
  * network, it only ever calls log*() and flushPending().
  *
- * Privacy: a session id is a random code, and nothing in the rows is about the person playing:
- * the data describes what the pretend people did. The player's name (asked on the first screen)
- * only names the downloaded files, so the rows stay anonymous and a future server never gets it.
+ * Privacy: a session id is a random code, and the rows are about what the pretend people did. The only
+ * thing in them about the player is their grade ("8th"), which identifies nobody. The player's name (asked
+ * on the first screen) only names the files and their folder, so a future server never gets it.
  *
  * One session = one player, from the name screen to "Log out". It saves one file per part of the
- * session: Kai_Moreno_tutorial.csv, Kai_Moreno_round1.csv, Kai_Moreno_round2.csv... (see files()).
+ * session, in a folder named after the player inside the data folder (see js/datafolder.js):
+ *   data/Kai_Moreno/Kai_Moreno_tutorial.csv, Kai_Moreno_round1.csv, Kai_Moreno_round2.csv...
+ * Each part is written as soon as it ends (saveFinished). Without a data folder (a browser that can't
+ * write to one, or the dev helpers), nothing is written until "Log out", which downloads the files instead.
  */
 (function () {
   'use strict';
@@ -39,13 +42,15 @@
   //                   timestamp_ms as 1.79E+12.
   //   taste_sports... tastes_json split into one number per topic, so a spreadsheet can sort and chart them:
   //                   a line chart of taste_sports across a round shows the filter bubble forming.
+  //   grade           the player's grade from the first screen: "8th", or what they typed. The same on every row
+  //                   of a session, so a study can compare grades without knowing who anyone is.
   // New columns go at the END only, so code that reads the first ones by position keeps working.
   var COLUMNS = [
     'session_id', 'timestamp_ms', 'phase', 'vp_id', 'event', 'topic', 'liked',
     'attention_before', 'attention_after', 'fatigue_mult', 'tastes_json',
     'round_no', 'round_time_sec', 'detail',
     'post_no', 'clock_time'
-  ].concat(DS.TOPIC_IDS.map(function (id) { return 'taste_' + id; }));
+  ].concat(DS.TOPIC_IDS.map(function (id) { return 'taste_' + id; }), ['grade']);
 
   // Sortable and unique enough: local date + time + 3 random bytes, e.g. 20261004-153012-a3f9c1.
   function makeSessionId() {
@@ -66,15 +71,19 @@
     now: function () { return Date.now(); }   // replaceable, so tests can use a fake clock
   };
 
-  var session = { id: makeSessionId() };
+  // Everything that belongs to one player. "Log out" replaces the whole object instead of emptying it, so a
+  // save that finishes after the next player has started marks the OLD session's files, never the new one's.
+  //   saved   file part -> how many of its rows were in its last save
+  //   names   file part -> the name it is saved under in the folder (see folderFileName)
+  function newSession() { return { id: makeSessionId(), saved: {}, names: {} }; }
+  var session = newSession();
   // A getter, not a plain value: play mode freezes the logger, and "Log out" still has to start a new id.
   Object.defineProperty(logger, 'sessionId', { enumerable: true, get: function () { return session.id; } });
 
   var context = { phase: 'title', round: 0 };  // stamped onto every record; game.js keeps it current
-  var player = { first: '', last: '' };        // names the CSV files only (see fileName below)
+  var player = { first: '', last: '', grade: '' }; // the names name the files only (see fileName); the grade is a column
   var pending = [];                            // logged, but not yet handed to flush()
   var store = [];                              // flushed: exactly what the CSV files hold
-  var savedRows = {};                          // file part -> how many of its rows were in its last download
 
   // ---------------------------------------------------------------- Records
   function round(n, places) {
@@ -120,6 +129,7 @@
       clock_time: clockTime(now)
     };
     DS.TOPIC_IDS.forEach(function (id) { rec['taste_' + id] = f.tastes ? round(f.tastes[id], 3) : ''; });
+    rec.grade = player.grade;
     return rec;
   }
 
@@ -171,7 +181,7 @@
   // ==========================================================================
   //  flush(records)  —  the ONLY place data leaves the logger.
   //
-  //  Today: file the batch into `store`, which feeds the CSV export. Keep that line.
+  //  Today: file the batch into `store`, which the CSV files are written from. Keep that line.
   //
   //  To also send batches to the Flask server later, add (inside this function):
   //
@@ -188,7 +198,7 @@
   };
 
   // Hand everything logged since the last call to flush(). The game calls this at the end of
-  // each round, and files() calls it too, so a download is never missing recent events.
+  // each round, and files() calls it too, so a saved file is never missing recent events.
   logger.flushPending = function () {
     if (!pending.length) return;
     logger.flush(pending.splice(0, pending.length));
@@ -203,7 +213,7 @@
     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
 
-  // Pure: records in, text out. (Separate from the download so tests can check it.)
+  // Pure: records in, text out. (Separate from the saving so tests can check it.)
   logger.buildCSV = function (records) {
     var lines = [COLUMNS.join(',')];
     records.forEach(function (r) {
@@ -212,7 +222,14 @@
     return lines.join('\r\n') + '\r\n';
   };
 
-  // Replaceable, like now(), so the tests can see which files would be saved without a page.
+  // ------------------------------------------------------------------ Where the files go
+  // All four are replaceable, like now(), so the tests can catch the files without a page or a folder.
+  // writeFile and fileExists may return a value or a promise; the code below copes with both (when()), so
+  // the tests can stay synchronous while the real folder is asynchronous.
+  logger.hasFolder = function () { return !!(DS.dataFolder && DS.dataFolder.ready()); };
+  logger.writeFile = function (folder, name, text) { return DS.dataFolder.write(folder, name, text); };
+  logger.fileExists = function (folder, name) { return DS.dataFolder.exists(folder, name); };
+  // The fallback without a data folder: a normal browser download (everything lands in Downloads).
   logger.download = function (filename, text) {
     var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
     var url = URL.createObjectURL(blob);
@@ -242,18 +259,29 @@
   };
   logger.NAME_MAX = NAME_MAX;
 
-  // game.js calls this once the first screen is filled in. Both names are needed, or the files
-  // keep their anonymous names.
-  logger.setPlayer = function (first, last) {
-    player.first = logger.cleanName(first);
-    player.last = logger.cleanName(last);
+  // A typed grade goes in every row, so it is kept short and plain: no line breaks or control characters
+  // (the CSV quotes anything else). "8th" is what the checkbox gives.
+  logger.cleanGrade = function (s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/\s+/g, ' ').slice(0, DS.CONFIG.GRADE_MAX).trim();
   };
 
-  // Kai_Moreno_round1.csv, or doomscroll_<session_id>_round1.csv when there is no name (the tests, and the
-  // dev helpers, which can start a round without the first screen). `part` is 'tutorial', 'round1', 'round2'...
+  // game.js calls this once the first screen is filled in. Both names are needed, or the files
+  // keep their anonymous names.
+  logger.setPlayer = function (first, last, grade) {
+    player.first = logger.cleanName(first);
+    player.last = logger.cleanName(last);
+    player.grade = logger.cleanGrade(grade);
+  };
+
+  // The player's folder inside the data folder: Kai_Moreno, or doomscroll_<session_id> when there is no name
+  // (the tests, and the dev helpers, which can start a round without the first screen).
+  logger.folderName = function () {
+    return player.first && player.last ? player.first + '_' + player.last : 'doomscroll_' + session.id;
+  };
+  // Kai_Moreno_round1.csv. `part` is 'tutorial', 'round1', 'round2'...
   logger.fileName = function (part) {
-    var base = player.first && player.last ? player.first + '_' + player.last : 'doomscroll_' + session.id;
-    return base + (part ? '_' + part : '') + '.csv';
+    return logger.folderName() + (part ? '_' + part : '') + '.csv';
   };
 
   // Which file a row belongs in: every tutorial run (including "Try again" and a replay after a round) goes
@@ -262,9 +290,8 @@
     return rec.phase === 'main' ? 'round' + rec.round_no : 'tutorial';
   }
 
-  // The session's files, in the order they were played: [{ part, name, records }]. Empty while sealed.
-  logger.files = function () {
-    if (sealed()) return [];
+  // The session's files, in the order they were played: [{ part, name, records }].
+  function collect() {
     logger.flushPending();
     var byPart = {}, files = [];
     store.forEach(function (rec) {
@@ -276,43 +303,92 @@
       byPart[part].records.push(rec);
     });
     return files;
-  };
+  }
+  // The same, for anyone outside the logger: empty while sealed (see below).
+  logger.files = function () { return sealed() ? [] : collect(); };
 
-  function save(files) {
+  // A file has news when it has rows its last save didn't (a new round, or a tutorial replay).
+  function unsaved(files) {
+    return files.filter(function (f) { return f.records.length > (session.saved[f.part] || 0); });
+  }
+
+  // value-or-promise helpers (see "Where the files go"): when(x, fn) is fn(x), after x settles if it's a promise.
+  function when(x, fn) { return x && typeof x.then === 'function' ? x.then(fn) : fn(x); }
+  function all(xs) {
+    return xs.some(function (x) { return x && typeof x.then === 'function'; }) ? Promise.all(xs) : xs;
+  }
+
+  // The name a part is saved under in the player's folder. Usually fileName(part). If that file is already
+  // there from an EARLIER session (a student who played twice, or two students with the same name), it gets a
+  // number: "Kai_Moreno_round1 (2).csv", so a save never writes over someone's data. Decided once per part and
+  // session, so the session's own later saves (a tutorial replay) rewrite its own file.
+  function folderFileName(s, part) {
+    if (s.names[part]) return s.names[part];
+    var folder = logger.folderName(), base = logger.fileName(part).replace(/\.csv$/, '');
+    function pick(n) {
+      var name = n === 1 ? base + '.csv' : base + ' (' + n + ').csv';
+      return when(logger.fileExists(folder, name), function (taken) { return taken && n < 99 ? pick(n + 1) : name; });
+    }
+    s.names[part] = pick(1);
+    return s.names[part];
+  }
+
+  // Write each file into the player's folder, whole (a file is rewritten when its part gets more rows).
+  // The CSV text is built right away, so it is this session's data even if the writing finishes later.
+  // Returns the paths written ("Kai_Moreno/Kai_Moreno_round1.csv"), or a promise of them.
+  function saveToFolder(files) {
+    var s = session, folder = logger.folderName();
+    return all(files.map(function (f) {
+      var text = logger.buildCSV(f.records), rows = f.records.length;
+      return when(folderFileName(s, f.part), function (name) {
+        return when(logger.writeFile(folder, name, text), function () {
+          s.saved[f.part] = Math.max(s.saved[f.part] || 0, rows);
+          return folder + '/' + name;
+        });
+      });
+    }));
+  }
+  function saveAsDownloads(files) {
     files.forEach(function (f) {
       logger.download(f.name, logger.buildCSV(f.records));
-      savedRows[f.part] = f.records.length;
+      session.saved[f.part] = f.records.length;
     });
     return files.map(function (f) { return f.name; });
   }
-  // A file has news when it has rows its last download didn't (a new round, or a tutorial replay).
-  function unsaved(files) {
-    return files.filter(function (f) { return f.records.length > (savedRows[f.part] || 0); });
+
+  // The part being played right now, which must not be written yet: its rows hold the tastes of a round that
+  // is still going. null when nothing is being played.
+  function livePart() {
+    if (!sealed()) return null;
+    return context.phase === 'main' ? 'round' + context.round : 'tutorial';
   }
 
-  // The Download button: saves every file with new rows, plus the latest one even if it was saved already
-  // (so pressing the button again always gives the student their file). Returns the file names, or null
-  // if the log is sealed (see below). Several files at once can make Chrome ask "download multiple files?".
-  logger.exportCSV = function () {
-    if (sealed()) return null;
-    var files = logger.files();
-    var toSave = unsaved(files);
-    var latest = files[files.length - 1];
-    if (latest && toSave.indexOf(latest) === -1) toSave.push(latest);
-    return save(toSave);
+  // game.js calls this whenever a part has ended (a round is over, or the game starts after the tutorial):
+  // every finished part with new rows is written to the data folder. Without a folder it does nothing, and
+  // the files wait for "Log out". Returns the paths written, or a promise of them.
+  logger.saveFinished = function () {
+    if (!logger.hasFolder()) return [];
+    var live = livePart();
+    return saveToFolder(unsaved(collect()).filter(function (f) { return f.part !== live; }));
   };
 
-  // "Log out": saves only the files with new rows, so nothing the student played is lost and nothing
-  // already downloaded is downloaded twice. Returns the file names, or null if sealed.
+  // "Log out": saves every file with new rows, so nothing the student played is lost. To the data folder if
+  // there is one, otherwise as downloads (several at once can make Chrome ask "download multiple files?").
+  // Returns the names (or a promise of them), or null if the log is sealed.
   logger.saveUnsaved = function () {
     if (sealed()) return null;
-    return save(unsaved(logger.files()));
+    var files = unsaved(collect());
+    return logger.hasFolder() ? saveToFolder(files) : saveAsDownloads(files);
+  };
+  // If writing to the folder failed at "Log out", the student can still take their files as downloads.
+  logger.downloadUnsaved = function () {
+    return sealed() ? null : saveAsDownloads(unsaved(collect()));
   };
 
   // The log holds every person's HIDDEN tastes, so it stays sealed while a game is being played.
   // Otherwise a curious student could dump it from the browser console in the middle of a round
-  // and read the answers. It opens once the results screen is up, which is also the only place
-  // the Download button lives.
+  // and read the answers. It opens once the round is over. (saveFinished still writes the parts that
+  // have ended, like the tutorial while a round is being played, but never the live part.)
   function sealed() {
     return context.phase === 'tutorial1' || context.phase === 'main';
   }
@@ -325,10 +401,9 @@
   // saveUnsaved), and so do the tests.
   logger.reset = function () {
     pending.length = 0; store.length = 0;
-    Object.keys(savedRows).forEach(function (k) { delete savedRows[k]; });
     context.phase = 'title'; context.round = 0;
-    player.first = ''; player.last = '';
-    session.id = makeSessionId();
+    player.first = ''; player.last = ''; player.grade = '';
+    session = newSession();
   };
 
   // If the tab is closed or navigated away, hand over what we have. (Does nothing visible today;

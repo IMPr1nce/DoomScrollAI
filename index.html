@@ -18,14 +18,16 @@
 
     <!-- Only one .screen is visible at a time. ui.showScreen('name') shows #screen-name. -->
 
-    <!-- The first screen: who is playing. The name only names the CSV file downloaded at the end
-         (logger.fileName); it is in none of the data's rows. game.js checks it and moves on to the title.
-         autocomplete is off so a shared school laptop doesn't suggest the last student's name. -->
+    <!-- The first screen: who is playing. The name only names the player's data folder and CSV files
+         (logger.fileName); the grade is a column of the data; the gamer tag only goes on the leaderboard.
+         The data folder is chosen once per visit (the teacher does it before class; Log out keeps it).
+         game.js checks everything and moves on to the title. autocomplete is off so a shared school laptop
+         doesn't suggest the last student's name. -->
     <section id="screen-name" class="screen">
       <form id="name-form" class="title-card name-card" novalidate autocomplete="off">
         <div class="title-card__emoji" aria-hidden="true">👋</div>
         <h1>Who's playing?</h1>
-        <p class="title-card__sub">Your name goes on the data file you save at the end, so your teacher knows it's yours.</p>
+        <p class="title-card__sub">Your name labels your data files. Only your gamer tag goes on the leaderboard.</p>
         <div class="name-card__fields">
           <label class="field">
             <span class="field__label">First name</span>
@@ -35,6 +37,26 @@
             <span class="field__label">Last name</span>
             <input id="name-last" class="field__input" type="text" maxlength="20" autocomplete="off" autocapitalize="words" spellcheck="false" required>
           </label>
+        </div>
+        <div class="name-card__fields">
+          <!-- One or the other: game.js unticks 8th when a grade is typed, and clears the typed grade when 8th is ticked. -->
+          <fieldset id="grade" class="field grade">
+            <legend class="field__label">Grade</legend>
+            <div class="grade__row">
+              <label class="grade__check"><input id="grade-8th" type="checkbox"> 8th</label>
+              <input id="grade-other" class="field__input" type="text" maxlength="12" autocomplete="off" spellcheck="false"
+                     placeholder="Other grade" aria-label="Other grade">
+            </div>
+          </fieldset>
+          <label class="field">
+            <span class="field__label">Gamer tag</span>
+            <input id="gamer-tag" class="field__input" type="text" maxlength="16" autocomplete="off" spellcheck="false"
+                   placeholder="Not your real name">
+          </label>
+        </div>
+        <div class="folder">
+          <button id="btn-folder" class="btn btn--ghost" type="button">📁 Choose data folder</button>
+          <span id="folder-status" class="folder__status" aria-live="polite"></span>
         </div>
         <p id="name-error" class="name-card__error" aria-live="polite"></p>
         <button id="btn-name" class="btn btn--primary btn--big" type="submit">Continue</button>
@@ -94,7 +116,7 @@
       <div id="main-grid" class="board"></div>
     </section>
 
-    <!-- The results: a score first, then one step per person, then the big picture (reveal.js). -->
+    <!-- The results: a score first, then one step per person, the leaderboard, then the big picture (reveal.js). -->
     <section id="screen-reveal" class="screen">
       <nav id="reveal-steps" class="steps" aria-label="Results steps"></nav>
       <div id="reveal-stage" class="stage" tabindex="-1"></div>
@@ -131,6 +153,8 @@
   <script src="js/vp.js"></script>
   <script src="js/metrics.js"></script>
   <script src="js/logger.js"></script>
+  <script src="js/leaderboard.js"></script>
+  <script src="js/datafolder.js"></script>
   <script src="js/radar.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/reveal.js"></script>

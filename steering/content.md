@@ -92,10 +92,28 @@ alone, and a skip gets a quick 👆 swipe.
 - **Exploring and exploiting come back on the big-picture step:** "Exploiting = showing what you know works.
   Exploring = trying something new to learn more." The tutorial introduced them with the same words. It
   defines; it doesn't judge the player.
+- **The leaderboard says ranks as ranks, and ties as ties:** "You're #3 of 12 rounds.", "You're tied for #3 of 12
+  rounds.", "You're #1 of 12 rounds!" (only an untied #1 gets the "!"), "Yours is the first round on the board."
+  Tied rounds share a rank (1, 2, 2, 4). Its note says where the rows come from, and says so when there is no
+  data folder ("Only rounds since the game was opened…") or the file couldn't be saved. Points are explained on
+  the step: "Points = everyone's attention when the round ended. Someone who left counts as 0."
 - **Exactly three discussion questions.** The third is "If you always order your favorite food, you never find
   a new favorite. When should an app show something new?"
 - **A new outcome needs** a sentence in `DS.revealText` and a "reveal text: …" test in `tests/tests.js`.
 - **The discussion questions ask; they don't preach.**
+
+## The name screen and gamer tags
+- **The why, in one line:** "Your name labels your data files. Only your gamer tag goes on the leaderboard."
+- **Messages, the first missing thing only:** "Type your first and last name.", "Tick 8th grade, or type your
+  grade.", "Pick a gamer tag for the leaderboard.", "Pick a different gamer tag." (a refused word: never say
+  which word, or why), "Choose the data folder first (ask your teacher)."
+- **The gamer tag's placeholder says "Not your real name".** The tag is shown to the class.
+- **Refused words** live in `DS.BLOCKED_TAG_WORDS` (`content.js`): `anywhere` words are refused even inside a tag
+  and spelled around ("sh1t", "f.u_c k"), so they must never hide inside an ordinary word; `whole` words are
+  refused only as a word of their own ("ass" but not "class"). Tested both ways. It's a speed bump: the teacher
+  can delete a row from `leaderboard.csv`.
+- **The folder status:** "Not chosen yet.", "✓ Saving to the data folder.", and, in a browser without one, "This
+  browser can't save to a folder. Your files will download when you log out."
 
 ## Accessibility
 - **Emoji + words, never color alone:** topics, status chips, watched vs skipped in the feed, the +/− pills.
@@ -118,5 +136,7 @@ alone, and a skip gets a quick 👆 swipe.
 | Tutorial header and pop-ups, the "ready?" card, pause | `js/game.js` | the tutorial's key lines, per version, in `tests/e2e.js`; otherwise follow the rules by hand |
 | Card labels and status chips ("Waiting", "Needs a post!", "AFK — closed the app"), the avatar reactions | `js/ui.js` | the reactions, in `tests/e2e.js` |
 | Results labels, captions and legends | the drawing half of `js/reveal.js` | no |
+| The leaderboard's sentences, the "saved in data/…" line | `DS.revealText` in `js/reveal.js` | yes |
 | Title screen, and the name screen's labels | `index.html` | the name screen, in `tests/e2e.js` |
-| The name screen's message ("Type your first and last name.") | `askName()` in `js/game.js` | yes, in `tests/e2e.js` |
+| The name screen's messages and folder status, the Log out pop-ups | `askName()`, `folderStatus()`, `logOut()` in `js/game.js` | the messages and status, in `tests/e2e.js` |
+| Refused gamer-tag words | `DS.BLOCKED_TAG_WORDS` in `js/content.js` | yes |

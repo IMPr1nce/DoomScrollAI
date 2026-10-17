@@ -29,7 +29,8 @@
     HOOKED_WINDOW: 6, HOOKED_SHARE: 0.8, HOOKED_MESSAGE_CHANCE: 0.6,
     ENJOY_THRESHOLD: 0.45, LIKED_LOCKS_BUTTONS: true, RNG_SEED: null,
     MESSAGE_NO_REPEAT: 4, TOPIC_MESSAGE_CHANCE: 0.4, REVEAL_TREND_DELTA: 0.15, REVEAL_LOW_VARIETY: 0.25,
-    PROFILE_COUNT: 6, RADAR_SMOOTHING: 1
+    PROFILE_COUNT: 6, RADAR_SMOOTHING: 1,
+    LEADERBOARD_TOP: 10, GAMER_TAG_MAX: 16, GRADE_MAX: 12
   };
   var DEFAULTS = Object.assign(JSON.parse(JSON.stringify(C)), JSON.parse(JSON.stringify(PINNED)));
 
@@ -580,6 +581,19 @@
     eq(DS.metrics.averageAttention([]), 0);
   });
 
+  test('points: everyone\'s attention at the end, added up and rounded; someone who left counts 0', function () {
+    C.IDLE_DRAIN_PER_SEC = 0;
+    var a = makeVP(), b = makeVP(), gone = makeVP();
+    a.attention = 71.6; b.attention = 40.2;
+    DS.rng.use(DISLIKE);
+    for (var i = 0; i < 5; i++) gone.push(DS.TOPIC_IDS[i]);
+    eq(gone.state, 'afk');
+    eq(DS.metrics.points([a, b]), 112);
+    eq(DS.metrics.points([a, b, gone]), 112, 'leaving adds nothing');
+    eq(DS.metrics.points([]), 0);
+    eq(DS.metrics.buildReveal([a, b], 10).points, 112, 'the results carry the same number');
+  });
+
   test('feedSummary counts posts per topic; enjoyedTopics uses ENJOY_THRESHOLD', function () {
     var s = DS.metrics.feedSummary([
       { topic: 'sports', liked: true, t: 0 }, { topic: 'sports', liked: false, t: 1 },
@@ -857,8 +871,21 @@
     L.now = function () { return 1700000000000; };
     return L;
   }
-  var realDownload = DS.logger.download;
-  function restoreLogger() { DS.logger.now = function () { return Date.now(); }; DS.logger.download = realDownload; DS.logger.reset(); }
+  var REAL = ['download', 'hasFolder', 'writeFile', 'fileExists'].reduce(function (o, k) { o[k] = DS.logger[k]; return o; }, {});
+  function restoreLogger() {
+    DS.logger.now = function () { return Date.now(); };
+    Object.keys(REAL).forEach(function (k) { DS.logger[k] = REAL[k]; });
+    DS.logger.reset();
+  }
+  // A pretend data folder, with plain (not promise) answers, so a test reads like a story.
+  // folder.files['Kai_Moreno/Kai_Moreno_round1.csv'] = the text written there.
+  function fakeFolder(L) {
+    var folder = { files: {}, writes: [] };
+    L.hasFolder = function () { return true; };
+    L.writeFile = function (dir, name, text) { folder.files[dir + '/' + name] = text; folder.writes.push(dir + '/' + name); };
+    L.fileExists = function (dir, name) { return (dir + '/' + name) in folder.files; };
+    return folder;
+  }
   // Rows are stamped with the phase they were logged in. To READ them we move to the results screen,
   // because the log is sealed during play (see the seal test below).
   function openLog() { DS.logger.setContext({ phase: 'reveal' }); return DS.logger.stored(); }
@@ -866,6 +893,23 @@
   test('logger: the first 11 columns are exactly the agreed ones, in order', function () {
     eq(DS.logger.COLUMNS.slice(0, 11).join(','),
        'session_id,timestamp_ms,phase,vp_id,event,topic,liked,attention_before,attention_after,fatigue_mult,tastes_json');
+  });
+
+  test('logger: the grade (from the first screen) is the last column, on every row; cleaned to stay short', function () {
+    eq(DS.logger.COLUMNS[DS.logger.COLUMNS.length - 1], 'grade');
+    var L = freshLogger();
+    try {
+      L.setPlayer('Kai', 'Moreno', '8th');
+      L.setContext({ phase: 'main', round: 1 });
+      L.logGame('pause', 1); L.logGame('resume', 2);
+      L.flushPending();
+      eq(openLog().map(function (r) { return r.grade; }).join(','), '8th,8th');
+      eq(L.cleanGrade('  7th\n grade '), '7th grade', 'one line, single spaces');
+      eq(L.cleanGrade('a very very long grade'), 'a very very', 'cut at GRADE_MAX, no trailing space');
+      eq(L.cleanGrade(null), '');
+      L.reset(); L.logGame('pause', 3); L.setContext({ phase: 'reveal' }); L.flushPending();
+      eq(L.stored()[0].grade, '', 'reset() forgets the grade');
+    } finally { restoreLogger(); }
   });
 
   test('logger: a push and its watch_end become records with the right fields', function () {
@@ -897,7 +941,7 @@
 
   test('logger: the readable columns come after the agreed ones: post_no, clock_time, one taste per topic', function () {
     eq(DS.logger.COLUMNS.slice(11).join(','), 'round_no,round_time_sec,detail,post_no,clock_time,' +
-       DS.TOPIC_IDS.map(function (id) { return 'taste_' + id; }).join(','));
+       DS.TOPIC_IDS.map(function (id) { return 'taste_' + id; }).join(',') + ',grade');
     var L = freshLogger();
     try {
       L.setContext({ phase: 'main', round: 1 });
@@ -949,24 +993,91 @@
     } finally { restoreLogger(); }
   });
 
-  test('logger: Download saves what is new plus the latest file; Log out saves only what is new', function () {
+  test('logger: each part is written to data/First_Last/ once it ends, never while it is being played', function () {
+    var L = freshLogger();
+    try {
+      var folder = fakeFolder(L);
+      L.setPlayer('Kai', 'Moreno', '8th');
+      L.setContext({ phase: 'tutorial1', round: 0 }); L.logGame('pause', 1);
+      eq(L.saveFinished().length, 0, 'the tutorial is still being played: nothing is written');
+      L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 2);
+      eq(L.saveFinished().join(' '), 'Kai_Moreno/Kai_Moreno_tutorial.csv', 'the game started: the tutorial is done, round 1 is live');
+      ok(folder.files['Kai_Moreno/Kai_Moreno_tutorial.csv'].indexOf('session_id,') === 0, 'a CSV with its header');
+      L.setContext({ phase: 'reveal' });
+      eq(L.saveFinished().join(' '), 'Kai_Moreno/Kai_Moreno_round1.csv', 'the round ended: only it is new');
+      eq(L.saveFinished().length, 0, 'nothing new: nothing written again');
+      L.setContext({ phase: 'tutorial1', round: 0 }); L.logGame('pause', 3);   // a replay after the round...
+      L.setContext({ phase: 'main', round: 2 });
+      eq(L.saveFinished().join(' '), 'Kai_Moreno/Kai_Moreno_tutorial.csv', '...rewrites the tutorial file, whole');
+      eq(parseCSV(folder.files['Kai_Moreno/Kai_Moreno_tutorial.csv']).length, 3, 'header + both tutorial rows');
+    } finally { restoreLogger(); }
+  });
+
+  test('logger: without a data folder nothing is written until Log out, which downloads instead', function () {
     var L = freshLogger();
     try {
       var saved = [];
-      L.download = function (name, text) { saved.push(name); ok(text.indexOf('session_id,') === 0, 'a CSV with its header'); };
+      L.hasFolder = function () { return false; };
+      L.download = function (name) { saved.push(name); };
       L.setPlayer('Kai', 'Moreno');
-      L.setContext({ phase: 'tutorial1', round: 0 }); L.logGame('pause', 1);
-      L.setContext({ phase: 'main', round: 1 });      L.logGame('pause', 2);
+      L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 1);
       L.setContext({ phase: 'reveal' });
-      eq(L.exportCSV().join(' '), 'Kai_Moreno_tutorial.csv Kai_Moreno_round1.csv', 'the first download saves both');
-      eq(L.exportCSV().join(' '), 'Kai_Moreno_round1.csv', 'pressing again saves the latest again, not the tutorial');
-      eq(L.saveUnsaved().length, 0, 'nothing new: Log out saves nothing');
-      L.setContext({ phase: 'main', round: 2 }); L.logGame('pause', 3);   // Play again, never downloaded
+      eq(L.saveFinished().length, 0); eq(saved.length, 0);
+      eq(L.saveUnsaved().join(' '), 'Kai_Moreno_round1.csv', 'Log out downloads what was never saved');
+      eq(L.saveUnsaved().length, 0, 'and only once');
+    } finally { restoreLogger(); }
+  });
+
+  test('logger: Log out saves what is still unsaved into the folder; a failed folder can still download', function () {
+    var L = freshLogger();
+    try {
+      var folder = fakeFolder(L), downloads = [];
+      L.download = function (name) { downloads.push(name); };
+      L.setPlayer('Kai', 'Moreno');
+      L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 1);
       L.setContext({ phase: 'reveal' });
-      eq(L.saveUnsaved().join(' '), 'Kai_Moreno_round2.csv', 'Log out saves the round that was never downloaded');
+      eq(L.saveUnsaved().join(' '), 'Kai_Moreno/Kai_Moreno_round1.csv');
+      eq(L.saveUnsaved().length, 0, 'saved: nothing left');
+      L.setContext({ phase: 'main', round: 2 }); L.logGame('pause', 2); L.setContext({ phase: 'reveal' });
+      eq(L.downloadUnsaved().join(' '), 'Kai_Moreno_round2.csv', 'the fallback downloads only the unsaved file');
+      eq(folder.writes.length, 1);
       L.reset();
       eq(L.files().length, 0, 'the next player starts with an empty log');
       eq(L.fileName('round1'), 'doomscroll_' + L.sessionId + '_round1.csv', 'and without the last player\'s name');
+    } finally { restoreLogger(); }
+  });
+
+  test('logger: a file from an earlier session is never written over: "Kai_Moreno_round1 (2).csv"', function () {
+    var L = freshLogger();
+    try {
+      var folder = fakeFolder(L);
+      folder.files['Kai_Moreno/Kai_Moreno_round1.csv'] = 'an earlier Kai Moreno';
+      folder.files['Kai_Moreno/Kai_Moreno_round1 (2).csv'] = 'and another';
+      L.setPlayer('Kai', 'Moreno');
+      L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 1);
+      L.setContext({ phase: 'reveal' });
+      eq(L.saveFinished().join(' '), 'Kai_Moreno/Kai_Moreno_round1 (3).csv');
+      eq(folder.files['Kai_Moreno/Kai_Moreno_round1.csv'], 'an earlier Kai Moreno', 'untouched');
+      L.setContext({ phase: 'main', round: 1 }); L.logGame('resume', 2); L.setContext({ phase: 'reveal' });
+      eq(L.saveFinished().join(' '), 'Kai_Moreno/Kai_Moreno_round1 (3).csv', 'this session keeps rewriting its own file');
+    } finally { restoreLogger(); }
+  });
+
+  test('logger: a save that finishes after Log out marks the old session, not the next player\'s', function () {
+    var L = freshLogger();
+    try {
+      var finish = [];
+      fakeFolder(L);
+      L.writeFile = function () { return { then: function (ok) { finish.push(ok); return this; } }; };   // a slow folder
+      L.setPlayer('Kai', 'Moreno');
+      L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 1); L.setContext({ phase: 'reveal' });
+      L.saveUnsaved();
+      L.reset();                                         // the next player, before the write finished
+      finish.forEach(function (ok) { ok(); });
+      fakeFolder(L);
+      L.setPlayer('Ada', 'Lovelace');
+      L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 1); L.setContext({ phase: 'reveal' });
+      eq(L.saveFinished().join(' '), 'Ada_Lovelace/Ada_Lovelace_round1.csv', 'Ada\'s round 1 is still unsaved, so it is saved');
     } finally { restoreLogger(); }
   });
 
@@ -1062,7 +1173,8 @@
         vp.push('sports');                                  // (refused while watching; the first one is logged)
         L.flushPending();
         eq(L.stored().length, 0, 'stored() must be empty during ' + phase);
-        eq(L.exportCSV(), null, 'exportCSV() must refuse during ' + phase);   // returns before touching the page
+        eq(L.saveUnsaved(), null, 'saveUnsaved() must refuse during ' + phase);   // returns before touching the page
+        eq(L.downloadUnsaved(), null, 'downloadUnsaved() too');
       });
       ['reveal', 'title'].forEach(function (phase) {
         L.setContext({ phase: phase });
@@ -1114,6 +1226,74 @@
       ok(csv.split('\r\n').length > 2, 'the log has rows');
       ok(!/Zebedee|Quimby/.test(csv), 'the name must not be in the data');
     } finally { restoreLogger(); }
+  });
+
+  // ------------------------------------------------------------- Leaderboard
+  var LB = function () { return DS.leaderboard; };
+  var REAL_LB = ['hasFolder', 'readFile', 'writeFile'].reduce(function (o, k) { o[k] = DS.leaderboard[k]; return o; }, {});
+  function restoreBoard() { Object.keys(REAL_LB).forEach(function (k) { DS.leaderboard[k] = REAL_LB[k]; }); DS.leaderboard.resetMemory(); }
+  function boardRow(tag, points, version) { return { gamer_tag: tag, points: points, round_no: 1, version: version || 'v', played_at: '' }; }
+
+  test('leaderboard: gamer tags are cleaned, and a few words are refused, even spelled around', function () {
+    eq(LB().cleanTag('  Zebra   King\n '), 'Zebra King');
+    eq(LB().cleanTag('abcdefghijklmnopqrstuvwxyz'), 'abcdefghijklmnop', 'cut at GAMER_TAG_MAX');
+    eq(LB().cleanTag(null), '');
+    ['ZebraKing', 'Class Act', 'Grape Juice', 'Dickens Fan', 'Cocktail', 'Essex', 'Hello', 'Skill'].forEach(function (t) {
+      ok(LB().tagAllowed(t), 'should be allowed: ' + t);
+    });
+    ['shit', 'Sh1tLord', 'f.u_c k', 'BIG ASS', 'sexy_dancer', 'ass', 'kkk'].forEach(function (t) {
+      ok(!LB().tagAllowed(t), 'should be refused: ' + t);
+    });
+  });
+
+  test('leaderboard: the file reads back to the same rows (commas and quotes in a tag too); bad rows are skipped', function () {
+    var rows = [LB().entry('Zebra, "King"', 175.6, 2, 'radar-interests/2', 1700000000000), LB().entry('Owl', 0, 1, 'grid/6', 1700000000000)];
+    eq(rows[0].points, 176, 'whole points');
+    ok(/^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(rows[0].played_at), 'a readable date: ' + rows[0].played_at);
+    var text = LB().buildCSV(rows);
+    eq(text.split('\r\n')[0], 'gamer_tag,points,round_no,version,played_at');
+    var back = LB().parseCSV(text);
+    eq(JSON.stringify(back), JSON.stringify(rows));
+    // edited in a spreadsheet: columns moved, \n line endings, a blank line, a row with no points, one with no tag
+    var edited = LB().parseCSV('points,gamer_tag,round_no\n90,Ana,1\n\n,Bo,1\n50,,1\n12,Cy,2');
+    eq(edited.map(function (r) { return r.gamer_tag + ':' + r.points; }).join(' '), 'Ana:90 Cy:12');
+    eq(LB().parseCSV('').length, 0); eq(LB().parseCSV(null).length, 0);
+  });
+
+  test('leaderboard: ranked by points, ties share a rank, only this version, your row found even outside the top', function () {
+    C.LEADERBOARD_TOP = 3;
+    var mine = boardRow('Me', 50);
+    var rows = [boardRow('A', 90), boardRow('B', 70), boardRow('C', 70), boardRow('Other', 999, 'grid/6'), boardRow('D', 60), mine, boardRow('E', 50)];
+    var v = LB().view(rows, mine, 'v');
+    eq(v.top.map(function (t) { return t.rank + t.row.gamer_tag; }).join(' '), '1A 2B 2C', 'a tie shares #2; the earlier round is listed first');
+    eq(v.count, 6, 'the grid/6 round is not compared');
+    eq(v.mineInTop, false);
+    eq(v.mine.rank, 5); eq(v.mine.tied, true, 'tied with E');
+    var top = LB().view(rows, rows[0], 'v');
+    eq(top.mineInTop, true); eq(top.mine.rank, 1); eq(top.mine.tied, false);
+    eq(top.top[0].mine, true);
+  });
+
+  test('leaderboard: add() reads the file, adds the round, writes it back; without a folder it keeps this visit only', function () {
+    try {
+      var file = LB().buildCSV([boardRow('Old', 120, 'v')]), written = null;
+      DS.leaderboard.hasFolder = function () { return true; };
+      DS.leaderboard.readFile = function () { return file; };
+      DS.leaderboard.writeFile = function (text) { written = text; };
+      var mine = boardRow('Me', 150);
+      var got = LB().add(mine, 'v');
+      eq(got.saved, 'folder');
+      eq(got.view.count, 2); eq(got.view.mine.rank, 1);
+      eq(LB().parseCSV(written).map(function (r) { return r.gamer_tag; }).join(' '), 'Old Me', 'the old rows stay, the new one is added');
+      DS.leaderboard.readFile = function () { return null; };                      // no file yet
+      eq(LB().add(boardRow('First', 10), 'v').view.count, 1);
+      DS.leaderboard.readFile = function () { throw new Error('the folder is gone'); };
+      var failed = LB().add(boardRow('Lost', 10), 'v');
+      eq(failed.saved, 'failed', 'said honestly'); eq(failed.view.mine.row.gamer_tag, 'Lost', 'and the round is still shown');
+      DS.leaderboard.hasFolder = function () { return false; };
+      var a = LB().add(boardRow('X', 30), 'v');
+      eq(a.saved, 'memory'); eq(a.view.count, 2, 'this visit: Lost and X');
+    } finally { restoreBoard(); }
   });
 
   // ---------------------------------------------------- Reveal wording (reveal.js)
@@ -1231,6 +1411,19 @@
     eq(T().enjoyTile(o).value, '3.5 → 1.4');
   });
 
+  test('reveal text: the leaderboard says your rank honestly: first round, a tie, #1 and the rest', function () {
+    var v = function (rank, count, tied) { return { mine: { rank: rank, tied: !!tied }, count: count }; };
+    eq(T().boardRank(v(1, 1)), 'Yours is the first round on the board.');
+    eq(T().boardRank(v(1, 12)), 'You\'re #1 of 12 rounds!');
+    eq(T().boardRank(v(1, 12, true)), 'You\'re tied for #1 of 12 rounds.', 'a shared #1 is no win');
+    eq(T().boardRank(v(15, 16)), 'You\'re #15 of 16 rounds.');
+    eq(T().boardRank({ mine: null, count: 3 }), '');
+    ok(/no data folder/.test(T().boardNote('memory')), 'says when the board is only this visit');
+    ok(/couldn't be saved/.test(T().boardNote('failed')));
+    eq(T().savedLine({ where: 'folder', folder: 'Kai_Moreno' }), '✓ Your data is saved in data/Kai_Moreno.');
+    ok(/download when you log out/.test(T().savedLine({ where: 'none' })));
+  });
+
   test('reveal text: no he/she anywhere, and every sentence is short (8th-grade reading level)', function () {
     var pool = [];
     var vs = [{ first: 0.9, second: 0.1, trend: 'dropped' }, { first: 0, second: 0, trend: 'low' }, { first: 0.1, second: 0.9, trend: 'rose' },
@@ -1246,6 +1439,9 @@
       .forEach(function (p) { pool.push(T().feedLine(p) + ' ' + T().triedLine(p)); });
     pool.push(T().exploreDefinition);
     pool.push(T().varietyHint);
+    pool.push(T().boardHint, T().boardLoading);
+    ['folder', 'memory', 'failed'].forEach(function (x) { pool.push(T().boardNote(x)); });
+    [{ where: 'folder', folder: 'Kai_Moreno' }, { where: 'pending' }, { where: 'failed' }, { where: 'none' }].forEach(function (x) { pool.push(T().savedLine(x)); });
     T().questions.forEach(function (q) { pool.push(q); });
 
     pool.forEach(function (line) {

@@ -10,18 +10,23 @@ more and more of the same thing, and the people's tastes narrowed. That is a fil
 student made it by chasing attention. The class then talks about whether that was good for those
 people.
 
-No installs. No server. No accounts. The only thing asked of the student is their name, and it only
-names the data file.
+No installs. No server. No accounts. The student types their name (it only names their data files),
+their grade, and a gamer tag for the leaderboard.
 
 ---
 
 ## How to run it
 
 1. Open the project folder.
-2. **Double-click `index.html`.** Use Chrome if you can.
+2. **Double-click `index.html`.** Use Chrome or Edge.
+3. **Before class, choose the data folder:** on the first screen, press **📁 Choose data folder** and pick
+   the `data` folder inside the project (or the project folder itself: a `data` folder is made inside it).
+   Chrome asks once whether the page may edit files there: choose *Edit files*.
 
-That's all. It runs straight from the file, offline. You can put the folder on a USB stick, a
-shared drive, or any web host that serves static files.
+That's all. It runs straight from the file, offline. Chrome forgets the folder when the tab is closed, so
+choose it again each time you open the game (once per class: *Log out* keeps it for the next student).
+It needs Chrome or Edge: other browsers can't save to a folder, so there the files download when a student
+logs out, and the leaderboard only shows rounds since the page was opened.
 
 **Screen size:** built for a 1366 × 768 school laptop (about 600 px of page height once Chrome's
 toolbars are counted). Everyone fits on screen without scrolling in any window at least 1000 px wide
@@ -30,8 +35,10 @@ still work; the page just scrolls.
 
 ## What the student does (about 3 minutes)
 
-1. **Who's playing?** The student types their first and last name (both needed), then the **title
-   screen** → Start. The name names the data files saved at the end.
+1. **Who's playing?** The student types their first and last name, ticks **8th** (or types another grade),
+   and picks a **gamer tag** (not their real name; a few rude words are refused). All are needed, and so is
+   the data folder. Then the **title screen** → Start. The name names the student's folder and files; the
+   grade goes in the data; the gamer tag only goes on the leaderboard.
 2. **The tutorial:** one person, Alex, a brand-new user, in two named steps. The radar is Alex's
    **profile**: it starts empty, and each post Alex watches moves that topic
    out one ring (each button reads like "✓2 ✗1": watched twice, skipped once).
@@ -47,7 +54,7 @@ still work; the page just scrolls.
      who is unlucky with their first few picks may lose Alex and get *Try again*.)
 3. **The game:** two people, 30 seconds. Everyone's attention drains when you ignore them. Show each
    person posts they like. At 0 they leave for good ("AFK"). The score is *still scrolling* and
-   *average attention*. A liked post is watched for 2 seconds. After every post the person's avatar reacts:
+   *average attention*; the leaderboard's *points* are everyone's attention when time runs out, added up. A liked post is watched for 2 seconds. After every post the person's avatar reacts:
    ❤️ for a watch (with 💬 when the topic was fresh), 👆 for a skip.
    Each person's six topic buttons sit around a **radar**, with a spike pointing at each button. The
    longer the spike, the more that person is into the topic, so a glance shows what to show them. The
@@ -56,12 +63,13 @@ still work; the page just scrolls.
 4. **Results:** the score first (the win), then one screen per person: what you showed them and how many
    of the six topics you tried, how much variety they saw, and their radar twice: at the start (the one you
    played with) and at the end, usually shrunk into a single spike. That's the filter bubble, and the
-   student's own feed made it. Then the big picture: one line that names the idea ("Exploiting = showing
+   student's own feed made it. Then the **🏆 Leaderboard**: every round played on this laptop, ranked by
+   points, with the student's row marked "you". Then the big picture: one line that names the idea ("Exploiting = showing
    what you know works. Exploring = trying something new to learn more.") and three questions for the class.
    The tutorial introduced these two words; the round never uses them.
-5. **Download data, Log out or Play again** (on the big-picture step). *Play again* starts a new round.
-   *Log out* saves any of the student's files not downloaded yet, then goes back to the name screen for the
-   next student.
+5. **Log out or Play again** (on the big-picture step). The files save themselves as each part ends, and the
+   step says where. *Play again* starts a new round. *Log out* saves anything not saved yet, then goes back to
+   the name screen for the next student.
 
 Teacher tips:
 
@@ -71,7 +79,9 @@ Teacher tips:
   Compare the score and the variety numbers.
 - Switching to another tab pauses the game automatically.
 - **Sharing a laptop:** when a student is done, press **Log out** on the last results step. Their files are
-  saved, and the next student starts on an empty name screen.
+  saved, and the next student starts on an empty name screen (the data folder stays chosen).
+- **The leaderboard** is `data/leaderboard/leaderboard.csv`. To remove a rude gamer tag, delete its row in a
+  spreadsheet and save it as CSV. To start a fresh board (a new class), delete or rename the file.
 
 ### Comparing versions in a playtest
 
@@ -113,6 +123,8 @@ Edit the file, save it, reload the page.
 | **More or less luck** | `TASTE_FAVORITE` (0.95) and `TASTE_DISLIKED` (0.08): the closer to 1 and 0, the more a right choice is rewarded. `SKIP_STREAK_BREAK` (0.6): right after a skip, a topic with at least this like chance always lands, so long spikes are never skipped twice in a row (`null` = pure dice). `FATIGUE_LIKE_PENALTY` (0.02) adds a little luck back for repeated topics. |
 | The `learned` radar to **trust one lucky like less** | raise `RADAR_SMOOTHING` (1) |
 | The results screen to be **more or less strict** about calling a change real | `REVEAL_TREND_DELTA`, `REVEAL_LOW_VARIETY` |
+| **More or fewer rows** on the leaderboard | `LEADERBOARD_TOP` (10, in two columns; more may not fit a laptop screen: run `tests/e2e.js`) |
+| **Longer gamer tags** or typed grades | `GAMER_TAG_MAX` (16), `GRADE_MAX` (12) |
 
 **After you change numbers, check the balance.** Open `sim.html`. It plays hundreds of rounds with
 robot players and tells you whether the game still teaches the lesson:
@@ -144,22 +156,33 @@ Everything the game does is written to a log in the browser's memory: every post
 was liked, attention before and after, each person's tastes as they change, who left and why, pauses,
 and the start and end of each round.
 
-On the last results step, **Download data (CSV)** saves one file per part of the session, named after the
-student: `Kai_Moreno_tutorial.csv` for the tutorial (every try and replay), then `Kai_Moreno_round1.csv`,
-`Kai_Moreno_round2.csv`… for each round, so *Play again* never mixes two rounds. Each press saves every file
-with new rows, plus the latest round again. **Log out** saves whatever wasn't downloaded yet, then starts a
-fresh session for the next student. A part with no rows (a tutorial skipped before any post) has no file.
-Spaces in a name become `-`, characters a file name can't hold are dropped, and each name is cut at 20
-characters. (The log holds the people's tastes as they drift, which the player must not see until the
-end, so it can't be read or downloaded in the middle of a game, only from the results screen.)
+The game saves itself into the data folder, one file per part of the session, in a folder named after the
+student:
 
-Saving two files at once can make Chrome ask whether this page may **download multiple files**. Choose
-*Allow*: if it's blocked, the extra files are lost.
+```
+data/
+  Kai_Moreno/
+    Kai_Moreno_tutorial.csv     the tutorial (every try and replay), saved when the game starts
+    Kai_Moreno_round1.csv       each round, saved the moment it ends, so Play again never mixes two rounds
+    Kai_Moreno_round2.csv
+  leaderboard/
+    leaderboard.csv             one row per round played on this laptop
+```
 
-**Privacy:** the student's name is on the files' names only. Inside, nothing is about the player: no
-name, no account, no device information. The session id is a random code like `20261004-153012-a3f9c1`,
-and the log describes what the pretend people did. The name never leaves the laptop, and a future server
-(below) would not receive it. Closing the tab without downloading discards it all. Check your school's
+A part with no rows (a tutorial skipped before any post) has no file. Spaces in a name become `-`,
+characters a file name can't hold are dropped, and each name is cut at 20 characters. **Nothing is ever
+written over:** if a student plays again later (or two students share a name), the new files get a number,
+like `Kai_Moreno_round1 (2).csv`. (The log holds the people's tastes as they drift, which the player must not
+see until the end, so a round's file is only written once that round is over.)
+
+Without a data folder (Firefox or Safari), nothing is saved until **Log out**, which downloads the files
+instead. Chrome may then ask whether the page may **download multiple files**: choose *Allow*.
+
+**Privacy:** the student's name is on the folder and file names only. Inside, the only thing about the
+player is their grade: no name, no gamer tag, no account, no device information. The session id is a random
+code like `20261004-153012-a3f9c1`, and the log describes what the pretend people did. The gamer tag is only
+in the leaderboard file, which has no name or session id, so it can't be joined to anyone's data. Nothing
+leaves the laptop, and a future server (below) would not receive the name or the tag. Check your school's
 rules before collecting files with students' names.
 
 | Column | Meaning |
@@ -180,15 +203,20 @@ rules before collecting files with students' names.
 | `post_no` | which of this person's posts the row is about: 1, 2, 3… A `push` and its `watch_end` share it. Starts again at 1 each round. Blank on rows that aren't about a post. |
 | `clock_time` | `timestamp_ms` as a time of day on the laptop, like `15:28:44` |
 | `taste_sports` … `taste_food` | `tastes_json` split into one number per topic, so a spreadsheet can sort or chart it. A line chart of one taste across a round shows the filter bubble forming. |
+| `grade` | the student's grade from the first screen: `8th`, or what they typed. The same on every row of a session. |
 
 The first 11 columns are the agreed set. The rest make the data usable: rounds, a pause-proof clock, the
-extra word, a post number to pair rows, a readable time, and the tastes as plain numbers. New columns only
-ever go at the end.
+extra word, a post number to pair rows, a readable time, the tastes as plain numbers, and the grade. New
+columns only ever go at the end.
+
+The leaderboard file has its own columns: `gamer_tag`, `points` (everyone's attention when the round ended,
+added up; someone who left counts 0, so 0–200 with 2 people), `round_no` (the student's 1st, 2nd… round),
+`version` (rounds of different versions are ranked separately) and `played_at` (date and time).
 
 ### Adding the Flask server later
 
 Everything that leaves the logger goes through **one function**, `logger.flush(records)`, in
-`js/logger.js`. Today it files the records away for the CSV download. The game calls it at the end of
+`js/logger.js`. Today it files the records away for the CSV files. The game calls it at the end of
 each round, and when the page closes. To also send the data to a server, add one `fetch` inside that
 function (the code is written out in the comment right above it):
 
@@ -200,7 +228,7 @@ fetch('http://localhost:5000/api/log', {
 }).catch(function () { /* the game must never break because the network did */ });
 ```
 
-Keep the line that stores the records (the CSV download needs it). The Flask side needs CORS turned
+Keep the line that stores the records (the CSV files need it). The Flask side needs CORS turned
 on, because `index.html` is opened from a file, not from the server.
 
 ---
@@ -214,11 +242,14 @@ js/config.js          every tunable number and flag
 js/content.js         topics, the people (and their bio clues), every message
 js/vp.js              the person model: tastes, attention, like/skip, drift, fatigue (NO page code)
 js/metrics.js         diversity, scores, and every number on the results screen (NO page code)
-js/logger.js          event log, CSV download, and flush(), the one exit for data
+js/logger.js          event log, the CSV files, and flush(), the one exit for data
+js/leaderboard.js     the leaderboard: gamer tags, points, ranking, its CSV (NO page code)
+js/datafolder.js      the data folder the teacher chooses, where every file is saved (Chrome/Edge)
 js/radar.js           draws the six-topic radar (on the cards and on the results screen)
 js/ui.js              screens, pop-up, scoreboard, profile cards (radar or button layout)
 js/reveal.js          the results screen: the wording (pure, tested) + the drawing
 js/game.js            the conductor: clock, phases, pause, round end, logging hooks
+data/                 where the game saves: one folder per student, and leaderboard/ (not in git)
 tests.html            open in Chrome: the model, logger and results-wording tests
 sim.html              open in Chrome: the balance simulator
 tests/                tests.js, plus optional tools: run-node.js (terminal runner), e2e.js (real-Chrome check),
@@ -230,7 +261,8 @@ steering/             how the project is meant to work, for anyone changing it (
 ```
 
 Rules the code follows: plain HTML + CSS + vanilla JS; no modules, frameworks, build step or backend;
-classic `<script>` tags in dependency order sharing one global, `window.DS`; the model files never touch
+classic `<script>` tags in dependency order sharing one global, `window.DS`; the only disk access is the data
+folder the teacher picks (Chrome's File System Access API); the model files never touch
 the page, so the tests and the simulator can run them without a browser.
 
 ## Checking your work
@@ -244,8 +276,9 @@ the page, so the tests and the simulator can run them without a browser.
   things in every version (both radars, and 6 people with buttons): the tutorial's two steps, its profile
   radar and what its pop-ups say, the avatar reactions, every screen fits a short laptop
   window (and the board a 1024 × 768 one), no radar button overlaps another, the interests radar matches
-  each person and never changes mid-round, the results text is sane (no "undefined"), the CSV is
-  well-formed and says which version was played, the console doors are closed, and the frantic-click and
+  each person and never changes mid-round, the results text is sane (no "undefined"), the name screen's
+  checks, the CSV files land in the right folder, well-formed and saying which version was played, the
+  leaderboard file and step, Log out with and without a data folder, the console doors are closed, and the frantic-click and
   pause loopholes stay closed. Run it after tuning `config.js` or editing `content.js`. It takes 2–3 minutes.
 - **Developer mode:** open `index.html?dev` (add `?dev` to the file's address). This leaves the
   console handles open and loads `tests/dev-helpers.js`. In the console (F12):
@@ -286,7 +319,11 @@ the page, so the tests and the simulator can run them without a browser.
 | Problem | Fix |
 |---|---|
 | The page is blank, or you see "needs JavaScript" | turn JavaScript on, then reload |
-| Download data does nothing | the browser or the school's settings may block downloads. Allow downloads for this page. |
-| Only one file arrived | Chrome blocked the others as "multiple downloads", and those files are lost. Before the next class, allow multiple downloads for this page (the icon at the end of the address bar, or Chrome's site settings). |
+| No "Choose data folder" button | the browser can't save to a folder (Firefox, Safari). Use Chrome or Edge, or let the files download at Log out. |
+| "Choose the data folder first" | press 📁 Choose data folder and pick the project's `data` folder. Chrome forgets it when the tab closes. |
+| Chrome says it can't open that folder | it refuses some system folders (your home or Downloads folder itself). Pick the project's `data` folder. |
+| "Could not save" at Log out | the data folder was moved or deleted. Put it back and press *Try again*, or press *Download them*. |
+| Only one file arrived (no data folder) | Chrome blocked the others as "multiple downloads", and those files are lost. Allow multiple downloads for this page (the icon at the end of the address bar). |
+| A rude gamer tag on the board | delete its row from `data/leaderboard/leaderboard.csv`. |
 | The cards need scrolling | the window is narrower than 1000 px or shorter than 560 px. Maximize the window, or press Ctrl + minus to zoom out. |
 | Everything is too easy or too hard | see the tuning table above, then check `sim.html` |
