@@ -11,16 +11,19 @@ js/config.js           every tunable number and flag (DS.CONFIG)
 js/content.js          topics, the people (+ Alex for the tutorials), speech-bubble lines
 js/vp.js               the person model (DS.VP), the dice (DS.rng), createCast and createTutorialVP
 js/metrics.js          diversity, score, observed(), buildReveal(): every number the results show
-js/logger.js           the event log, the CSV, flush()
+js/logger.js           the event log, the CSV files (one per part, saved as each part ends), flush()
+js/leaderboard.js      the leaderboard: gamer tags (and the word filter), points ranking, its CSV, add()
+js/datafolder.js       the data folder the teacher picks (File System Access API): write, read, exists
 js/radar.js            radar geometry (pure) and SVG drawing
 js/ui.js               screens, pop-up, click guard, scoreboard, banner, the profile card (and its avatar reactions)
 js/reveal.js           the results screen: DS.revealText (pure wording) + DS.reveal (drawing)
-js/game.js             the conductor: loop, phases, pause, round end, playtest switches, lockdown
+js/game.js             the conductor: loop, phases, pause, round end, saving, the name screen, playtest switches, lockdown
 tests.html             the unit tests in a browser (tests/tests.js)
 sim.html, sim/sim.js   the balance simulator
 tests/run-node.js      runs the unit tests or the simulator in Node
 tests/e2e.js           the real game in headless Chrome
 tests/dev-helpers.js   DS.dev.* (dev mode only)
+data/                  where the game saves (data/First_Last/, data/leaderboard/); only README.txt is in git
 steering/              these documents
 .claude/               launch.json (the dev server) and CLAUDE.md (loads these documents)
 README.md              for teachers and the team lead: running, tuning, the data
@@ -28,8 +31,10 @@ README.md              for teachers and the team lead: running, tuning, the data
 
 ## Two layers
 - **Model** (no DOM; runs in the browser and in Node): `config`, `content`, `vp`, `metrics`, `logger`
-  (records and CSV), the geometry in `radar.js`, `DS.revealText`, and `sim/sim.js`.
-- **Page:** `ui.js`, the drawing in `radar.js` and `reveal.js`, `game.js`, `tests/dev-helpers.js`.
+  (records and CSV), `leaderboard`, the geometry in `radar.js`, `DS.revealText`, and `sim/sim.js`. The logger
+  and the leaderboard reach the disk only through replaceable functions that look up `DS.dataFolder` when called.
+- **Page:** `datafolder.js` (browser only, but no DOM), `ui.js`, the drawing in `radar.js` and `reveal.js`,
+  `game.js`, `tests/dev-helpers.js`.
 
 A file may only use what loaded before it. `reveal.js` looks up `DS.ui` when it first draws, because the
 tests load it without the page code.
@@ -51,16 +56,24 @@ tests load it without the page code.
   replaces it. One timer removes it; `destroy()` clears that timer, so a thrown-away card never runs it.
   `REACTION_*_SEC` in `config.js` reach the CSS as `--reaction-dur` and `--reaction-delay`. With
   `prefers-reduced-motion`, the duration is cut to `REACTION_STILL_SEC` and the CSS swaps in a fade in place.
-- **Round end.** `endRound()` logs `round_end`, flushes the log, shows the banner, then calls
-  `DS.reveal.show(DS.metrics.buildReveal(vps, elapsed))`. The results screen only draws: every number and
-  verdict comes from `buildReveal()`.
+- **Round end.** `endRound()` logs `round_end`, flushes the log, moves to the `reveal` phase (which unseals
+  it), saves the round's file (`saveFinished()`), builds the results (`DS.metrics.buildReveal(vps, elapsed)`) and
+  adds the round to the leaderboard (`DS.leaderboard.add()`, async). Then it shows the banner, and after it
+  `DS.reveal.show(data, handlers, board)`. The board usually arrives during the banner; if not,
+  `DS.reveal.setBoard(data, board)` fills the step in later (and drops a board meant for an older round). The
+  results screen only draws: every number and verdict comes from `buildReveal()` and `leaderboard.view()`.
+- **Saving.** `saveFinished()` in `game.js` wraps `logger.saveFinished()` and remembers the outcome in `saving`
+  (`folder`, `pending`, `failed` or `none`), which the big-picture step prints under its buttons.
 
 ## Game state
 - **Phases:** `title → tutorial1 → main → reveal`. The name screen comes before the title (`askName()` in
-  `game.js`), but it isn't a phase: nothing is played or logged there. Its Continue arms the click guard, so Start
-  is wrapped in `ui.guarded`. **Play again** goes to `main`; **Replay the tutorial** goes to `tutorial1`; **Log out**
-  (`logOut()`) saves the unsaved files (`logger.saveUnsaved()`), starts a new session (`logger.reset()`: new id,
-  empty log, no name), sets `roundNo` back to 0 and shows the name screen, empty, for the next player.
+  `game.js`), but it isn't a phase: nothing is played or logged there. It checks, in order: both names, a grade
+  (the "8th" box or a typed one), a gamer tag (`leaderboard.cleanTag` / `tagAllowed`), and the data folder (when the
+  browser has one). Its Continue arms the click guard, so Start is wrapped in `ui.guarded`. **Play again** goes to
+  `main`; **Replay the tutorial** goes to `tutorial1`; **Log out** (`logOut()`) saves the unsaved files
+  (`logger.saveUnsaved()`; a "Saving your files…" pop-up blocks clicks while it writes, and a failure offers
+  *Try again* or *Download them*), then `forgetPlayer()`: a new session (`logger.reset()`: new id, empty log, no
+  name or grade), `roundNo` 0, no gamer tag, and the name screen, empty, for the next player. The data folder stays.
 - **`active`** is whatever is being played: `vps`, `cards`, `frozen` (nothing ticks: a pop-up, the
   "ready?" card, a pause or a finished round), `paused` (only a real pause), `ended`, `elapsed`,
   `limitSec` and `check`.
@@ -120,4 +133,8 @@ It lives in two places that must agree.
 - **A speech-bubble line or category:** see [content.md](content.md#speech-bubbles).
 - **A results outcome:** decide it in `metrics.buildReveal()` (pure), word it in `DS.revealText`, and add a
   "reveal text: …" test to `tests/tests.js`.
+- **A results step:** add it in `buildSteps()` and `goTo()` in `reveal.js`, and update the step counts that
+  `tests/e2e.js` expects (the default has 5: score, 2 people, leaderboard, big picture).
+- **A leaderboard column:** add it to `leaderboard.COLUMNS` (at the end) and to `entry()`. `parseCSV()` finds
+  columns by name, so older files still read; their rows get an empty value.
 - **A log column:** add it after `detail` (never change the first 11), and add it to the README's column table.

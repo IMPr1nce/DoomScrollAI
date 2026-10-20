@@ -147,6 +147,23 @@ body.guarded .title-card .btn { opacity: 0.55; }
 .field__input[aria-invalid="true"] { border-color: var(--bad); }
 /* Always one line tall, empty or not, so the button doesn't jump when the message appears. */
 .name-card__error { min-height: 1.45em; margin: 10px 0 8px; font-size: 16px; font-weight: 700; color: var(--bad); }
+.name-card__fields + .name-card__fields { margin-top: 12px; }
+/* Grade: an "8th" checkbox beside a box for any other grade. A fieldset, so a screen reader hears "Grade" for both. */
+.grade { margin: 0; padding: 0; border: 0; }
+.grade legend { padding: 0; margin-bottom: 6px; }
+.grade__row { display: flex; gap: 10px; align-items: center; }
+.grade__check {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border: 2px solid var(--line); border-radius: 12px;
+  font-weight: 700; cursor: pointer;
+}
+.grade__check input { width: 20px; height: 20px; margin: 0; accent-color: var(--primary); }
+.grade__check:has(input:checked) { border-color: var(--primary); background: #f4f1ff; }
+.grade--invalid .grade__check, .grade--invalid .field__input { border-color: var(--bad); }
+/* The data folder: chosen once per visit, usually by the teacher. The status says it in words. */
+.folder { margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.folder__status { font-size: 16px; font-weight: 700; color: var(--muted); }
+.folder__status--ok { color: var(--good); }
 
 /* ----------------------------------------------------------------- Tutorial */
 
@@ -752,6 +769,31 @@ body.guarded .title-card .btn { opacity: 0.55; }
 .vrow__value { font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
 .vrow__count { color: var(--muted); }
 
+/* ---- The leaderboard: the top rows in two columns, your row marked "you", and one line on where you ranked. */
+.lb {
+  margin: auto; width: 100%; max-width: 1060px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 14px 28px 16px; text-align: center;
+  background: var(--card); border-radius: 28px; box-shadow: var(--shadow);
+}
+.lb__title { margin: 0; font-size: 34px; line-height: 1.15; }
+.lb__hint, .lb__note { margin: 0; font-size: 16px; color: var(--muted); }
+.lb__me { margin: 0; font-size: 20px; font-weight: 800; }
+.lb__cols { width: 100%; display: flex; justify-content: center; gap: 24px; }
+.lb__table { flex: 1; max-width: 480px; border-collapse: collapse; font-variant-numeric: tabular-nums; text-align: left; }
+.lb__table--mine { width: 100%; }
+.lb__table th { padding: 0 8px 2px; font-size: 16px; font-weight: 700; color: var(--muted); border-bottom: 2px solid var(--line); }
+.lb__table td { padding: 3px 8px; line-height: 1.3; border-bottom: 1px solid var(--line); }
+.lb__table th:nth-child(n+3), .lb__num { text-align: right; }
+.lb__rank { width: 76px; font-weight: 800; white-space: nowrap; }
+.lb__tag { font-weight: 700; overflow-wrap: anywhere; }
+.lb__num { width: 72px; }
+.lb__row--mine td { background: #fff8dc; }
+.lb__you {
+  margin-left: 8px; padding: 0 8px; border-radius: 999px;
+  background: var(--primary); color: #fff; font-size: 16px; font-weight: 800;
+}
+
 /* ---- Step 8: the big picture */
 .big {
   margin: auto; width: 100%; max-width: 1100px;
@@ -772,7 +814,8 @@ body.guarded .title-card .btn { opacity: 0.55; }
 .talk__def { margin: 2px 0 0; font-size: 18px; color: var(--muted); }    /* explore/exploit, named only here */
 .talk__list { margin: 4px 0 0; padding-left: 1.4em; font-size: 20px; }
 .talk__list li { margin: 4px 0; }
-.big__actions { grid-column: 1 / -1; display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+.big__actions { grid-column: 1 / -1; display: flex; justify-content: center; align-items: center; gap: 14px; flex-wrap: wrap; }
+.big__saved { margin: 0; font-size: 16px; font-weight: 700; color: var(--muted); }
 .big > .link-btn { grid-column: 1 / -1; justify-self: center; margin-top: 0; }
 
 /* ------------------------------------------------ Short windows (tutorial)
@@ -792,6 +835,12 @@ body.guarded .title-card .btn { opacity: 0.55; }
   .card--large .topics { margin-top: 8px; gap: 8px; }
   .card--large .topic-btn { min-height: 48px; }
   #btn-skip { margin-top: 2px; }
+  /* The name screen has five fields and the folder: without the wave and some padding it fits a 560px window. */
+  #screen-name.screen--active { padding-top: 8px; padding-bottom: 8px; }
+  .name-card { padding: 20px 40px 18px; }
+  .name-card .title-card__emoji { display: none; }
+  .name-card h1 { margin-top: 0; font-size: 38px; }
+  .name-card .title-card__sub { margin-bottom: 12px; }
 }
 
 /* ------------------------------------------------ Narrower windows, radar layout
@@ -832,6 +881,7 @@ body.guarded .title-card .btn { opacity: 0.55; }
 @media (max-width: 640px) {
   .board { grid-template-columns: 1fr; }
   .name-card__fields { flex-direction: column; }
+  .lb__cols { flex-direction: column; align-items: center; }
   .banner span { font-size: 40px; padding: 10px 24px; }
 }
 

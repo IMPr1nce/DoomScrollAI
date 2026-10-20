@@ -1,11 +1,13 @@
 /*
  * reveal.js — the results screen: the part of the game that teaches the lesson.
  *
- * It walks the player through 8 steps, one at a time:
+ * It walks the player through the steps one at a time (5 with the default 2 people):
  *
- *   1. Score         "the win": still scrolling + average attention. (They did well!)
- *   2-7. One per VP  what you showed them, how their tastes changed, how their variety changed.
- *   8. Big picture   the average story, a verdict, the question, and 3 discussion prompts.
+ *   Score            "the win": still scrolling, average attention and points. (They did well!)
+ *   One per VP       what you showed them, how their tastes changed, how their variety changed.
+ *   Leaderboard      every round on this laptop, ranked by points (leaderboard.js). Before the big
+ *                    picture, so the class discussion still comes last.
+ *   Big picture      the average story, a verdict, the question, and 3 discussion prompts.
  *
  * Two layers in this file:
  *   DS.revealText   PURE functions that turn numbers into sentences. No DOM, so tests.html can
@@ -148,6 +150,30 @@
     exploiting: 'Exploiting = showing what you know works.',
     exploreDefinition: 'Exploiting = showing what you know works. Exploring = trying something new to learn more.',
 
+    // ---- The leaderboard. `view` is DS.leaderboard.view(); ties are said as ties.
+    boardHint: 'Points = everyone\'s attention when the round ended. Someone who left counts as 0.',
+    boardLoading: 'Loading the leaderboard…',
+    boardRank: function (view) {
+      if (!view.mine) return '';
+      if (view.count === 1) return 'Yours is the first round on the board.';
+      return 'You\'re ' + (view.mine.tied ? 'tied for ' : '') + '#' + view.mine.rank + ' of ' + view.count + ' rounds' +
+             (view.mine.rank === 1 && !view.mine.tied ? '!' : '.');
+    },
+    // Says where the rounds come from, because without a data folder the board is only this visit's.
+    boardNote: function (saved) {
+      if (saved === 'folder') return 'Rounds played on this laptop.';
+      if (saved === 'memory') return 'Only rounds since the game was opened: no data folder was chosen.';
+      return 'The leaderboard file couldn\'t be saved, so only rounds since the game was opened are shown.';
+    },
+
+    // ---- Where the player's files are, under the big picture's buttons. `s` = { where, folder } from game.js.
+    savedLine: function (s) {
+      if (s.where === 'folder') return '✓ Your data is saved in data/' + s.folder + '.';
+      if (s.where === 'pending') return 'Saving your data…';
+      if (s.where === 'failed') return 'Saving to the data folder failed. Log out will try again.';
+      return 'No data folder: your files download when you log out.';
+    },
+
     questions: [
       'Did anyone\'s feed get narrower? What did you do that caused it?',
       'The game only gave you points for attention. What did it never reward?',
@@ -196,11 +222,14 @@
     }
     var still = h('strong', 'bigstat__value');
     var avg = h('strong', 'bigstat__value');
+    var pts = h('strong', 'bigstat__value');
     stats.appendChild(stat('still scrolling', still));
     stats.appendChild(stat('average attention', avg));
+    stats.appendChild(stat('points', pts));         // what the leaderboard ranks (metrics.points)
     box.appendChild(stats);
     countUp(still, data.stillScrolling, function (n) { return n + ' / ' + data.total; });
     countUp(avg, Math.round(data.averageAttention), String);
+    countUp(pts, data.points, String);
 
     // Who stayed and who left, at a glance. Words, not just color.
     var row = h('ul', 'chips');
@@ -416,7 +445,50 @@
     return wrap;
   }
 
-  // ---- Step 8: the big picture
+  // ---- The leaderboard: the best rounds on this laptop, and where this one landed. The top rows sit in two
+  // columns (1-5, 6-10), because ten rows one under the other don't fit the ~445px a results step has. Your row
+  // is marked "you" in words (not only a color), and gets a line of its own underneath when it isn't in the top.
+  var MEDALS = ['🥇', '🥈', '🥉'];
+  function boardTable(rows, withHead) {
+    var table = h('table', 'lb__table' + (withHead ? '' : ' lb__table--mine'));
+    if (withHead) {
+      var head = h('tr');
+      ['Rank', 'Gamer tag', 'Points', 'Round'].forEach(function (t) { head.appendChild(h('th', null, t)); });
+      table.appendChild(h('thead')).appendChild(head);
+    }
+    var body = table.appendChild(h('tbody'));
+    rows.forEach(function (t) {
+      var tr = h('tr', t.mine ? 'lb__row lb__row--mine' : 'lb__row');
+      tr.appendChild(h('td', 'lb__rank', (MEDALS[t.rank - 1] ? MEDALS[t.rank - 1] + ' ' : '') + t.rank));
+      var tag = h('td', 'lb__tag', t.row.gamer_tag);
+      if (t.mine) tag.appendChild(h('span', 'lb__you', 'you'));
+      tr.appendChild(tag);
+      tr.appendChild(h('td', 'lb__num', String(t.row.points)));
+      tr.appendChild(h('td', 'lb__num', String(t.row.round_no)));
+      body.appendChild(tr);
+    });
+    return table;
+  }
+  function renderBoard() {
+    var box = h('div', 'lb');
+    box.appendChild(h('h2', 'lb__title', '🏆 Leaderboard'));
+    box.appendChild(h('p', 'lb__hint', text.boardHint));
+    var board = state.board;
+    if (!board) { box.appendChild(h('p', 'lb__note', text.boardLoading)); return box; }
+
+    var half = Math.ceil(C.LEADERBOARD_TOP / 2);
+    var cols = h('div', 'lb__cols');
+    for (var i = 0; i < board.view.top.length; i += half) cols.appendChild(boardTable(board.view.top.slice(i, i + half), true));
+    box.appendChild(cols);
+    if (board.view.mine && !board.view.mineInTop) {
+      box.appendChild(boardTable([{ rank: board.view.mine.rank, row: board.view.mine.row, mine: true }], false));
+    }
+    box.appendChild(h('p', 'lb__me', text.boardRank(board.view)));
+    box.appendChild(h('p', 'lb__note', text.boardNote(board.saved)));
+    return box;
+  }
+
+  // ---- The big picture
   // Left: the two averages and the verdict. Right: questions for the class. Bottom: the buttons.
   function renderBig(data) {
     var box = h('div', 'big');
@@ -446,15 +518,8 @@
     box.appendChild(talk);
 
     var actions = h('div', 'big__actions');
-    var dl = h('button', 'btn btn--ghost btn--big', '⬇ Download data (CSV)');
-    dl.type = 'button';
-    dl.addEventListener('click', ui.guarded(function () {
-      var names = state.handlers.onDownload();         // null if the log refused (it is sealed during play)
-      dl.textContent = !names ? 'Could not save. Try again.'
-                     : names.length === 1 ? '✓ Saved ' + names[0]
-                     : '✓ Saved ' + names.length + ' files';
-      setTimeout(function () { dl.textContent = '⬇ Download data (CSV)'; }, 3000);
-    }));
+    // The files save themselves when each part ends, so there is no Download button: this line says where they are.
+    actions.appendChild(h('p', 'big__saved', text.savedLine(state.handlers.saveStatus())));
     // The player is done: save their files and hand the laptop to the next student (the name screen).
     var out = h('button', 'btn btn--ghost btn--big', '🚪 Log out');
     out.type = 'button';
@@ -462,7 +527,6 @@
     var again = h('button', 'btn btn--primary btn--big', '▶ Play again');
     again.type = 'button';
     again.addEventListener('click', ui.guarded(function () { state.handlers.onPlayAgain(); }));
-    actions.appendChild(dl);
     actions.appendChild(out);
     actions.appendChild(again);
     box.appendChild(actions);
@@ -480,6 +544,7 @@
     data.vps.forEach(function (p, i) {
       steps.push({ kind: 'vp', index: i, label: p.avatar + ' ' + p.name, short: p.name, gone: p.gone });
     });
+    steps.push({ kind: 'board', label: '🏆 Leaderboard', short: 'Leaderboard' });
     steps.push({ kind: 'big', label: 'Big picture', short: 'Big picture' });
     return steps;
   }
@@ -514,6 +579,7 @@
     var stage = ui.$('reveal-stage');
     stage.innerHTML = '';
     stage.appendChild(st.kind === 'score' ? renderScore(state.data)
+                    : st.kind === 'board' ? renderBoard()
                     : st.kind === 'big'   ? renderBig(state.data)
                     :                       renderVP(state.data.vps[st.index]));
     stage.classList.remove('stage--in');
@@ -534,14 +600,23 @@
 
   // ---------------------------------------------------------------------- Public
   // data: DS.metrics.buildReveal(...)
-  // handlers: { onDownload() -> file names, onPlayAgain(), onReplayTutorial(), onLogOut() }
-  reveal.show = function (data, handlers) {
+  // handlers: { onPlayAgain(), onReplayTutorial(), onLogOut(), saveStatus() -> { where, folder } }
+  // board: { view, saved } from DS.leaderboard.add(), or null while it is still being saved (see setBoard)
+  reveal.show = function (data, handlers, board) {
     ui = DS.ui;
-    state = { data: data, handlers: handlers, steps: buildSteps(data), step: 0 };
+    state = { data: data, handlers: handlers, board: board || null, steps: buildSteps(data), step: 0 };
     ui.showScreen('reveal');
     ui.armGuard();                       // the player's last frantic clicks must not skip the score
     renderStepper();
     goTo(0);
+  };
+
+  // The leaderboard is read from and written to a file, so it can arrive after the screen is up. `data` says
+  // which round it belongs to: a board that arrives after "Play again" is dropped.
+  reveal.setBoard = function (data, board) {
+    if (!state || state.data !== data) return;
+    state.board = board;
+    if (state.steps[state.step].kind === 'board') goTo(state.step);
   };
 
   reveal.init = function () {

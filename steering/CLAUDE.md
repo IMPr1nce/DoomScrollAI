@@ -42,12 +42,13 @@ Paths in backticks are relative to the project root.
 - **Play-mode lockdown:** unless `?dev` / `DEV_MODE`, `game.js` freezes `DS`, `DS.CONFIG`, `DS.rng`,
   `DS.metrics`, `DS.logger` and `VP.prototype`, and leaves out `DS.game.current`. So game code must never
   write to `DS.CONFIG` at runtime. (`tests.html` and `sim.html` don't load `game.js`, so they can.)
-- **The log is sealed during play:** `logger.stored()` and `files()` are `[]` and `exportCSV()` is `null` during the
+- **The log is sealed during play:** `logger.stored()` and `files()` are `[]` and `saveUnsaved()` is `null` during the
   tutorials and the round, because the log holds the drifting tastes. Tests read it through `openLog()`.
+  `saveFinished()` may run during play but never writes the live part; `endRound()` moves to `reveal` first.
 - **Tests pin their own config** (`PINNED` in `tests/tests.js`), so tuning never breaks them. A new key that
   a test depends on goes into `PINNED`.
-- **Layout budgets:** the board fits windows at least 1001px wide and about 560px tall; each results step
-  must fit about 445px. `tests/e2e.js` and `DS.dev.measureReveal()` check this.
+- **Layout budgets:** the board and the name screen fit windows at least 1001px wide and about 560px tall; each results
+  step must fit about 445px (the leaderboard's 10 rows only fit as two columns). `tests/e2e.js` and `DS.dev.measureReveal()` check this.
 - **The radar lives in two places that must agree:** `js/radar.js` and the `.radar` rules in
   `css/style.css` ([structure.md](structure.md#the-radar)).
 - **Words have rules** (results must be honest; no he/she; sentences of 24 words or fewer; speech bubbles
@@ -60,8 +61,14 @@ Paths in backticks are relative to the project root.
   ([balance.md](balance.md)).
 - **The first 11 CSV columns are the agreed set.** Add new ones at the end. Everything leaves through
   `logger.flush()`. Each session saves one file per part: the tutorial, then each round (`logger.files()`).
-- **The player's name only names the CSV files** (`logger.fileName(part)`). Never put it in a row or a column: the rows
-  are what a future server receives.
+- **The player's name only names the folder and CSV files** (`logger.folderName()`, `logger.fileName(part)`). Never put it
+  in a row or a column: the rows are what a future server receives. The **gamer tag** is only in the leaderboard
+  file, never in the rows; the **grade** is the last column.
+- **Saving is async, the tests are not.** The logger's and leaderboard's file functions may return a value or a
+  promise (`when()`); tests replace them with plain functions (`fakeFolder()`, `FAKE_FOLDER` in `tests/e2e.js`).
+  A save that finishes after Log out must touch only its own session object, never `logger.reset()`'s new one.
+- **Never write over a student's file:** a part's folder name is picked once per session (`folderFileName()`), adding
+  ` (2)` when an earlier session left the same name.
 - When editing a file with a script, **don't slice by a comment string that appears twice** (it once
   clobbered half of `reveal.js`). Prefer exact multi-line edits, then re-run the tests.
 
@@ -94,4 +101,7 @@ Paths in backticks are relative to the project root.
 - 2026-10-15: "Guess the profile" removed; **Log out** on the big-picture step saves the unsaved files and starts
   a new session on the name screen. One CSV per part (`Kai_Moreno_tutorial.csv`, `Kai_Moreno_round1.csv`…), and
   new columns at the end: `post_no`, `clock_time`, `taste_<topic>` ([tech.md](tech.md#data-and-logging)).
-- Not built, by design: the Flask endpoint (one `fetch` in `logger.flush`), sound, accounts.
+- 2026-10-17: the name screen asks for a grade (8th or typed) and a gamer tag; the files save themselves into a
+  `data` folder the teacher picks (`data/First_Last/…`, Chrome's folder picker, no Download button); a 🏆 Leaderboard
+  step before the big picture ranks every round on the laptop by points (`data/leaderboard/leaderboard.csv`).
+- Not built, by design: the Flask endpoint (one `fetch` in `logger.flush`), sound, accounts, a class-wide leaderboard.

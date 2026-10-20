@@ -118,6 +118,30 @@ var TUTORIAL_TEXTS = "(async function () {" +
   "out.all = out.intro.concat(out.between, [out.win, out.left]).map(function (p) { return p.title + ' ' + p.text; }).join(' ') + ' ' + out.head1 + ' ' + out.head2;" +
   "return out; })()";
 
+// A pretend data folder: Chrome's folder picker can't be clicked in a headless browser, so the page gets an
+// in-memory folder with the same methods (getDirectoryHandle, getFileHandle, createWritable, getFile).
+// The game's real code (datafolder.js) then writes into it: window.__fs.dirs.data.dirs.Zebedee_Quimby.files.
+var FAKE_FOLDER = "(function () {" +
+  "function Dir(name) { this.name = name; this.kind = 'directory'; this.dirs = {}; this.files = {}; }" +
+  "function nf() { var e = new Error('not found'); e.name = 'NotFoundError'; return e; }" +
+  "Dir.prototype.getDirectoryHandle = async function (n, o) { if (!this.dirs[n]) { if (!(o && o.create)) throw nf(); this.dirs[n] = new Dir(n); } return this.dirs[n]; };" +
+  "Dir.prototype.getFileHandle = async function (n, o) { var self = this; if (!(n in this.files)) { if (!(o && o.create)) throw nf(); this.files[n] = ''; }" +
+  "  return { name: n, kind: 'file', getFile: async function () { return new Blob([self.files[n]]); }," +
+  "    createWritable: async function () { var buf = ''; return { write: async function (t) { buf += t; }, close: async function () { self.files[n] = buf; } }; } }; };" +
+  "window.__fs = new Dir('DoomScrollAI');" +
+  "window.showDirectoryPicker = async function () { return window.__fs; };" +
+  "})();";
+
+// Through the first screen, as a student would (the folder chosen first, as the teacher would).
+function signIn(first, last, grade, tag) {
+  return "(async function () { var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+    "if (!window.__fs) { " + FAKE_FOLDER + " } if (!DS.dataFolder.ready()) { document.getElementById('btn-folder').click(); await sleep(100); }" +
+    "document.getElementById('name-first').value = " + JSON.stringify(first) + "; document.getElementById('name-last').value = " + JSON.stringify(last) + ";" +
+    (grade === '8th' ? "document.getElementById('grade-8th').checked = true;" : "document.getElementById('grade-other').value = " + JSON.stringify(grade) + ";") +
+    "document.getElementById('gamer-tag').value = " + JSON.stringify(tag) + "; document.getElementById('btn-name').click(); await sleep(100);" +
+    "return document.body.dataset.screen; })()";
+}
+
 // ===================================================================== The checks
 async function main() {
   var chromePath = findChrome();
@@ -140,31 +164,50 @@ async function main() {
     var goals = await b.eval("[].slice.call(document.querySelectorAll('ul.goals li')).map(function (l) { return l.textContent.trim(); })");
     check('sim.html: all balance goals pass', goals.length >= 6 && goals.every(function (g) { return g.charAt(0) === '✔'; }), goals.join(' | '));
 
-    // ---- 1b. The first screen asks who is playing. Both names are needed (a name that cleans to nothing counts as
-    // missing), the name only names the CSV, and a double-click on Continue can't land on Start.
+    // ---- 1b. The first screen asks who is playing: both names (a name that cleans to nothing counts as missing), a
+    // grade (8th, or typed), a gamer tag (a few words refused), and the data folder. The name only names the files,
+    // and a double-click on Continue can't land on Start.
     b.problems.length = 0;
     await b.goto(ROOT + 'index.html');
     var who = await b.eval("(async function () {" +
       "var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
-      "var first = document.getElementById('name-first'), last = document.getElementById('name-last'), go = document.getElementById('btn-name');" +
-      "var err = function () { return document.getElementById('name-error').textContent; };" +
-      "var out = { screen: document.body.dataset.screen, focused: document.activeElement === first, fits: document.documentElement.scrollHeight <= innerHeight };" +
+      "var $ = function (id) { return document.getElementById(id); };" +
+      "var first = $('name-first'), last = $('name-last'), go = $('btn-name'), g8 = $('grade-8th'), other = $('grade-other'), tag = $('gamer-tag');" +
+      "var err = function () { return $('name-error').textContent; };" +
+      "var out = { screen: document.body.dataset.screen, focused: document.activeElement === first, fits: document.documentElement.scrollHeight <= innerHeight," +
+      "  folderStatus: $('folder-status').textContent, folderButton: !$('btn-folder').hidden };" +
       "go.click(); await sleep(50); out.empty = { screen: document.body.dataset.screen, error: err(), invalid: first.getAttribute('aria-invalid') + ' ' + last.getAttribute('aria-invalid'), focused: document.activeElement === first };" +
       "first.value = '  Mary   Ann '; last.value = '???'; go.click(); await sleep(50);" +
       "out.junk = { screen: document.body.dataset.screen, invalid: first.getAttribute('aria-invalid') + ' ' + last.getAttribute('aria-invalid'), focused: document.activeElement === last };" +
       "last.value = \"O'Brien\"; go.click(); await sleep(50);" +
-      "out.done = { screen: document.body.dataset.screen, error: err(), file: DS.logger.fileName(), startFocused: document.activeElement === document.getElementById('btn-start') };" +
-      "document.getElementById('btn-start').click(); await sleep(50); out.doubleClickHeld = document.body.dataset.screen === 'title';" +
-      "await sleep(600); document.getElementById('btn-start').click(); await sleep(150); out.started = document.body.dataset.screen;" +
+      "out.noGrade = { screen: document.body.dataset.screen, error: err(), marked: $('grade').classList.contains('grade--invalid'), focused: document.activeElement === g8 };" +
+      "other.value = '7th'; other.dispatchEvent(new Event('input')); g8.click(); out.tickClears = other.value === '' && g8.checked;" +
+      "other.value = 'High school'; other.dispatchEvent(new Event('input')); out.typeUnticks = !g8.checked; g8.click();" +
+      "go.click(); await sleep(50); out.noTag = { error: err(), focused: document.activeElement === tag, invalid: tag.getAttribute('aria-invalid') };" +
+      "tag.value = 'Sh1t Happens'; go.click(); await sleep(50); out.rude = err();" +
+      "tag.value = 'Mango Tango'; go.click(); await sleep(50); out.noFolder = { screen: document.body.dataset.screen, error: err() };" +
+      FAKE_FOLDER + " $('btn-folder').click(); await sleep(100); out.chosen = $('folder-status').textContent;" +
+      "go.click(); await sleep(50);" +
+      "out.done = { screen: document.body.dataset.screen, error: err(), file: DS.logger.fileName(), folder: DS.logger.folderName(), startFocused: document.activeElement === $('btn-start') };" +
+      "$('btn-start').click(); await sleep(50); out.doubleClickHeld = document.body.dataset.screen === 'title';" +
+      "await sleep(600); $('btn-start').click(); await sleep(150); out.started = document.body.dataset.screen;" +
       "return out; })()");
-    check('name screen: the game opens on it, with the first name ready to type, and it fits the window',
-          who.screen === 'name' && who.focused && who.fits, JSON.stringify(who));
+    check('name screen: the game opens on it, with the first name ready to type, the folder not chosen yet, and it fits the window',
+          who.screen === 'name' && who.focused && who.fits && who.folderButton && who.folderStatus === 'Not chosen yet.', JSON.stringify(who));
     check('name screen: Continue with no name stays put, says why and marks both boxes',
           who.empty.screen === 'name' && who.empty.error === 'Type your first and last name.' && who.empty.invalid === 'true true' && who.empty.focused, JSON.stringify(who.empty));
     check('name screen: a last name of only "???" counts as missing',
           who.junk.screen === 'name' && who.junk.invalid === 'false true' && who.junk.focused, JSON.stringify(who.junk));
-    check('name screen: both names lead to the title, and the CSV will be called Mary-Ann_O\'Brien.csv',
-          who.done.screen === 'title' && who.done.error === '' && who.done.file === "Mary-Ann_O'Brien.csv" && who.done.startFocused, JSON.stringify(who.done));
+    check('name screen: a grade is needed (8th, or typed); ticking 8th clears a typed grade, and typing one unticks 8th',
+          who.noGrade.screen === 'name' && who.noGrade.error === 'Tick 8th grade, or type your grade.' && who.noGrade.marked && who.noGrade.focused &&
+          who.tickClears && who.typeUnticks, JSON.stringify([who.noGrade, who.tickClears, who.typeUnticks]));
+    check('name screen: a gamer tag is needed, and a rude one is refused (even spelled with a 1)',
+          who.noTag.error === 'Pick a gamer tag for the leaderboard.' && who.noTag.focused && who.noTag.invalid === 'true' &&
+          who.rude === 'Pick a different gamer tag.', JSON.stringify([who.noTag, who.rude]));
+    check('name screen: the data folder must be chosen first; then everything leads to the title, files in Mary-Ann_O\'Brien/',
+          who.noFolder.screen === 'name' && who.noFolder.error === 'Choose the data folder first (ask your teacher).' &&
+          who.chosen === '✓ Saving to the data folder.' && who.done.screen === 'title' && who.done.error === '' &&
+          who.done.file === "Mary-Ann_O'Brien.csv" && who.done.folder === "Mary-Ann_O'Brien" && who.done.startFocused, JSON.stringify([who.noFolder, who.chosen, who.done]));
     check('name screen: a double-click on Continue doesn\'t land on Start; a later click starts the tutorial',
           who.doubleClickHeld && who.started === 'tutorial', JSON.stringify(who));
     check('name screen: no console errors', b.problems.length === 0, b.problems.join(' | '));
@@ -178,11 +221,14 @@ async function main() {
       "try { DS.rng.use(function () { return 0; }); out.diceSwapped = true; } catch (e) { out.diceSwapped = false; }" +
       "document.getElementById('btn-start').click();" +
       "var hijacked = false; try { DS.logger.flush = function () { hijacked = true; }; } catch (e) {} DS.logger.flushPending();" +
-      "out.logSealed = DS.logger.stored().length === 0 && DS.logger.exportCSV() === null; out.flushHeld = !hijacked; out.tutorial = document.body.dataset.screen;" +
+      "try { DS.leaderboard.add = function () {}; } catch (e) {} try { DS.dataFolder.write = function () {}; } catch (e) {}" +
+      "out.boardHeld = Object.isFrozen(DS.leaderboard) && Object.isFrozen(DS.dataFolder);" +
+      "out.logSealed = DS.logger.stored().length === 0 && DS.logger.saveUnsaved() === null; out.flushHeld = !hijacked; out.tutorial = document.body.dataset.screen;" +
       "return out; })()");
     check('play mode: no console handle to the live game or dev helpers', play.hasCurrent === 'undefined' && play.hasDev === 'undefined', JSON.stringify(play));
     check('play mode: settings and dice are frozen', play.configHeld && !play.diceSwapped, JSON.stringify(play));
     check('play mode: the log (it holds hidden tastes) is sealed and flush() cannot be hijacked', play.logSealed && play.flushHeld, JSON.stringify(play));
+    check('play mode: the leaderboard and the data folder cannot be swapped out', play.boardHeld, JSON.stringify(play));
     check('play mode: the game still starts', play.tutorial === 'tutorial', JSON.stringify(play));
     check('play mode: no console errors', b.problems.length === 0, b.problems.join(' | '));
 
@@ -325,8 +371,8 @@ async function main() {
     }
     b.problems.length = 0;
     await b.goto(ROOT + 'index.html?dev=1'); await sleep(400);
-    // Through the first screen, as a student would: the CSV downloaded in section 5 is named after this player.
-    await b.eval("document.getElementById('name-first').value = 'Zebedee'; document.getElementById('name-last').value = 'Quimby'; document.getElementById('btn-name').click();");
+    // Through the first screen, as a student would: the CSV files checked in section 5 are named after this player.
+    await b.eval(signIn('Zebedee', 'Quimby', '8th', 'Zeb the Great'));
     await sleep(600);                    // the click guard on Start
     var radar = await runBoard();
     check('radar board: 2 people side by side, each with a radar of 6 buttons, that fits the window',
@@ -404,8 +450,8 @@ async function main() {
       var phase = await b.eval("DS.dev.play({ bot: '" + bot + "' })");
       check('round with the "' + bot + '" bot ends on the results screen', phase === 'reveal', phase);
       var steps = await b.eval("DS.dev.measureReveal()");
-      check('  every results step (score, each person, big picture) fits a 600px-tall window (' + bot + ')',
-            steps.length === radar.cards + 2 && steps.every(function (s) { return /fits$/.test(s); }), steps.join(' | '));
+      check('  every results step (score, each person, leaderboard, big picture) fits a 600px-tall window (' + bot + ')',
+            steps.length === radar.cards + 3 && steps.every(function (s) { return /fits$/.test(s); }), steps.join(' | '));
       // Every sentence on every step must be real text: no "undefined", "NaN", "null" or "[object".
       var texts = await b.eval("(async function () { var out = []; var st = [].slice.call(document.querySelectorAll('#reveal-steps .step'));" +
         "for (var k = 0; k < st.length; k++) { st[k].click(); await new Promise(function (r) { setTimeout(r, 250); }); out.push(document.getElementById('reveal-stage').innerText); } return out; })()");
@@ -418,7 +464,10 @@ async function main() {
             /Exploiting = showing what you know works\. Exploring = trying something new to learn more\./.test(bigText) && questions === 3 &&
             /When should an app show something new\?/.test(bigText) && others.every(function (t) { return !/explor|exploit/i.test(t); }),
             questions + ' questions; ' + bigText.slice(0, 200));
-      var personSteps = texts.slice(1, -1);
+      var personSteps = texts.slice(1, -2), boardText = texts[texts.length - 2];
+      check('  the leaderboard step ranks this round under the gamer tag, says what points are, and where you ranked (' + bot + ')',
+            /🏆 Leaderboard/.test(boardText) && /Zeb the Great\s*you/.test(boardText) && /Points = everyone's attention/.test(boardText) &&
+            /You're (tied for )?#\d+ of \d+ rounds|Yours is the first round/.test(boardText) && /Rounds played on this laptop\./.test(boardText), boardText.slice(0, 300));
       if (bot === 'none') check('  nobody was shown anything, so no step says "You tried" (none)', texts.every(function (t) { return !/You tried/.test(t); }), personSteps.join(' ... ').slice(0, 200));
       else check('  each person\'s step says how many topics you tried (' + bot + ')',
                  personSteps.every(function (t) { return /You tried (all \d+|\d+ of \d+) topics( before \w+ left)?\./.test(t); }), personSteps.join(' ... ').slice(0, 300));
@@ -429,8 +478,8 @@ async function main() {
       }
     }
 
-    // ---- 5. The CSV files that the real Download button produces: one per part of the session (the tutorial,
-    // then each round), all named after the player. Downloads are caught instead of saved.
+    // ---- 5. The CSV files the game saved by itself into the data folder: one per part of the session (the
+    // tutorial, then each round), all in data/Zebedee_Quimby/, plus the leaderboard file.
     var CATCH = "var saved = [], oc = URL.createObjectURL, ok = HTMLAnchorElement.prototype.click, blobs = {};" +
       "URL.createObjectURL = function (x) { blobs.last = x; return oc.call(URL, x); };" +
       "HTMLAnchorElement.prototype.click = function () { saved.push({ name: this.download, blob: blobs.last }); };" +
@@ -441,51 +490,78 @@ async function main() {
       "var press = function (re) { [].slice.call(document.querySelectorAll('.big__actions .btn')).filter(function (x) { return re.test(x.textContent); })[0].click(); };";
     var csv = await b.eval("(async function () {" + CATCH +
       "await bigStep(); var order = [].slice.call(document.querySelectorAll('.big__actions .btn')).map(function (x) { return x.textContent; });" +
-      "press(/Download data/); await sleep(50); var label = document.querySelector('.big__actions .btn').textContent;" +
-      "return { files: await release(), order: order, label: label, session: DS.logger.sessionId, columns: DS.logger.COLUMNS }; })()");
+      "var data = window.__fs.dirs.data, mine = data.dirs.Zebedee_Quimby;" +
+      "var files = Object.keys(mine.files).map(function (n) { return { name: n, text: mine.files[n] }; });" +
+      "return { files: files, folders: Object.keys(data.dirs), order: order, savedLine: document.querySelector('.big__saved').textContent," +
+      "  board: data.dirs.leaderboard.files['leaderboard.csv'], downloads: (await release()).length, session: DS.logger.sessionId, columns: DS.logger.COLUMNS }; })()");
     var names = csv.files.map(function (f) { return f.name; });
-    check('results: the big picture\'s buttons are Download, Log out and Play again (no "Guess the profile")',
-          csv.order.length === 3 && /Download/.test(csv.order[0]) && /Log out/.test(csv.order[1]) && /Play again/.test(csv.order[2]), JSON.stringify(csv.order));
+    check('results: the big picture\'s buttons are Log out and Play again (no Download: the files save themselves), and it says where',
+          csv.order.length === 2 && /Log out/.test(csv.order[0]) && /Play again/.test(csv.order[1]) &&
+          csv.savedLine === '✓ Your data is saved in data/Zebedee_Quimby.' && csv.downloads === 0, JSON.stringify([csv.order, csv.savedLine]));
+    check('data folder: one folder per player and one for the leaderboard', csv.folders.join(' ') === 'Zebedee_Quimby leaderboard', csv.folders.join(' '));
     // This run skipped the tutorial before any post, so it has no tutorial file (an empty part saves nothing).
-    // The unit tests cover the tutorial's file.
+    // The unit tests cover the tutorial's file. Rounds thrown away by a restart are saved too: their rows are data.
     check('CSV: one file per round, in order, named after the player (Zebedee_Quimby_round1.csv); no empty tutorial file',
           names.length >= 3 && names.every(function (n, k) { return n === 'Zebedee_Quimby_round' + (k + 1) + '.csv'; }), names.join(' '));
-    check('CSV: the button says how many files it saved', csv.label === '✓ Saved ' + names.length + ' files', csv.label);
     var allRows = [];
     csv.files.forEach(function (f) {
       var lines = f.text.trim().split('\r\n');
       var rows = lines.slice(1).map(function (l) { return l.split(','); });   // tastes_json has commas, so read only the columns before it
       allRows = allRows.concat(rows);
-      f.ok = lines[0] === csv.columns.join(',') && rows.length > 0 && !/Zebedee|Quimby/.test(f.text) &&
-             rows.every(function (r) { return r[0] === csv.session; }) &&
+      f.ok = lines[0] === csv.columns.join(',') && rows.length > 0 && !/Zebedee|Quimby|Zeb the Great/.test(f.text) &&
+             rows.every(function (r) { return r[0] === csv.session && r[r.length - 1] === '8th'; }) &&
              (f.name.indexOf('tutorial') !== -1 ? rows.every(function (r) { return r[2] === 'tutorial1'; })
                                                 : rows.every(function (r) { return r[2] === 'main'; }));
     });
-    check('CSV: every file has the header, one session id, only its own part\'s rows, and never the player\'s name',
+    check('CSV: every file has the header, one session id, the grade on every row, only its own part\'s rows, and never the name or gamer tag',
           csv.files.every(function (f) { return f.ok; }), csv.files.filter(function (f) { return !f.ok; }).map(function (f) { return f.name; }).join(' '));
     check('CSV: has rows for pushes, round starts and round ends', ['push', 'round_start', 'round_end'].every(function (e) { return allRows.some(function (r) { return r[4] === e; }); }), 'missing an event type');
     var round1 = csv.files[1].text;
     check('CSV: round_start rows say which version was played ("radar-interests/2")',
           /round_start/.test(round1) && round1.split('\r\n').filter(function (l) { return /,round_start,/.test(l); }).every(function (l) { return /,radar-interests\/2,/.test(l); }),
           round1.split('\r\n').filter(function (l) { return /,round_start,/.test(l); }).slice(0, 2).join(' | '));
-    check('CSV: a watch_end row says which topic ended, and the readable columns are filled in (post_no, clock_time, taste_*)',
-          /,watch_end,[a-z]+,,[\d.]+,[\d.]+,,"\{.*\}",\d+,[\d.]+,complete,\d+,\d\d:\d\d:\d\d(,[\d.]+){6}\r\n/.test(round1), round1.split('\r\n').filter(function (l) { return /watch_end/.test(l); })[0]);
+    check('CSV: a watch_end row says which topic ended, and the readable columns are filled in (post_no, clock_time, taste_*, grade)',
+          /,watch_end,[a-z]+,,[\d.]+,[\d.]+,,"\{.*\}",\d+,[\d.]+,complete,\d+,\d\d:\d\d:\d\d(,[\d.]+){6},8th\r\n/.test(round1), round1.split('\r\n').filter(function (l) { return /watch_end/.test(l); })[0]);
+    var boardRows = csv.board.trim().split('\r\n');
+    check('leaderboard file: one row per finished round (gamer tag, points, round, version, date), and no real name',
+          boardRows[0] === 'gamer_tag,points,round_no,version,played_at' && boardRows.length - 1 === bots.length &&
+          boardRows.slice(1).every(function (l) { return /^Zeb the Great,\d+,\d+,radar-interests\/2,\d{4}-\d\d-\d\d \d\d:\d\d$/.test(l); }) &&
+          !/Zebedee|Quimby/.test(csv.board), csv.board);
 
-    // ---- 5b. Log out: saves only what wasn't downloaded yet (a new round), then the next player starts from
-    // an empty name screen with a fresh session.
+    // ---- 5b. Log out: the files are already saved, so nothing is downloaded; the next player starts from an empty name
+    // screen with a fresh session, and the data folder stays chosen (it belongs to the laptop).
     await b.eval("DS.dev.play({ bot: 'spam' })");
     var logout = await b.eval("(async function () {" + CATCH +
       "var before = DS.logger.sessionId; await bigStep(); await sleep(600); press(/Log out/); await sleep(300);" +
-      "var out = { files: (await release()).map(function (f) { return f.name; }), screen: document.body.dataset.screen," +
-      "  empty: document.getElementById('name-first').value === '' && document.getElementById('name-last').value === ''," +
-      "  focused: document.activeElement === document.getElementById('name-first'), newSession: DS.logger.sessionId !== before," +
+      "var $ = function (id) { return document.getElementById(id); };" +
+      "var out = { downloads: (await release()).length, screen: document.body.dataset.screen, rounds: Object.keys(window.__fs.dirs.data.dirs.Zebedee_Quimby.files).length," +
+      "  empty: ['name-first', 'name-last', 'grade-other', 'gamer-tag'].every(function (id) { return $(id).value === ''; }) && !$('grade-8th').checked," +
+      "  folderKept: DS.dataFolder.ready() && $('folder-status').textContent === '✓ Saving to the data folder.'," +
+      "  focused: document.activeElement === $('name-first'), newSession: DS.logger.sessionId !== before," +
       "  anonymous: /^doomscroll_/.test(DS.logger.fileName('round1')), log: DS.logger.counts().stored + DS.logger.counts().pending };" +
-      "document.getElementById('name-first').value = 'Ada'; document.getElementById('name-last').value = 'Lovelace'; document.getElementById('btn-name').click();" +
-      "await sleep(100); out.next = document.body.dataset.screen + ' ' + DS.logger.fileName('round1'); return out; })()");
-    check('log out: saves only the round that was never downloaded', logout.files.length === 1 && /^Zebedee_Quimby_round\d+\.csv$/.test(logout.files[0]), JSON.stringify(logout.files));
-    check('log out: back to an empty name screen, with a new session and an empty log',
-          logout.screen === 'name' && logout.empty && logout.focused && logout.newSession && logout.anonymous && logout.log === 0, JSON.stringify(logout));
+      "out.next = await " + signIn('Ada', 'Lovelace', '7th', 'Countess') + "; out.next += ' ' + DS.logger.fileName('round1'); return out; })()");
+    check('log out: nothing to download (every round saved itself), and the round played last is in the folder',
+          logout.downloads === 0 && logout.rounds === csv.files.length + 1, JSON.stringify(logout));
+    check('log out: back to an empty name screen, with a new session and an empty log; the data folder stays chosen',
+          logout.screen === 'name' && logout.empty && logout.folderKept && logout.focused && logout.newSession && logout.anonymous && logout.log === 0, JSON.stringify(logout));
     check('log out: the next player\'s files carry the new name', logout.next === 'title Ada_Lovelace_round1.csv', logout.next);
+
+    // ---- 5c. Without a data folder (a browser that can't write to one, or the dev helpers): nothing is written during
+    // play, the results say so, the leaderboard holds only this visit, and Log out downloads the files instead.
+    await b.goto(ROOT + 'index.html?dev=1'); await sleep(300);
+    await b.eval("DS.dev.play({ bot: 'spam' })");
+    var nofolder = await b.eval("(async function () {" + CATCH +
+      "var st = [].slice.call(document.querySelectorAll('#reveal-steps .step')); st[st.length - 2].click(); await sleep(500);" +
+      "var out = { board: document.querySelector('.lb__note').textContent }; await bigStep(); out.savedLine = document.querySelector('.big__saved').textContent;" +
+      "await sleep(600); press(/Log out/); await sleep(300); out.files = (await release()).map(function (f) { return f.name; }); out.screen = document.body.dataset.screen; return out; })()");
+    check('no data folder: the results say the files download at Log out, and the board is only this visit',
+          /No data folder/.test(nofolder.savedLine) && /no data folder was chosen/.test(nofolder.board), JSON.stringify(nofolder));
+    check('no data folder: Log out downloads the round, then shows the name screen',
+          nofolder.files.length === 1 && /^doomscroll_[\da-f-]+_round1\.csv$/.test(nofolder.files[0]) && nofolder.screen === 'name', JSON.stringify(nofolder));
+    // The loopholes below run with a data folder, as in class.
+    await b.goto(ROOT + 'index.html?dev=1'); await sleep(300);
+    await b.eval(signIn('Zebedee', 'Quimby', '8th', 'Zeb the Great'));
+    await sleep(600);
 
     // ---- 6. Loopholes: frantic clicks, the pause state machine, stale timers
     var loop = await b.eval("(async function () {" +
@@ -537,7 +613,7 @@ async function main() {
     check('learned radar: a push updates that topic\'s count and draws its spike', learned.countAfterPush === '1/1' && learned.spikesAfterPush === 1, JSON.stringify(learned));
     var learnedEnd = await b.eval("(async function () { var out = {}; out.phase = await DS.dev.play({ bot: 'learner' }); out.steps = await DS.dev.measureReveal(); return out; })()");
     check('learned radar: the round ends on a results screen whose steps all fit',
-          learnedEnd.phase === 'reveal' && learnedEnd.steps.length === 4 && learnedEnd.steps.every(function (s) { return /fits$/.test(s); }), JSON.stringify(learnedEnd));
+          learnedEnd.phase === 'reveal' && learnedEnd.steps.length === 5 && learnedEnd.steps.every(function (s) { return /fits$/.test(s); }), JSON.stringify(learnedEnd));
     var learnedWords = await b.eval(TUTORIAL_TEXTS);
     check('learned radar: the tutorial is the same two steps on the profile radar, and its win pop-up never promises filled-in radars',
           learnedWords.intro.length === 4 && learnedWords.intro[2].title === "This is Alex's Interest radar!" && learnedWords.between.length === 2 &&
@@ -566,8 +642,8 @@ async function main() {
       "out.phase = await DS.dev.play({ bot: 'learner' }); out.steps = await DS.dev.measureReveal(); return out; })()");
     check('six-person grid: 6 cards, grid buttons with stars, fits the window, nothing clipped',
           six.cards === 6 && six.radarCards === 0 && six.stars === 6 && six.fits && six.clipped === 0, JSON.stringify(six));
-    check('six-person grid: the round ends on a results screen whose 8 steps all fit',
-          six.phase === 'reveal' && six.steps.length === 8 && six.steps.every(function (s) { return /fits$/.test(s); }), JSON.stringify(six.steps));
+    check('six-person grid: the round ends on a results screen whose 9 steps all fit',
+          six.phase === 'reveal' && six.steps.length === 9 && six.steps.every(function (s) { return /fits$/.test(s); }), JSON.stringify(six.steps));
     var gridWords = await b.eval(TUTORIAL_TEXTS);
     check('six-person grid: the tutorial\'s two steps talk about the buttons\' counts, never a radar, and promise no filled-in radars',
           gridWords.intro[2].title === 'These are the topics' && gridWords.between.length === 2 && /You explored: random topics/.test(gridWords.win.text) &&

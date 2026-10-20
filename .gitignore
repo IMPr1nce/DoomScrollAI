@@ -1,0 +1,3 @@
+# Students' data stays on the laptop: everything the game saves in data/, except the note that explains it.
+data/*
+!data/README.txt

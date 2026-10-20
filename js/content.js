@@ -207,3 +207,15 @@ DS.TOPIC_MESSAGES = {
     disliked: ['Not hungry right now.', 'I don\'t like that dish.', 'Not my kind of food.', 'Skip the recipe.']
   }
 };
+
+// ------------------------------------------------------------- Gamer tags
+// A gamer tag is shown to everyone on the leaderboard, so a few words are refused (leaderboard.tagAllowed).
+// It's a speed bump, not a full filter: the teacher can still delete a row from data/leaderboard/leaderboard.csv.
+// The tag is checked with spaces, dots and digits-as-letters removed ("f.u_c k", "sh1t"), so:
+//   anywhere  refused even inside a longer tag. Only words that never hide inside an ordinary word.
+//   whole     refused only as a word of their own, because they DO hide in ordinary words ("class", "grape").
+DS.BLOCKED_TAG_WORDS = {
+  anywhere: ['fuck', 'shit', 'bitch', 'cunt', 'nigg', 'faggot', 'whore', 'slut', 'porn', 'penis', 'vagina',
+             'dildo', 'pussy', 'asshole', 'bastard', 'wank', 'twat', 'retard', 'nazi', 'hitler', 'boob', 'sexy'],
+  whole: ['ass', 'sex', 'rape', 'cum', 'cock', 'dick', 'fag', 'kkk', 'tits', 'hoe', 'kys']
+};

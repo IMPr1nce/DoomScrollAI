@@ -77,6 +77,13 @@
     return sum / vps.length;
   }
 
+  // The leaderboard's points: everyone's attention when the round ended, added up. Someone who left counts 0
+  // (their attention is 0), so keeping everyone matters as much as keeping them high. Whole numbers, because a
+  // board of "176.43" reads as a measurement, not a score.
+  function points(vps) {
+    return Math.round(vps.reduce(function (sum, vp) { return sum + (vp.state === 'afk' ? 0 : vp.attention); }, 0));
+  }
+
   // ------------------------------------------------------- Reveal helpers
   // "You showed Maya 14 posts. 12 were Sports."
   function feedSummary(history) {
@@ -192,6 +199,7 @@
       total: vps.length,
       stillScrolling: stillScrolling(vps),
       averageAttention: averageAttention(vps),
+      points: points(vps),
       vps: people,
       overall: {
         varietyFirst: first,                   // null when nobody has both halves
@@ -210,6 +218,7 @@
     diversityByHalf: diversityByHalf,
     stillScrolling: stillScrolling,
     averageAttention: averageAttention,
+    points: points,
     feedSummary: feedSummary,
     enjoyedTopics: enjoyedTopics,
     observed: observed,
