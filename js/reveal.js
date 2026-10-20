@@ -159,10 +159,10 @@
       return 'You\'re ' + (view.mine.tied ? 'tied for ' : '') + '#' + view.mine.rank + ' of ' + view.count + ' rounds' +
              (view.mine.rank === 1 && !view.mine.tied ? '!' : '.');
     },
-    // Says where the rounds come from, because without a data folder the board is only this visit's.
+    // Says where the rounds come from, because without the saving program the board is only this visit's.
     boardNote: function (saved) {
       if (saved === 'folder') return 'Rounds played on this laptop.';
-      if (saved === 'memory') return 'Only rounds since the game was opened: no data folder was chosen.';
+      if (saved === 'memory') return 'Only rounds since the game was opened: the saving program wasn\'t running.';
       return 'The leaderboard file couldn\'t be saved, so only rounds since the game was opened are shown.';
     },
 
@@ -170,8 +170,8 @@
     savedLine: function (s) {
       if (s.where === 'folder') return '✓ Your data is saved in data/' + s.folder + '.';
       if (s.where === 'pending') return 'Saving your data…';
-      if (s.where === 'failed') return 'Saving to the data folder failed. Log out will try again.';
-      return 'No data folder: your files download when you log out.';
+      if (s.where === 'failed') return 'Saving failed: is the saving program still running? Log out will try again.';
+      return 'The saving program isn\'t running, so nothing is saved yet. Log out will try again.';
     },
 
     questions: [

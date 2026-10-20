@@ -160,10 +160,9 @@ body.guarded .title-card .btn { opacity: 0.55; }
 .grade__check input { width: 20px; height: 20px; margin: 0; accent-color: var(--primary); }
 .grade__check:has(input:checked) { border-color: var(--primary); background: #f4f1ff; }
 .grade--invalid .grade__check, .grade--invalid .field__input { border-color: var(--bad); }
-/* The data folder: chosen once per visit, usually by the teacher. The status says it in words. */
-.folder { margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
-.folder__status { font-size: 16px; font-weight: 700; color: var(--muted); }
-.folder__status--ok { color: var(--good); }
+/* Whether the saving program (server.py) is running, in words: green with a ✓ once it answers. */
+.server-status { margin: 12px 0 0; font-size: 16px; font-weight: 700; color: var(--muted); }
+.server-status--ok { color: var(--good); }
 
 /* ----------------------------------------------------------------- Tutorial */
 
@@ -835,7 +834,7 @@ body.guarded .title-card .btn { opacity: 0.55; }
   .card--large .topics { margin-top: 8px; gap: 8px; }
   .card--large .topic-btn { min-height: 48px; }
   #btn-skip { margin-top: 2px; }
-  /* The name screen has five fields and the folder: without the wave and some padding it fits a 560px window. */
+  /* The name screen has five fields and the status line: without the wave and some padding it fits a 560px window. */
   #screen-name.screen--active { padding-top: 8px; padding-bottom: 8px; }
   .name-card { padding: 20px 40px 18px; }
   .name-card .title-card__emoji { display: none; }

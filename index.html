@@ -20,7 +20,7 @@
 
     <!-- The first screen: who is playing. The name only names the player's data folder and CSV files
          (logger.fileName); the grade is a column of the data; the gamer tag only goes on the leaderboard.
-         The data folder is chosen once per visit (the teacher does it before class; Log out keeps it).
+         The status line says whether the saving program (server.py) is running: it writes every file.
          game.js checks everything and moves on to the title. autocomplete is off so a shared school laptop
          doesn't suggest the last student's name. -->
     <section id="screen-name" class="screen">
@@ -54,10 +54,7 @@
                    placeholder="Not your real name">
           </label>
         </div>
-        <div class="folder">
-          <button id="btn-folder" class="btn btn--ghost" type="button">📁 Choose data folder</button>
-          <span id="folder-status" class="folder__status" aria-live="polite"></span>
-        </div>
+        <p id="server-status" class="server-status" aria-live="polite"></p>
         <p id="name-error" class="name-card__error" aria-live="polite"></p>
         <button id="btn-name" class="btn btn--primary btn--big" type="submit">Continue</button>
       </form>
@@ -144,9 +141,9 @@
   </div>
 
   <!--
-    Classic scripts, in dependency order. No ES modules, so this works when you double-click
-    the file (file://). Model first (no DOM), then the logger, then the screen code, and last
-    the game that wires them together.
+    Classic scripts, in dependency order, sharing one global (window.DS). No ES modules and no build step:
+    server.py serves these files as they are. Model first (no DOM), then the logger, then the screen code,
+    and last the game that wires them together.
   -->
   <script src="js/config.js"></script>
   <script src="js/content.js"></script>

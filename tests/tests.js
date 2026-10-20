@@ -43,6 +43,11 @@
   function eq(actual, expected, msg) {
     if (actual !== expected) fail((msg || 'not equal') + ': expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
   }
+  function throws(fn, msg) {
+    var threw = false;
+    try { fn(); } catch (e) { threw = true; }
+    if (!threw) fail((msg || 'expected an error') + ': nothing was thrown');
+  }
   function approx(actual, expected, eps, msg) {
     if (typeof actual !== 'number' || Math.abs(actual - expected) > (eps === undefined ? 1e-6 : eps)) {
       fail((msg || 'not close') + ': expected ~' + expected + ', got ' + actual);
@@ -871,13 +876,13 @@
     L.now = function () { return 1700000000000; };
     return L;
   }
-  var REAL = ['download', 'hasFolder', 'writeFile', 'fileExists'].reduce(function (o, k) { o[k] = DS.logger[k]; return o; }, {});
+  var REAL = ['hasFolder', 'writeFile', 'fileExists'].reduce(function (o, k) { o[k] = DS.logger[k]; return o; }, {});
   function restoreLogger() {
     DS.logger.now = function () { return Date.now(); };
     Object.keys(REAL).forEach(function (k) { DS.logger[k] = REAL[k]; });
     DS.logger.reset();
   }
-  // A pretend data folder, with plain (not promise) answers, so a test reads like a story.
+  // A pretend saving program (server.py), with plain (not promise) answers, so a test reads like a story.
   // folder.files['Kai_Moreno/Kai_Moreno_round1.csv'] = the text written there.
   function fakeFolder(L) {
     var folder = { files: {}, writes: [] };
@@ -1013,34 +1018,40 @@
     } finally { restoreLogger(); }
   });
 
-  test('logger: without a data folder nothing is written until Log out, which downloads instead', function () {
+  test('logger: without the saving program nothing is written as parts end; Log out still tries it, and nothing downloads', function () {
     var L = freshLogger();
     try {
-      var saved = [];
-      L.hasFolder = function () { return false; };
-      L.download = function (name) { saved.push(name); };
+      var folder = fakeFolder(L);
+      L.hasFolder = function () { return false; };            // the name screen's check got no answer
       L.setPlayer('Kai', 'Moreno');
       L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 1);
       L.setContext({ phase: 'reveal' });
-      eq(L.saveFinished().length, 0); eq(saved.length, 0);
-      eq(L.saveUnsaved().join(' '), 'Kai_Moreno_round1.csv', 'Log out downloads what was never saved');
+      eq(L.saveFinished().length, 0); eq(folder.writes.length, 0);
+      eq(L.saveUnsaved().join(' '), 'Kai_Moreno/Kai_Moreno_round1.csv', 'Log out asks the saving program anyway: it may be back');
       eq(L.saveUnsaved().length, 0, 'and only once');
+      eq([typeof L.download, typeof L.downloadUnsaved].join(' '), 'undefined undefined', 'there is no download fallback');
     } finally { restoreLogger(); }
   });
 
-  test('logger: Log out saves what is still unsaved into the folder; a failed folder can still download', function () {
+  test('logger: a failed save keeps every row; the next try (Log out\'s "Try again") saves them', function () {
     var L = freshLogger();
     try {
-      var folder = fakeFolder(L), downloads = [];
-      L.download = function (name) { downloads.push(name); };
+      var folder = fakeFolder(L), working = L.writeFile, asking = L.fileExists;
+      var down = function () { throw new Error('the saving program stopped'); };
       L.setPlayer('Kai', 'Moreno');
       L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 1);
       L.setContext({ phase: 'reveal' });
       eq(L.saveUnsaved().join(' '), 'Kai_Moreno/Kai_Moreno_round1.csv');
       eq(L.saveUnsaved().length, 0, 'saved: nothing left');
       L.setContext({ phase: 'main', round: 2 }); L.logGame('pause', 2); L.setContext({ phase: 'reveal' });
-      eq(L.downloadUnsaved().join(' '), 'Kai_Moreno_round2.csv', 'the fallback downloads only the unsaved file');
-      eq(folder.writes.length, 1);
+      L.fileExists = down;                                   // stopped before round 2's name was picked...
+      throws(function () { L.saveUnsaved(); }, 'the failure reaches game.js, which shows "Could not save"');
+      L.fileExists = asking; L.writeFile = down;             // ...and, once back, stopped again mid-write
+      throws(function () { L.saveUnsaved(); });
+      eq(L.files().length, 2, 'both rounds are still in the log');
+      L.writeFile = working;
+      eq(L.saveUnsaved().join(' '), 'Kai_Moreno/Kai_Moreno_round2.csv', 'the retry saves only the unsaved round');
+      eq(folder.writes.join(' '), 'Kai_Moreno/Kai_Moreno_round1.csv Kai_Moreno/Kai_Moreno_round2.csv');
       L.reset();
       eq(L.files().length, 0, 'the next player starts with an empty log');
       eq(L.fileName('round1'), 'doomscroll_' + L.sessionId + '_round1.csv', 'and without the last player\'s name');
@@ -1173,8 +1184,7 @@
         vp.push('sports');                                  // (refused while watching; the first one is logged)
         L.flushPending();
         eq(L.stored().length, 0, 'stored() must be empty during ' + phase);
-        eq(L.saveUnsaved(), null, 'saveUnsaved() must refuse during ' + phase);   // returns before touching the page
-        eq(L.downloadUnsaved(), null, 'downloadUnsaved() too');
+        eq(L.saveUnsaved(), null, 'saveUnsaved() must refuse during ' + phase);   // returns before touching the disk
       });
       ['reveal', 'title'].forEach(function (phase) {
         L.setContext({ phase: phase });
@@ -1418,10 +1428,11 @@
     eq(T().boardRank(v(1, 12, true)), 'You\'re tied for #1 of 12 rounds.', 'a shared #1 is no win');
     eq(T().boardRank(v(15, 16)), 'You\'re #15 of 16 rounds.');
     eq(T().boardRank({ mine: null, count: 3 }), '');
-    ok(/no data folder/.test(T().boardNote('memory')), 'says when the board is only this visit');
+    ok(/saving program wasn't running/.test(T().boardNote('memory')), 'says when the board is only this visit');
     ok(/couldn't be saved/.test(T().boardNote('failed')));
     eq(T().savedLine({ where: 'folder', folder: 'Kai_Moreno' }), '✓ Your data is saved in data/Kai_Moreno.');
-    ok(/download when you log out/.test(T().savedLine({ where: 'none' })));
+    ok(/saving program isn't running/.test(T().savedLine({ where: 'none' })) && /Log out will try again/.test(T().savedLine({ where: 'failed' })));
+    ok(!/download/i.test([T().savedLine({ where: 'none' }), T().savedLine({ where: 'failed' }), T().boardNote('memory')].join(' ')), 'nothing downloads now');
   });
 
   test('reveal text: no he/she anywhere, and every sentence is short (8th-grade reading level)', function () {

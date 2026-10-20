@@ -5,6 +5,7 @@ breaking the rules in [tech.md](tech.md).
 
 ## Layout
 ```
+server.py              the saving program (Python 3, standard library): serves the game, writes data/<folder>/<file>.csv
 index.html             every screen (name, title, tutorial, main, reveal), the pop-up and the banner; scripts at the bottom
 css/style.css          all styling; colors are variables at the top
 js/config.js           every tunable number and flag (DS.CONFIG)
@@ -13,7 +14,7 @@ js/vp.js               the person model (DS.VP), the dice (DS.rng), createCast a
 js/metrics.js          diversity, score, observed(), buildReveal(): every number the results show
 js/logger.js           the event log, the CSV files (one per part, saved as each part ends), flush()
 js/leaderboard.js      the leaderboard: gamer tags (and the word filter), points ranking, its CSV, add()
-js/datafolder.js       the data folder the teacher picks (File System Access API): write, read, exists
+js/datafolder.js       talks to server.py (same-site fetch): check, write, read, exists
 js/radar.js            radar geometry (pure) and SVG drawing
 js/ui.js               screens, pop-up, click guard, scoreboard, banner, the profile card (and its avatar reactions)
 js/reveal.js           the results screen: DS.revealText (pure wording) + DS.reveal (drawing)
@@ -21,11 +22,11 @@ js/game.js             the conductor: loop, phases, pause, round end, saving, th
 tests.html             the unit tests in a browser (tests/tests.js)
 sim.html, sim/sim.js   the balance simulator
 tests/run-node.js      runs the unit tests or the simulator in Node
-tests/e2e.js           the real game in headless Chrome
+tests/e2e.js           the real game and server.py in headless Chrome (a temporary data folder)
 tests/dev-helpers.js   DS.dev.* (dev mode only)
-data/                  where the game saves (data/First_Last/, data/leaderboard/); only README.txt is in git
+data/                  where server.py saves (data/First_Last/, data/leaderboard/); only README.txt is in git
 steering/              these documents
-.claude/               launch.json (the dev server) and CLAUDE.md (loads these documents)
+.claude/               launch.json (runs server.py) and CLAUDE.md (loads these documents)
 README.md              for teachers and the team lead: running, tuning, the data
 ```
 
@@ -33,6 +34,8 @@ README.md              for teachers and the team lead: running, tuning, the data
 - **Model** (no DOM; runs in the browser and in Node): `config`, `content`, `vp`, `metrics`, `logger`
   (records and CSV), `leaderboard`, the geometry in `radar.js`, `DS.revealText`, and `sim/sim.js`. The logger
   and the leaderboard reach the disk only through replaceable functions that look up `DS.dataFolder` when called.
+- **The saving program** (`server.py`, outside the browser): serves the files and writes the CSVs. It knows nothing
+  about the game: the logger decides every name, and the server only checks that a path is `data/<folder>/<file>.csv`.
 - **Page:** `datafolder.js` (browser only, but no DOM), `ui.js`, the drawing in `radar.js` and `reveal.js`,
   `game.js`, `tests/dev-helpers.js`.
 
@@ -63,17 +66,20 @@ tests load it without the page code.
   `DS.reveal.setBoard(data, board)` fills the step in later (and drops a board meant for an older round). The
   results screen only draws: every number and verdict comes from `buildReveal()` and `leaderboard.view()`.
 - **Saving.** `saveFinished()` in `game.js` wraps `logger.saveFinished()` and remembers the outcome in `saving`
-  (`folder`, `pending`, `failed` or `none`), which the big-picture step prints under its buttons.
+  (`folder`, `pending`, `failed` or `none`), which the big-picture step prints under its buttons. The path to disk:
+  `logger.writeFile` → `DS.dataFolder.write` → `POST /api/write` → `server.py` (a temporary file, then a rename).
 
 ## Game state
 - **Phases:** `title → tutorial1 → main → reveal`. The name screen comes before the title (`askName()` in
   `game.js`), but it isn't a phase: nothing is played or logged there. It checks, in order: both names, a grade
-  (the "8th" box or a typed one), a gamer tag (`leaderboard.cleanTag` / `tagAllowed`), and the data folder (when the
-  browser has one). Its Continue arms the click guard, so Start is wrapped in `ui.guarded`. **Play again** goes to
+  (the "8th" box or a typed one), a gamer tag (`leaderboard.cleanTag` / `tagAllowed`), and last the saving program
+  (`DS.dataFolder.check()`, asked when the screen opens and again on Continue, so Continue waits for its answer; a
+  `checking` flag drops a second click meanwhile). Its Continue arms the click guard, so Start is wrapped in `ui.guarded`. **Play again** goes to
   `main`; **Replay the tutorial** goes to `tutorial1`; **Log out** (`logOut()`) saves the unsaved files
-  (`logger.saveUnsaved()`; a "Saving your files…" pop-up blocks clicks while it writes, and a failure offers
-  *Try again* or *Download them*), then `forgetPlayer()`: a new session (`logger.reset()`: new id, empty log, no
-  name or grade), `roundNo` 0, no gamer tag, and the name screen, empty, for the next player. The data folder stays.
+  (`logger.saveUnsaved()`; a "Saving your files…" pop-up blocks clicks while it writes, and a failure offers only
+  *Try again*, keeping the player and their log), then `forgetPlayer()`: a new session (`logger.reset()`: new id,
+  empty log, no name or grade), `roundNo` 0, no gamer tag, and the name screen, empty, which checks the saving
+  program again for the next player.
 - **`active`** is whatever is being played: `vps`, `cards`, `frozen` (nothing ticks: a pop-up, the
   "ready?" card, a pause or a finished round), `paused` (only a real pause), `ended`, `elapsed`,
   `limitSec` and `check`.

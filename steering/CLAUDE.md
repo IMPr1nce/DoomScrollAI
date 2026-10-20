@@ -12,7 +12,7 @@ Paths in backticks are relative to the project root.
 | Document | Read it when you… |
 |---|---|
 | [product.md](product.md) | need the why: who it's for, the lesson, a player's session, the principles, and the **decision log** |
-| [tech.md](tech.md) | write code: the hard constraints (file://, ES5, no modules), browser support, commands, checks, data |
+| [tech.md](tech.md) | write code: the hard constraints (server.py, ES5, no modules), browser support, commands, checks, data |
 | [structure.md](structure.md) | look for where something lives, how the pieces talk, the game's states, the radar, or how to add things |
 | [content.md](content.md) | write anything a player sees: people, speech bubbles, tutorial and results wording, accessibility |
 | [balance.md](balance.md) | change a number in `js/config.js`: what "balanced" means, the current tuning, the simulator's goals |
@@ -65,8 +65,12 @@ Paths in backticks are relative to the project root.
   in a row or a column: the rows are what a future server receives. The **gamer tag** is only in the leaderboard
   file, never in the rows; the **grade** is the last column.
 - **Saving is async, the tests are not.** The logger's and leaderboard's file functions may return a value or a
-  promise (`when()`); tests replace them with plain functions (`fakeFolder()`, `FAKE_FOLDER` in `tests/e2e.js`).
-  A save that finishes after Log out must touch only its own session object, never `logger.reset()`'s new one.
+  promise (`when()`); the unit tests replace them with plain functions (`fakeFolder()`), and `tests/e2e.js` runs the
+  real `server.py` on a temporary data folder. A save that finishes after Log out must touch only its own session
+  object, never `logger.reset()`'s new one. A failed save must keep every row: nothing downloads, so *Try again* is
+  the only way on.
+- **Only `server.py` writes to the disk**, and only `js/datafolder.js` talks to it. Keep its checks (127.0.0.1,
+  Host, Origin, JSON, `data/<folder>/<file>.csv`, 5 MB) when adding an endpoint ([tech.md](tech.md#security-posture)).
 - **Never write over a student's file:** a part's folder name is picked once per session (`folderFileName()`), adding
   ` (2)` when an earlier session left the same name.
 - When editing a file with a script, **don't slice by a comment string that appears twice** (it once
@@ -104,4 +108,8 @@ Paths in backticks are relative to the project root.
 - 2026-10-17: the name screen asks for a grade (8th or typed) and a gamer tag; the files save themselves into a
   `data` folder the teacher picks (`data/First_Last/…`, Chrome's folder picker, no Download button); a 🏆 Leaderboard
   step before the big picture ranks every round on the laptop by points (`data/leaderboard/leaderboard.csv`).
-- Not built, by design: the Flask endpoint (one `fetch` in `logger.flush`), sound, accounts, a class-wide leaderboard.
+- 2026-10-20: a small local saving program, `server.py` (Python 3 standard library), serves the game at
+  `http://localhost:8765` and writes every CSV into `data/`: no folder picker and nothing ever downloads. The name
+  screen checks it ("✓ Saving program is running.") and Continue waits for it; a failed save offers only *Try
+  again*. Files, names, `(2)` and columns are unchanged. The game no longer opens with a double-click.
+- Not built, by design: a shared or Flask server (one `fetch` in `logger.flush`), sound, accounts, a class-wide leaderboard.

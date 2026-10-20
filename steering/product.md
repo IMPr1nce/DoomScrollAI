@@ -16,8 +16,9 @@ student built it by chasing attention. The class then discusses whether that was
 ## Who it's for
 - **Players:** students aged 13–14, in class, usually one per school laptop (Chrome, 1366 × 768, about
   600px of page height once the browser's toolbars are counted).
-- **Teachers:** start it with a double-click (no accounts, no install, works offline), choose the data folder
-  once per visit, pause it to talk, and walk the class through the results on a projector with the arrow keys.
+- **Teachers:** start the saving program once per laptop (`python3 server.py`, then open `http://localhost:8765`;
+  no accounts, no install beyond Python 3, works offline), pause it to talk, and walk the class through the
+  results on a projector with the arrow keys.
 - **The team lead** reads the code, so it's written to be understood ([tech.md](tech.md)).
 
 ## The lesson
@@ -40,7 +41,8 @@ student built it by chasing attention. The class then discusses whether that was
 
 ## How a session goes (about three minutes)
 1. **Who's playing?** First and last name, grade (tick **8th** or type another) and a **gamer tag**, all needed,
-   plus the **data folder** (chosen once per visit, usually by the teacher). Then **Title** → Start. The name
+   and the saving program must be running (the screen says "✓ Saving program is running."; Continue checks it
+   again). Then **Title** → Start. The name
    only names the player's folder and files (`data/Kai_Moreno/Kai_Moreno_round1.csv`); the grade is a column of
    the data; the gamer tag is only on the leaderboard.
 2. **The tutorial:** one person, Alex, a new user, in two named steps. An intro chain of pop-ups explains
@@ -88,11 +90,13 @@ student built it by chasing attention. The class then discusses whether that was
    and a gamer tag (only on the leaderboard, never in the data, with a few words refused).
 
 ## Not built, on purpose
-- **The Flask backend.** `logger.flush()` is ready for a single `fetch` ([tech.md](tech.md#data-and-logging)).
+- **A class-wide or Flask backend.** Each laptop runs its own small saving program (`server.py`), which only
+  writes files. Sending the rows to a shared server is still one `fetch` in `logger.flush()`
+  ([tech.md](tech.md#data-and-logging)).
 - Sound, accounts, leaderboards, LLM calls.
 - **Grading.** Scores aren't secure: anything that runs in a browser can be changed. The leaderboard is for fun.
 - **A class-wide leaderboard.** Each laptop keeps its own board in its data folder. A shared board across
-  laptops would need the server.
+  laptops would need a shared server.
 
 ## Versions for playtests
 Switches in the address bar let two groups play two versions without anyone editing a file:
@@ -133,3 +137,4 @@ decisions here with the date and the reason.
 | 2026-10-15 | **"Guess the profile" is removed; a Log out button takes its place** on the big-picture step. Log out saves the player's unsaved files, then starts a new session on the name screen (a new session id, an empty log, no name). Replaces the 2026-10-07 puzzle row. | The team lead no longer needs the puzzle. Classes share laptops, so one student must be able to hand over to the next without reloading, and without losing data: Log out saves before it forgets. |
 | 2026-10-17 | **The name screen also asks for a grade and a gamer tag. The files save themselves into a `data` folder: `data/First_Last/First_Last_round1.csv`… and `data/leaderboard/leaderboard.csv`. A leaderboard step comes before the big picture.** Grade: an "8th" box or a typed grade, in a new last column `grade`. Gamer tag: up to 16 characters, a few rude words refused, only in the leaderboard file (never in the rows). The teacher picks the folder once per visit (Chrome's folder picker); each part saves as it ends, so the Download button is gone; a file is never written over (`(2)`). Points = everyone's attention at the end, added up (AFK = 0). Every round played on the laptop is a row; the step shows the top 10 in two columns and your rank. Replaces the Download button of the 2026-10-15 row. | The team lead wants each student's files in their own folder without downloading, a grade to compare classes, and a leaderboard of every playthrough. One laptop for now, so the folder picker does it with no server and the game still opens with a double-click; a class-wide board would need one. The board rewards only attention, which the big picture then questions, so it sits before it. Trade-offs: Chrome/Edge only (other browsers download at Log out), the folder is picked again each visit (remembering it would need browser storage), and principle 6 now covers the grade and the tag. |
 | 2026-10-15 | **One CSV per part of the session:** `First_Last_tutorial.csv`, then `First_Last_round1.csv`, `_round2.csv`… Tutorial rows are always round 0. New columns at the end: `post_no`, `clock_time`, and `taste_<topic>` for each topic. A `watch_end` row (and an AFK after a skip) now says its topic. | The team lead wants each Play-again round stored separately, still named after the player. The new columns make the file readable in a spreadsheet: pair a push with its watch_end, read the time, and chart the tastes without parsing JSON. The first 11 columns are unchanged. Trade-off: the first download saves two files, so Chrome may ask to allow multiple downloads. |
+| 2026-10-20 | **A small local saving program, `server.py`, does all the file writing.** Python 3 standard library only, one per laptop (4 laptops, 4 servers, no network between them), bound to 127.0.0.1. It serves the game at `http://localhost:8765` and writes the same files as before into `data/` next to it. No folder picker, no downloads at all: `logger.download`, `downloadUnsaved` and the "Download them" button are gone; a failed save keeps every row and offers only *Try again*. The name screen's folder button becomes a status line ("✓ Saving program is running."), and Continue checks it last. File names, folders, `(2)`, columns and the leaderboard are unchanged. Replaces the folder picker of the 2026-10-17 row. | The team lead wanted no folder prompt and no download prompts, and fewer ways for saving to fail in class: the picker had to be redone every visit, worked only in Chrome/Edge, and its download fallback could lose files to "allow multiple downloads". Now every browser saves the same way. Trade-offs: each laptop needs Python 3 and someone to run `python3 server.py` before class (Chromebooks can't); the game no longer opens with a double-click (from `file://` it says to start the program); 4 laptops mean 4 separate data folders and leaderboards to collect; if the program can't be restarted, a student is held at "Could not save" (nothing downloads, so nothing is lost by a click). |

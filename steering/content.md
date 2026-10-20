@@ -94,8 +94,8 @@ alone, and a skip gets a quick 👆 swipe.
   defines; it doesn't judge the player.
 - **The leaderboard says ranks as ranks, and ties as ties:** "You're #3 of 12 rounds.", "You're tied for #3 of 12
   rounds.", "You're #1 of 12 rounds!" (only an untied #1 gets the "!"), "Yours is the first round on the board."
-  Tied rounds share a rank (1, 2, 2, 4). Its note says where the rows come from, and says so when there is no
-  data folder ("Only rounds since the game was opened…") or the file couldn't be saved. Points are explained on
+  Tied rounds share a rank (1, 2, 2, 4). Its note says where the rows come from, and says so when the saving
+  program wasn't running ("Only rounds since the game was opened…") or the file couldn't be saved. Points are explained on
   the step: "Points = everyone's attention when the round ended. Someone who left counts as 0."
 - **Exactly three discussion questions.** The third is "If you always order your favorite food, you never find
   a new favorite. When should an app show something new?"
@@ -106,14 +106,21 @@ alone, and a skip gets a quick 👆 swipe.
 - **The why, in one line:** "Your name labels your data files. Only your gamer tag goes on the leaderboard."
 - **Messages, the first missing thing only:** "Type your first and last name.", "Tick 8th grade, or type your
   grade.", "Pick a gamer tag for the leaderboard.", "Pick a different gamer tag." (a refused word: never say
-  which word, or why), "Choose the data folder first (ask your teacher)."
+  which word, or why), "Start the saving program first (ask your teacher)."
 - **The gamer tag's placeholder says "Not your real name".** The tag is shown to the class.
 - **Refused words** live in `DS.BLOCKED_TAG_WORDS` (`content.js`): `anywhere` words are refused even inside a tag
   and spelled around ("sh1t", "f.u_c k"), so they must never hide inside an ordinary word; `whole` words are
   refused only as a word of their own ("ass" but not "class"). Tested both ways. It's a speed bump: the teacher
   can delete a row from `leaderboard.csv`.
-- **The folder status:** "Not chosen yet.", "✓ Saving to the data folder.", and, in a browser without one, "This
-  browser can't save to a folder. Your files will download when you log out."
+- **The saving program's status line:** "Checking the saving program…", then "✓ Saving program is running." or
+  "Start the saving program first (ask your teacher)." Opened from a file (`file://`), it adds which address to
+  open: "Then open http://localhost:8765." Students call it "the saving program", never "the server".
+- **Saving, after the round:** "✓ Your data is saved in data/Kai_Moreno.", "Saving your data…", "Saving failed: is
+  the saving program still running? Log out will try again." and, if it never answered, "The saving program isn't
+  running, so nothing is saved yet. Log out will try again." The leaderboard's note: "…the saving program wasn't
+  running." **Nothing ever says "download".**
+- **"Could not save" at Log out:** "Your files didn't reach the saving program. Ask your teacher to check that it is
+  running, then try again." Its only button is **Try again**.
 
 ## Accessibility
 - **Emoji + words, never color alone:** topics, status chips, watched vs skipped in the feed, the +/− pills.
@@ -138,5 +145,5 @@ alone, and a skip gets a quick 👆 swipe.
 | Results labels, captions and legends | the drawing half of `js/reveal.js` | no |
 | The leaderboard's sentences, the "saved in data/…" line | `DS.revealText` in `js/reveal.js` | yes |
 | Title screen, and the name screen's labels | `index.html` | the name screen, in `tests/e2e.js` |
-| The name screen's messages and folder status, the Log out pop-ups | `askName()`, `folderStatus()`, `logOut()` in `js/game.js` | the messages and status, in `tests/e2e.js` |
+| The name screen's messages and the saving program's status, the Log out pop-ups | `askName()`, `serverStatus()`, `logOut()` in `js/game.js` | the messages, status and "Could not save", in `tests/e2e.js` |
 | Refused gamer-tag words | `DS.BLOCKED_TAG_WORDS` in `js/content.js` | yes |
