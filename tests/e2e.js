@@ -1,29 +1,37 @@
 /*
- * tests/e2e.js — end-to-end check of the REAL game in a real (headless) Chrome, opened from
- * file:// exactly like a teacher's double-click.
+ * tests/e2e.js — end-to-end check of the REAL game in a real (headless) Chrome, served by the real saving
+ * program (server.py), exactly as in class.
  *
  *     node tests/e2e.js
  *
  * Optional. The game needs none of this. Run it after tuning config.js or editing content.js, to
  * confirm the whole thing still works: the screens fit a laptop, the results text is sane, the
- * lessons' loopholes are still closed, and the CSV is well-formed. It prints PASS/FAIL per check
- * and exits with code 1 if anything fails. Takes about 2-3 minutes.
+ * lessons' loopholes are still closed, and the CSV files land on disk, well-formed. It prints PASS/FAIL per
+ * check and exits with code 1 if anything fails. Takes about 2-3 minutes.
  *
- * Needs: Node 22+ (it uses Node's built-in WebSocket and fetch, so there is nothing to install)
- * and Google Chrome. If Chrome isn't found automatically, set CHROME_PATH to its executable.
+ * Needs: Node 22+ (it uses Node's built-in WebSocket and fetch, so there is nothing to install),
+ * Python 3 (for server.py; set PYTHON if it isn't called python3) and Google Chrome. If Chrome isn't found
+ * automatically, set CHROME_PATH to its executable.
  *
- * How it works: it starts Chrome with a debugging port, then talks to it with the Chrome DevTools
- * Protocol: "open this page", "run this JavaScript in it", "take a screenshot".
+ * How it works: it starts server.py on a free port with a temporary data folder (the real data/ is never
+ * touched), then Chrome with a debugging port, and talks to Chrome with the Chrome DevTools Protocol: "open
+ * this page", "run this JavaScript in it". The CSV files are then read straight from the temporary folder.
  */
 'use strict';
 
 var fs = require('fs');
 var os = require('os');
+var net = require('net');
+var http = require('http');
 var path = require('path');
 var spawn = require('child_process').spawn;
 
-var ROOT = 'file://' + (process.platform === 'win32' ? '/' : '') + path.join(__dirname, '..').replace(/\\/g, '/') + '/';
-var PORT = 9300 + Math.floor(Math.random() * 90);
+var PROJECT = path.join(__dirname, '..');
+var FILE_ROOT = 'file://' + (process.platform === 'win32' ? '/' : '') + PROJECT.replace(/\\/g, '/') + '/';   // a double-click
+var PORT = 9300 + Math.floor(Math.random() * 90);    // Chrome's debugging port
+var DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'doomscroll-data-'));
+var SERVER_PORT = 0, ROOT = '';                      // set once a free port is found (main)
+var PYTHON = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
 
 // ------------------------------------------------------------------ Find Chrome
 function findChrome() {
@@ -39,6 +47,66 @@ function findChrome() {
 }
 
 function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+// ------------------------------------------------------------ The saving program
+// A port nobody is using: the OS hands one out, and we give it straight back to server.py.
+function freePort() {
+  return new Promise(function (res, rej) {
+    var probe = net.createServer();
+    probe.on('error', rej);
+    probe.listen(0, '127.0.0.1', function () { var p = probe.address().port; probe.close(function () { res(p); }); });
+  });
+}
+
+// Starts server.py and waits until it answers. Its output is kept, so a check can read what it printed.
+async function startServer(port) {
+  var proc = spawn(PYTHON, [path.join(PROJECT, 'server.py'), '--port', String(port), '--data', DATA], { stdio: ['ignore', 'pipe', 'pipe'] });
+  proc.output = '';
+  proc.stdout.on('data', function (d) { proc.output += d; });
+  proc.stderr.on('data', function (d) { proc.output += d; });
+  proc.done = new Promise(function (r) { proc.on('exit', function (code) { proc.exitCode = code; r(code); }); });
+  for (var i = 0; i < 80 && proc.exitCode === null; i++) {
+    try { if ((await fetch('http://127.0.0.1:' + port + '/api/health')).ok) return proc; } catch (e) { /* not up yet */ }
+    await sleep(100);
+  }
+  throw new Error('server.py did not start: ' + proc.output);
+}
+async function stopServer(proc) {
+  if (proc && proc.exitCode === null) { proc.kill(); await proc.done; }
+}
+
+// One raw request to the saving program, with exactly the headers given (fetch won't let a test set Host).
+// Resolves { status, body }.
+function raw(method, urlPath, headers, body) {
+  return new Promise(function (res, rej) {
+    // A browser always says how long the body is (server.py refuses a body without it), so this does too.
+    var length = body === undefined ? {} : { 'Content-Length': Buffer.byteLength(body) };
+    var req = http.request({ host: '127.0.0.1', port: SERVER_PORT, method: method, path: urlPath,
+      headers: Object.assign({ Host: 'localhost:' + SERVER_PORT }, length, headers) }, function (r) {
+      var chunks = [];
+      r.on('data', function (c) { chunks.push(c); });
+      r.on('end', function () { res({ status: r.statusCode, body: Buffer.concat(chunks).toString('utf8') }); });
+    });
+    req.on('error', rej);
+    if (body !== undefined) req.write(body);
+    req.end();
+  });
+}
+
+// Every file under the temporary data folder, as "Folder/file.csv" (hidden ones too: a leftover temp file
+// would show up here).
+function dataFiles() {
+  var out = [];
+  fs.readdirSync(DATA).forEach(function (d) {
+    var dir = path.join(DATA, d);
+    if (fs.statSync(dir).isDirectory()) fs.readdirSync(dir).forEach(function (f) { out.push(d + '/' + f); });
+    else out.push(d);
+  });
+  return out.sort();
+}
+function readData(rel) { return fs.readFileSync(path.join(DATA, rel), 'utf8'); }
+// Kai_Moreno_round2.csv before Kai_Moreno_round10.csv
+function byRound(a, b) { return a.localeCompare(b, undefined, { numeric: true }); }
 
 // ------------------------------------------------------------ Tiny DevTools driver
 async function startChrome(chromePath) {
@@ -58,7 +126,7 @@ async function connect() {
   var ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise(function (res, rej) { ws.onopen = res; ws.onerror = rej; });
 
-  var nextId = 0, waiting = {}, listeners = [], problems = [];
+  var nextId = 0, waiting = {}, listeners = [], problems = [], downloads = [];
   ws.onmessage = function (ev) {
     var m = JSON.parse(ev.data);
     if (m.id && waiting[m.id]) { var w = waiting[m.id]; delete waiting[m.id]; m.error ? w.rej(new Error(m.error.message)) : w.res(m.result); return; }
@@ -66,15 +134,20 @@ async function connect() {
     if (m.method === 'Runtime.exceptionThrown') problems.push('exception: ' + ((m.params.exceptionDetails.exception || {}).description || m.params.exceptionDetails.text));
     if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') problems.push('console.error: ' + m.params.args.map(function (a) { return a.value || a.description; }).join(' '));
     if (m.method === 'Log.entryAdded' && m.params.entry.level === 'error') problems.push('load error: ' + m.params.entry.text + ' ' + (m.params.entry.url || ''));
+    // Nothing may ever download: Chrome reports any attempt here, even one the page hid from the checks' own catcher.
+    if (m.method === 'Page.downloadWillBegin' || m.method === 'Browser.downloadWillBegin') downloads.push(m.params.suggestedFilename);
     listeners.slice().forEach(function (l) { l(m); });
   };
   function send(method, params) {
     return new Promise(function (res, rej) { var id = ++nextId; waiting[id] = { res: res, rej: rej }; ws.send(JSON.stringify({ id: id, method: method, params: params || {} })); });
   }
   await send('Page.enable'); await send('Runtime.enable'); await send('Log.enable');
+  // ...and should one start anyway, Chrome refuses it instead of filling the Downloads folder.
+  try { await send('Page.setDownloadBehavior', { behavior: 'deny' }); } catch (e) { /* older Chrome: the listener still counts */ }
 
   return {
     problems: problems,
+    downloads: downloads,
     viewport: function (w, h) { return send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false }); },
     // e.g. [{ name: 'prefers-reduced-motion', value: 'reduce' }]; [] turns it back off
     media: function (features) { return send('Emulation.setEmulatedMedia', { features: features }); },
@@ -118,27 +191,23 @@ var TUTORIAL_TEXTS = "(async function () {" +
   "out.all = out.intro.concat(out.between, [out.win, out.left]).map(function (p) { return p.title + ' ' + p.text; }).join(' ') + ' ' + out.head1 + ' ' + out.head2;" +
   "return out; })()";
 
-// A pretend data folder: Chrome's folder picker can't be clicked in a headless browser, so the page gets an
-// in-memory folder with the same methods (getDirectoryHandle, getFileHandle, createWritable, getFile).
-// The game's real code (datafolder.js) then writes into it: window.__fs.dirs.data.dirs.Zebedee_Quimby.files.
-var FAKE_FOLDER = "(function () {" +
-  "function Dir(name) { this.name = name; this.kind = 'directory'; this.dirs = {}; this.files = {}; }" +
-  "function nf() { var e = new Error('not found'); e.name = 'NotFoundError'; return e; }" +
-  "Dir.prototype.getDirectoryHandle = async function (n, o) { if (!this.dirs[n]) { if (!(o && o.create)) throw nf(); this.dirs[n] = new Dir(n); } return this.dirs[n]; };" +
-  "Dir.prototype.getFileHandle = async function (n, o) { var self = this; if (!(n in this.files)) { if (!(o && o.create)) throw nf(); this.files[n] = ''; }" +
-  "  return { name: n, kind: 'file', getFile: async function () { return new Blob([self.files[n]]); }," +
-  "    createWritable: async function () { var buf = ''; return { write: async function (t) { buf += t; }, close: async function () { self.files[n] = buf; } }; } }; };" +
-  "window.__fs = new Dir('DoomScrollAI');" +
-  "window.showDirectoryPicker = async function () { return window.__fs; };" +
-  "})();";
+// The name screen's status line once the saving program has answered.
+var RUNNING = '✓ Saving program is running.';
+var START_IT = 'Start the saving program first (ask your teacher).';
 
-// Through the first screen, as a student would (the folder chosen first, as the teacher would).
+// Fills in the first screen (without pressing Continue).
+function fillIn(first, last, grade, tag) {
+  return "document.getElementById('name-first').value = " + JSON.stringify(first) + "; document.getElementById('name-last').value = " + JSON.stringify(last) + ";" +
+    "document.getElementById('grade-8th').checked = false; document.getElementById('grade-other').value = '';" +
+    (grade === '8th' ? "document.getElementById('grade-8th').checked = true;" : "document.getElementById('grade-other').value = " + JSON.stringify(grade) + ";") +
+    "document.getElementById('gamer-tag').value = " + JSON.stringify(tag) + ";";
+}
+// Through the first screen, as a student would. Continue asks the saving program, so it waits for the answer.
 function signIn(first, last, grade, tag) {
   return "(async function () { var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
-    "if (!window.__fs) { " + FAKE_FOLDER + " } if (!DS.dataFolder.ready()) { document.getElementById('btn-folder').click(); await sleep(100); }" +
-    "document.getElementById('name-first').value = " + JSON.stringify(first) + "; document.getElementById('name-last').value = " + JSON.stringify(last) + ";" +
-    (grade === '8th' ? "document.getElementById('grade-8th').checked = true;" : "document.getElementById('grade-other').value = " + JSON.stringify(grade) + ";") +
-    "document.getElementById('gamer-tag').value = " + JSON.stringify(tag) + "; document.getElementById('btn-name').click(); await sleep(100);" +
+    "for (var k = 0; k < 40 && document.getElementById('server-status').textContent !== " + JSON.stringify(RUNNING) + "; k++) await sleep(50);" +
+    fillIn(first, last, grade, tag) + "document.getElementById('btn-name').click();" +
+    "for (var j = 0; j < 40 && document.body.dataset.screen === 'name'; j++) await sleep(50);" +
     "return document.body.dataset.screen; })()";
 }
 
@@ -146,7 +215,16 @@ function signIn(first, last, grade, tag) {
 async function main() {
   var chromePath = findChrome();
   if (!chromePath) { console.log('Chrome not found. Install it, or set CHROME_PATH to the Chrome executable.'); process.exit(2); }
-  console.log('Using ' + chromePath + '\nOpening ' + ROOT + '\n');
+  SERVER_PORT = await freePort();
+  ROOT = 'http://localhost:' + SERVER_PORT + '/';
+  var server;
+  try { server = await startServer(SERVER_PORT); } catch (e) {
+    console.log(e.message + '\nIs Python 3 installed? Set PYTHON to its command if it isn\'t called ' + PYTHON + '.');
+    process.exit(2);
+  }
+  console.log('Using ' + chromePath + '\nOpening ' + ROOT + ' (server.py, saving to ' + DATA + ')\n');
+  check('server.py: says on start where it saves and which address to open',
+        server.output.indexOf('Saving to ' + DATA) !== -1 && server.output.indexOf('Open http://localhost:' + SERVER_PORT) !== -1, server.output);
 
   var chrome = await startChrome(chromePath);
   var b;
@@ -164,9 +242,21 @@ async function main() {
     var goals = await b.eval("[].slice.call(document.querySelectorAll('ul.goals li')).map(function (l) { return l.textContent.trim(); })");
     check('sim.html: all balance goals pass', goals.length >= 6 && goals.every(function (g) { return g.charAt(0) === '✔'; }), goals.join(' | '));
 
+    // ---- 1a. Opened with a double-click (file://), the page can't reach the saving program: the name screen says
+    // to start it and which address to open, and Continue stays put even with everything filled in.
+    b.problems.length = 0;
+    await b.goto(FILE_ROOT + 'index.html');
+    var fromFile = await b.eval("(async function () { var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+      "await sleep(200); var out = { status: document.getElementById('server-status').textContent };" +
+      fillIn('Kai', 'Moreno', '8th', 'Kai the Kat') + "document.getElementById('btn-name').click(); await sleep(300);" +
+      "out.screen = document.body.dataset.screen; out.error = document.getElementById('name-error').textContent; return out; })()");
+    check('file://: the name screen says to start the saving program and open http://localhost:8765, and Continue is blocked',
+          fromFile.status === START_IT + ' Then open http://localhost:8765.' && fromFile.screen === 'name' && fromFile.error === START_IT, JSON.stringify(fromFile));
+    check('file://: no console errors (it doesn\'t even try to reach the saving program)', b.problems.length === 0, b.problems.join(' | '));
+
     // ---- 1b. The first screen asks who is playing: both names (a name that cleans to nothing counts as missing), a
-    // grade (8th, or typed), a gamer tag (a few words refused), and the data folder. The name only names the files,
-    // and a double-click on Continue can't land on Start.
+    // grade (8th, or typed), a gamer tag (a few words refused), and checks the saving program. The name only names
+    // the files, and a double-click on Continue can't land on Start.
     b.problems.length = 0;
     await b.goto(ROOT + 'index.html');
     var who = await b.eval("(async function () {" +
@@ -175,7 +265,7 @@ async function main() {
       "var first = $('name-first'), last = $('name-last'), go = $('btn-name'), g8 = $('grade-8th'), other = $('grade-other'), tag = $('gamer-tag');" +
       "var err = function () { return $('name-error').textContent; };" +
       "var out = { screen: document.body.dataset.screen, focused: document.activeElement === first, fits: document.documentElement.scrollHeight <= innerHeight," +
-      "  folderStatus: $('folder-status').textContent, folderButton: !$('btn-folder').hidden };" +
+      "  serverStatus: $('server-status').textContent, folderButton: !!$('btn-folder') };" +
       "go.click(); await sleep(50); out.empty = { screen: document.body.dataset.screen, error: err(), invalid: first.getAttribute('aria-invalid') + ' ' + last.getAttribute('aria-invalid'), focused: document.activeElement === first };" +
       "first.value = '  Mary   Ann '; last.value = '???'; go.click(); await sleep(50);" +
       "out.junk = { screen: document.body.dataset.screen, invalid: first.getAttribute('aria-invalid') + ' ' + last.getAttribute('aria-invalid'), focused: document.activeElement === last };" +
@@ -185,15 +275,13 @@ async function main() {
       "other.value = 'High school'; other.dispatchEvent(new Event('input')); out.typeUnticks = !g8.checked; g8.click();" +
       "go.click(); await sleep(50); out.noTag = { error: err(), focused: document.activeElement === tag, invalid: tag.getAttribute('aria-invalid') };" +
       "tag.value = 'Sh1t Happens'; go.click(); await sleep(50); out.rude = err();" +
-      "tag.value = 'Mango Tango'; go.click(); await sleep(50); out.noFolder = { screen: document.body.dataset.screen, error: err() };" +
-      FAKE_FOLDER + " $('btn-folder').click(); await sleep(100); out.chosen = $('folder-status').textContent;" +
-      "go.click(); await sleep(50);" +
+      "tag.value = 'Mango Tango'; go.click(); await sleep(300);" +
       "out.done = { screen: document.body.dataset.screen, error: err(), file: DS.logger.fileName(), folder: DS.logger.folderName(), startFocused: document.activeElement === $('btn-start') };" +
       "$('btn-start').click(); await sleep(50); out.doubleClickHeld = document.body.dataset.screen === 'title';" +
       "await sleep(600); $('btn-start').click(); await sleep(150); out.started = document.body.dataset.screen;" +
       "return out; })()");
-    check('name screen: the game opens on it, with the first name ready to type, the folder not chosen yet, and it fits the window',
-          who.screen === 'name' && who.focused && who.fits && who.folderButton && who.folderStatus === 'Not chosen yet.', JSON.stringify(who));
+    check('name screen: the game opens on it, with the first name ready to type, the saving program found (no folder button), and it fits',
+          who.screen === 'name' && who.focused && who.fits && !who.folderButton && who.serverStatus === RUNNING, JSON.stringify(who));
     check('name screen: Continue with no name stays put, says why and marks both boxes',
           who.empty.screen === 'name' && who.empty.error === 'Type your first and last name.' && who.empty.invalid === 'true true' && who.empty.focused, JSON.stringify(who.empty));
     check('name screen: a last name of only "???" counts as missing',
@@ -204,10 +292,9 @@ async function main() {
     check('name screen: a gamer tag is needed, and a rude one is refused (even spelled with a 1)',
           who.noTag.error === 'Pick a gamer tag for the leaderboard.' && who.noTag.focused && who.noTag.invalid === 'true' &&
           who.rude === 'Pick a different gamer tag.', JSON.stringify([who.noTag, who.rude]));
-    check('name screen: the data folder must be chosen first; then everything leads to the title, files in Mary-Ann_O\'Brien/',
-          who.noFolder.screen === 'name' && who.noFolder.error === 'Choose the data folder first (ask your teacher).' &&
-          who.chosen === '✓ Saving to the data folder.' && who.done.screen === 'title' && who.done.error === '' &&
-          who.done.file === "Mary-Ann_O'Brien.csv" && who.done.folder === "Mary-Ann_O'Brien" && who.done.startFocused, JSON.stringify([who.noFolder, who.chosen, who.done]));
+    check('name screen: with the saving program running, everything leads to the title, files in Mary-Ann_O\'Brien/',
+          who.done.screen === 'title' && who.done.error === '' &&
+          who.done.file === "Mary-Ann_O'Brien.csv" && who.done.folder === "Mary-Ann_O'Brien" && who.done.startFocused, JSON.stringify(who.done));
     check('name screen: a double-click on Continue doesn\'t land on Start; a later click starts the tutorial',
           who.doubleClickHeld && who.started === 'tutorial', JSON.stringify(who));
     check('name screen: no console errors', b.problems.length === 0, b.problems.join(' | '));
@@ -452,6 +539,11 @@ async function main() {
       var steps = await b.eval("DS.dev.measureReveal()");
       check('  every results step (score, each person, leaderboard, big picture) fits a 600px-tall window (' + bot + ')',
             steps.length === radar.cards + 3 && steps.every(function (s) { return /fits$/.test(s); }), steps.join(' | '));
+      await b.viewport(1024, 768); await sleep(300);
+      var steps1024 = await b.eval("DS.dev.measureReveal()");
+      await b.viewport(1366, 600); await sleep(300);
+      check('  ...and a 1024x768 window (' + bot + ')',
+            steps1024.length === radar.cards + 3 && steps1024.every(function (s) { return /fits$/.test(s); }), steps1024.join(' | '));
       // Every sentence on every step must be real text: no "undefined", "NaN", "null" or "[object".
       var texts = await b.eval("(async function () { var out = []; var st = [].slice.call(document.querySelectorAll('#reveal-steps .step'));" +
         "for (var k = 0; k < st.length; k++) { st[k].click(); await new Promise(function (r) { setTimeout(r, 250); }); out.push(document.getElementById('reveal-stage').innerText); } return out; })()");
@@ -471,6 +563,20 @@ async function main() {
       if (bot === 'none') check('  nobody was shown anything, so no step says "You tried" (none)', texts.every(function (t) { return !/You tried/.test(t); }), personSteps.join(' ... ').slice(0, 200));
       else check('  each person\'s step says how many topics you tried (' + bot + ')',
                  personSteps.every(function (t) { return /You tried (all \d+|\d+ of \d+) topics( before \w+ left)?\./.test(t); }), personSteps.join(' ... ').slice(0, 300));
+      // Each person's step is a story now: no variety panel, the definition of "filter bubble" under exactly the stories
+      // that say "bubble", the lost-interest chips, and radars still readable after shrinking to fit the stack.
+      var persons = await b.eval("(async function () { var out = []; var st = [].slice.call(document.querySelectorAll('#reveal-steps .step'));" +
+        "for (var k = 1; k < st.length - 2; k++) { st[k].click(); await new Promise(function (r) { setTimeout(r, 250); });" +
+        "  var story = document.querySelector('.who__story'), def = document.querySelector('.who__def'), svg = document.querySelector('.rchart svg');" +
+        "  out.push({ story: story ? story.textContent : '', def: def ? def.textContent : null, vrow: document.querySelectorAll('.vrow, .varietybox').length," +
+        "    variety: /Variety of what they watched|0 = all the same/.test(document.getElementById('reveal-stage').innerText)," +
+        "    chips: (document.querySelector('.tchips') || {}).textContent || '', radar: svg ? Math.round(svg.getBoundingClientRect().height) : 0 }); }" +
+        "return out; })()");
+      check('  each person\'s step tells their story with no variety panel, defines "filter bubble" exactly where it says "bubble", and keeps radars 110px+ (' + bot + ')',
+            persons.length === radar.cards && persons.every(function (p) {
+              return p.story.length > 20 && !p.vrow && !p.variety && /^Lost interest:/.test(p.chips) && p.radar >= 110 &&
+                     (/bubble/.test(p.story) ? p.def === 'Filter bubble = a feed so full of one thing that you rarely see anything else.' : p.def === null);
+            }), JSON.stringify(persons).slice(0, 500));
       if (bot !== 'none') {
         var verdict = await b.eval("(function () { var st = [].slice.call(document.querySelectorAll('#reveal-steps .step')); st[st.length - 1].click(); return document.querySelector('.big__verdict').textContent; })()");
         // A bot that shows people only what they like must be told feeds got narrow; never "mixed".
@@ -478,27 +584,30 @@ async function main() {
       }
     }
 
-    // ---- 5. The CSV files the game saved by itself into the data folder: one per part of the session (the
-    // tutorial, then each round), all in data/Zebedee_Quimby/, plus the leaderboard file.
+    // ---- 5. The CSV files the game saved by itself, through server.py, onto the disk: one per part of the session
+    // (the tutorial, then each round), all in data/Zebedee_Quimby/, plus the leaderboard file.
     var CATCH = "var saved = [], oc = URL.createObjectURL, ok = HTMLAnchorElement.prototype.click, blobs = {};" +
       "URL.createObjectURL = function (x) { blobs.last = x; return oc.call(URL, x); };" +
       "HTMLAnchorElement.prototype.click = function () { saved.push({ name: this.download, blob: blobs.last }); };" +
       "var release = async function () { URL.createObjectURL = oc; HTMLAnchorElement.prototype.click = ok;" +
       "  var out = []; for (var k = 0; k < saved.length; k++) out.push({ name: saved[k].name, text: await saved[k].blob.text() }); return out; };" +
       "var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+      "var title = function () { return document.getElementById('overlay').hidden ? '' : document.getElementById('overlay-title').textContent; };" +
       "var bigStep = async function () { var st = [].slice.call(document.querySelectorAll('#reveal-steps .step')); st[st.length - 1].click(); await sleep(700); };" +
+      "var boardStep = async function () { var st = [].slice.call(document.querySelectorAll('#reveal-steps .step')); st[st.length - 2].click(); await sleep(500); };" +
       "var press = function (re) { [].slice.call(document.querySelectorAll('.big__actions .btn')).filter(function (x) { return re.test(x.textContent); })[0].click(); };";
     var csv = await b.eval("(async function () {" + CATCH +
       "await bigStep(); var order = [].slice.call(document.querySelectorAll('.big__actions .btn')).map(function (x) { return x.textContent; });" +
-      "var data = window.__fs.dirs.data, mine = data.dirs.Zebedee_Quimby;" +
-      "var files = Object.keys(mine.files).map(function (n) { return { name: n, text: mine.files[n] }; });" +
-      "return { files: files, folders: Object.keys(data.dirs), order: order, savedLine: document.querySelector('.big__saved').textContent," +
-      "  board: data.dirs.leaderboard.files['leaderboard.csv'], downloads: (await release()).length, session: DS.logger.sessionId, columns: DS.logger.COLUMNS }; })()");
+      "return { order: order, savedLine: document.querySelector('.big__saved').textContent," +
+      "  downloads: (await release()).length, session: DS.logger.sessionId, columns: DS.logger.COLUMNS }; })()");
+    csv.files = fs.readdirSync(path.join(DATA, 'Zebedee_Quimby')).sort(byRound).map(function (n) { return { name: n, text: readData('Zebedee_Quimby/' + n) }; });
+    csv.board = readData('leaderboard/leaderboard.csv');
     var names = csv.files.map(function (f) { return f.name; });
     check('results: the big picture\'s buttons are Log out and Play again (no Download: the files save themselves), and it says where',
           csv.order.length === 2 && /Log out/.test(csv.order[0]) && /Play again/.test(csv.order[1]) &&
-          csv.savedLine === '✓ Your data is saved in data/Zebedee_Quimby.' && csv.downloads === 0, JSON.stringify([csv.order, csv.savedLine]));
-    check('data folder: one folder per player and one for the leaderboard', csv.folders.join(' ') === 'Zebedee_Quimby leaderboard', csv.folders.join(' '));
+          csv.savedLine === '✓ Your data is saved in data/Zebedee_Quimby.' && csv.downloads === 0 && b.downloads.length === 0, JSON.stringify([csv.order, csv.savedLine, b.downloads]));
+    check('data folder on disk: one folder per player and one for the leaderboard, and no temporary files left over',
+          fs.readdirSync(DATA).sort().join(' ') === 'Zebedee_Quimby leaderboard' && dataFiles().every(function (f) { return !/\/\./.test(f); }), dataFiles().join(' '));
     // This run skipped the tutorial before any post, so it has no tutorial file (an empty part saves nothing).
     // The unit tests cover the tutorial's file. Rounds thrown away by a restart are saved too: their rows are data.
     check('CSV: one file per round, in order, named after the player (Zebedee_Quimby_round1.csv); no empty tutorial file',
@@ -509,11 +618,12 @@ async function main() {
       var rows = lines.slice(1).map(function (l) { return l.split(','); });   // tastes_json has commas, so read only the columns before it
       allRows = allRows.concat(rows);
       f.ok = lines[0] === csv.columns.join(',') && rows.length > 0 && !/Zebedee|Quimby|Zeb the Great/.test(f.text) &&
+             /\r\n$/.test(f.text) && f.text.split('\r\n').every(function (l) { return l.indexOf('\n') === -1; }) &&
              rows.every(function (r) { return r[0] === csv.session && r[r.length - 1] === '8th'; }) &&
              (f.name.indexOf('tutorial') !== -1 ? rows.every(function (r) { return r[2] === 'tutorial1'; })
                                                 : rows.every(function (r) { return r[2] === 'main'; }));
     });
-    check('CSV: every file has the header, one session id, the grade on every row, only its own part\'s rows, and never the name or gamer tag',
+    check('CSV: every file has the header, CRLF line ends, one session id, the grade on every row, only its own part\'s rows, and never the name or gamer tag',
           csv.files.every(function (f) { return f.ok; }), csv.files.filter(function (f) { return !f.ok; }).map(function (f) { return f.name; }).join(' '));
     check('CSV: has rows for pushes, round starts and round ends', ['push', 'round_start', 'round_end'].every(function (e) { return allRows.some(function (r) { return r[4] === e; }); }), 'missing an event type');
     var round1 = csv.files[1].text;
@@ -529,36 +639,80 @@ async function main() {
           !/Zebedee|Quimby/.test(csv.board), csv.board);
 
     // ---- 5b. Log out: the files are already saved, so nothing is downloaded; the next player starts from an empty name
-    // screen with a fresh session, and the data folder stays chosen (it belongs to the laptop).
+    // screen with a fresh session, checked against the saving program again. The same student signing in again gets
+    // new files beside the old ones ("Zebedee_Quimby_round1 (2).csv"), never written over them.
     await b.eval("DS.dev.play({ bot: 'spam' })");
     var logout = await b.eval("(async function () {" + CATCH +
-      "var before = DS.logger.sessionId; await bigStep(); await sleep(600); press(/Log out/); await sleep(300);" +
+      "var before = DS.logger.sessionId; await bigStep(); await sleep(600); press(/Log out/); await sleep(400);" +
       "var $ = function (id) { return document.getElementById(id); };" +
-      "var out = { downloads: (await release()).length, screen: document.body.dataset.screen, rounds: Object.keys(window.__fs.dirs.data.dirs.Zebedee_Quimby.files).length," +
+      "var out = { downloads: (await release()).length, screen: document.body.dataset.screen," +
       "  empty: ['name-first', 'name-last', 'grade-other', 'gamer-tag'].every(function (id) { return $(id).value === ''; }) && !$('grade-8th').checked," +
-      "  folderKept: DS.dataFolder.ready() && $('folder-status').textContent === '✓ Saving to the data folder.'," +
+      "  serverChecked: $('server-status').textContent," +
       "  focused: document.activeElement === $('name-first'), newSession: DS.logger.sessionId !== before," +
       "  anonymous: /^doomscroll_/.test(DS.logger.fileName('round1')), log: DS.logger.counts().stored + DS.logger.counts().pending };" +
-      "out.next = await " + signIn('Ada', 'Lovelace', '7th', 'Countess') + "; out.next += ' ' + DS.logger.fileName('round1'); return out; })()");
-    check('log out: nothing to download (every round saved itself), and the round played last is in the folder',
-          logout.downloads === 0 && logout.rounds === csv.files.length + 1, JSON.stringify(logout));
-    check('log out: back to an empty name screen, with a new session and an empty log; the data folder stays chosen',
-          logout.screen === 'name' && logout.empty && logout.folderKept && logout.focused && logout.newSession && logout.anonymous && logout.log === 0, JSON.stringify(logout));
-    check('log out: the next player\'s files carry the new name', logout.next === 'title Ada_Lovelace_round1.csv', logout.next);
+      "return out; })()");
+    var firstSession = fs.readdirSync(path.join(DATA, 'Zebedee_Quimby')).sort(byRound);
+    var round1Before = readData('Zebedee_Quimby/Zebedee_Quimby_round1.csv');
+    check('log out: nothing to download (every round saved itself), and the round played last is on disk',
+          logout.downloads === 0 && b.downloads.length === 0 && firstSession.length === csv.files.length + 1, JSON.stringify([logout, firstSession]));
+    check('log out: back to an empty name screen, with a new session and an empty log; the saving program is checked again',
+          logout.screen === 'name' && logout.empty && logout.serverChecked === RUNNING && logout.focused && logout.newSession && logout.anonymous && logout.log === 0, JSON.stringify(logout));
+    var again = await b.eval(signIn('Zebedee', 'Quimby', '7th', 'Zeb Again'));
+    await b.eval("DS.dev.play({ bot: 'spam' })"); await sleep(500);
+    var second = fs.readdirSync(path.join(DATA, 'Zebedee_Quimby')).sort(byRound);
+    var twoText = second.indexOf('Zebedee_Quimby_round1 (2).csv') !== -1 ? readData('Zebedee_Quimby/Zebedee_Quimby_round1 (2).csv') : '';
+    check('a second session of the same student: "Zebedee_Quimby_round1 (2).csv" beside the first, which is untouched',
+          again === 'title' && second.length === firstSession.length + 1 && twoText.split('\r\n').length > 2 && /,7th\r\n/.test(twoText) &&
+          readData('Zebedee_Quimby/Zebedee_Quimby_round1.csv') === round1Before, JSON.stringify([again, second]));
+    check('leaderboard file: the second session\'s round is added under its own gamer tag; the earlier rows stay',
+          readData('leaderboard/leaderboard.csv').trim().split('\r\n').length - 1 === bots.length + 2 && /\r\nZeb Again,\d+,1,/.test(readData('leaderboard/leaderboard.csv')),
+          readData('leaderboard/leaderboard.csv'));
 
-    // ---- 5c. Without a data folder (a browser that can't write to one, or the dev helpers): nothing is written during
-    // play, the results say so, the leaderboard holds only this visit, and Log out downloads the files instead.
-    await b.goto(ROOT + 'index.html?dev=1'); await sleep(300);
+    // ---- 5c. The saving program stops mid-session: the round's save fails (and says so), the leaderboard shows the round
+    // anyway, Log out keeps the student on the results with only "Try again", nothing downloads and no row is lost.
+    // Once it is started again, "Try again" saves the missing round (" (2)", as round 2 of the first session is there).
+    var round2Before = readData('Zebedee_Quimby/Zebedee_Quimby_round2.csv');
+    await stopServer(server);
     await b.eval("DS.dev.play({ bot: 'spam' })");
-    var nofolder = await b.eval("(async function () {" + CATCH +
-      "var st = [].slice.call(document.querySelectorAll('#reveal-steps .step')); st[st.length - 2].click(); await sleep(500);" +
-      "var out = { board: document.querySelector('.lb__note').textContent }; await bigStep(); out.savedLine = document.querySelector('.big__saved').textContent;" +
-      "await sleep(600); press(/Log out/); await sleep(300); out.files = (await release()).map(function (f) { return f.name; }); out.screen = document.body.dataset.screen; return out; })()");
-    check('no data folder: the results say the files download at Log out, and the board is only this visit',
-          /No data folder/.test(nofolder.savedLine) && /no data folder was chosen/.test(nofolder.board), JSON.stringify(nofolder));
-    check('no data folder: Log out downloads the round, then shows the name screen',
-          nofolder.files.length === 1 && /^doomscroll_[\da-f-]+_round1\.csv$/.test(nofolder.files[0]) && nofolder.screen === 'name', JSON.stringify(nofolder));
-    // The loopholes below run with a data folder, as in class.
+    var down = await b.eval("(async function () {" + CATCH +
+      "await sleep(500); await boardStep(); var out = { board: document.querySelector('.lb__note').textContent };" +
+      "await bigStep(); out.savedLine = document.querySelector('.big__saved').textContent;" +
+      "await sleep(600); press(/Log out/); await sleep(1000);" +
+      "out.title = title(); out.text = document.getElementById('overlay-text').textContent;" +
+      "out.buttons = [].map.call(document.querySelectorAll('#overlay-buttons button'), function (x) { return x.textContent; }).join(' | ');" +
+      "out.screen = document.body.dataset.screen; out.kept = DS.logger.files().map(function (f) { return f.name + ':' + f.records.length; }).join(' ');" +
+      "out.downloads = (await release()).length; return out; })()");
+    check('saving program stopped: the results say the save failed, and the leaderboard step says its file couldn\'t be saved',
+          down.savedLine === 'Saving failed: is the saving program still running? Log out will try again.' && /couldn't be saved/.test(down.board), JSON.stringify(down));
+    check('saving program stopped: Log out shows "Could not save" with only "Try again", stays on the results, keeps the log, downloads nothing',
+          down.title === 'Could not save' && down.buttons === 'Try again' && /saving program/.test(down.text) && down.screen === 'reveal' &&
+          /Zebedee_Quimby_round1\.csv:\d+ Zebedee_Quimby_round2\.csv:\d+/.test(down.kept) && down.downloads === 0 && b.downloads.length === 0, JSON.stringify(down));
+    server = await startServer(SERVER_PORT);
+    var retried = await b.eval("(async function () { var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+      "document.querySelector('#overlay-buttons button').click(); for (var k = 0; k < 40 && document.body.dataset.screen !== 'name'; k++) await sleep(50);" +
+      "return { screen: document.body.dataset.screen, status: document.getElementById('server-status').textContent }; })()");
+    var afterRetry = fs.existsSync(path.join(DATA, 'Zebedee_Quimby', 'Zebedee_Quimby_round2 (2).csv')) ? readData('Zebedee_Quimby/Zebedee_Quimby_round2 (2).csv') : '';
+    check('saving program back: "Try again" saves the round played while it was down (Zebedee_Quimby_round2 (2).csv), then the name screen',
+          retried.screen === 'name' && retried.status === RUNNING && afterRetry.split('\r\n').length > 2 && /,7th\r\n/.test(afterRetry) &&
+          readData('Zebedee_Quimby/Zebedee_Quimby_round2.csv') === round2Before && b.downloads.length === 0, JSON.stringify([retried, dataFiles().filter(function (f) { return /Zebedee/.test(f); })]));
+
+    // ---- 5d. Not running when a student signs in: Continue says to start it and stays put; once it runs, Continue works.
+    await stopServer(server);
+    var blocked = await b.eval("(async function () { var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+      fillIn('Ada', 'Lovelace', '7th', 'Countess') + "document.getElementById('btn-name').click(); await sleep(500);" +
+      "return { screen: document.body.dataset.screen, error: document.getElementById('name-error').textContent, status: document.getElementById('server-status').textContent," +
+      "  focused: document.activeElement === document.getElementById('btn-name') }; })()");
+    check('saving program not running: Continue says to start it, the status line says so too, and the name screen stays',
+          blocked.screen === 'name' && blocked.error === START_IT && blocked.status === START_IT && blocked.focused, JSON.stringify(blocked));
+    server = await startServer(SERVER_PORT);
+    var unblocked = await b.eval("(async function () { var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };" +
+      "document.getElementById('btn-name').click(); for (var k = 0; k < 40 && document.body.dataset.screen === 'name'; k++) await sleep(50);" +
+      "return document.body.dataset.screen + ' ' + DS.logger.fileName('round1') + ' ' + document.getElementById('server-status').textContent; })()");
+    check('saving program started again: the same Continue now leads to the title, and the files carry the new name',
+          unblocked === 'title Ada_Lovelace_round1.csv ' + RUNNING, unblocked);
+    b.problems.length = 0;                   // the stopped program's refused connections were logged on purpose
+
+    // The loopholes below run as in class: signed in, with the saving program running.
     await b.goto(ROOT + 'index.html?dev=1'); await sleep(300);
     await b.eval(signIn('Zebedee', 'Quimby', '8th', 'Zeb the Great'));
     await sleep(600);
@@ -649,13 +803,57 @@ async function main() {
           gridWords.intro[2].title === 'These are the topics' && gridWords.between.length === 2 && /You explored: random topics/.test(gridWords.win.text) &&
           !/radar|come filled in/i.test(gridWords.all), gridWords.all.slice(0, 300));
     check('six-person grid: no console errors', b.problems.length === 0, b.problems.join(' | '));
+
+    // ---- 8. The saving program only writes data/<folder>/<file>.csv, only for the game's own page. Probed straight,
+    // without a browser, the way another web page or a script on the laptop would try it.
+    var before = dataFiles().join('\n');
+    var GOOD = { Origin: 'http://localhost:' + SERVER_PORT, 'Content-Type': 'application/json' };
+    function write(folder, file, headers, text) {
+      return raw('POST', '/api/write', headers || GOOD, JSON.stringify({ folder: folder, file: file, text: text === undefined ? 'x\r\n' : text }));
+    }
+    var escapes = await Promise.all([
+      write('..', 'evil.csv'), write('Probe', '../../evil.csv'), write('a/b', 'evil.csv'), write('/tmp', 'evil.csv'),
+      write('Probe', 'evil.html'), write('Probe', '.evil.csv'), write('leaderboard', 'evil.csv'), write('.git', 'evil.csv'),
+      raw('GET', '/api/read?folder=..&file=server.py'), raw('GET', '/api/read?folder=leaderboard&file=..%2F..%2Fserver.py'),
+      raw('GET', '/api/exists?folder=Probe&file=..%2F..%2F..%2Fetc%2Fpasswd')
+    ]);
+    check('server.py: refuses paths that leave data/<folder>/<file>.csv ("..", "/", other extensions, hidden files)',
+          escapes.every(function (r) { return r.status === 400; }) && !fs.existsSync(path.join(PROJECT, 'evil.csv')) && !fs.existsSync(path.join(path.dirname(DATA), 'evil.csv')),
+          escapes.map(function (r) { return r.status; }).join(' '));
+    var foreign = await Promise.all([
+      write('Probe', 'evil.csv', { Origin: 'https://evil.example', 'Content-Type': 'application/json' }),
+      write('Probe', 'evil.csv', { Origin: 'null', 'Content-Type': 'application/json' }),               // a page opened from a file
+      write('Probe', 'evil.csv', { 'Content-Type': 'application/json' }),                               // no Origin at all
+      write('Probe', 'evil.csv', { Origin: GOOD.Origin, 'Content-Type': 'text/plain' }),                 // a form or a "simple" request
+      write('Probe', 'evil.csv', Object.assign({ Host: 'evil.example:' + SERVER_PORT }, GOOD)),         // DNS rebinding
+      raw('GET', '/api/read?folder=leaderboard&file=leaderboard.csv', { Origin: 'https://evil.example' }),
+      raw('GET', '/api/health', { Host: 'evil.example' })
+    ]);
+    check('server.py: refuses a foreign Origin, a missing one, a non-JSON body and a foreign Host',
+          foreign.map(function (r) { return r.status; }).join(' ') === '403 403 403 415 403 403 403', foreign.map(function (r) { return r.status; }).join(' '));
+    var big = await write('Probe', 'big.csv', GOOD, new Array(6 * 1024 * 1024 + 1).join('x'));
+    var statics = await Promise.all(['/data/leaderboard/leaderboard.csv', '/.git/HEAD', '/js/', '/js/../../etc/passwd'].map(function (u) { return raw('GET', u); }));
+    check('server.py: refuses a file over the size limit, never serves the data folder, hidden files or folder listings',
+          big.status === 413 && statics.every(function (r) { return r.status === 404; }), big.status + ' ' + statics.map(function (r) { return r.status; }).join(' '));
+    check('server.py: none of those requests wrote anything', dataFiles().join('\n') === before, dataFiles().filter(function (f) { return before.indexOf(f) === -1; }).join(' '));
+    var probe = await write('Probe_Test', 'Probe_Test.csv', GOOD, 'a,"b, c"\r\n1,ü\r\n');
+    var probed = await raw('GET', '/api/read?folder=Probe_Test&file=Probe_Test.csv');
+    check('server.py: a good write lands byte for byte (CRLF, quotes, UTF-8) and reads back the same',
+          probe.status === 200 && fs.readFileSync(path.join(DATA, 'Probe_Test', 'Probe_Test.csv')).equals(Buffer.from('a,"b, c"\r\n1,ü\r\n', 'utf8')) &&
+          JSON.parse(probed.body).text === 'a,"b, c"\r\n1,ü\r\n', probe.status + ' ' + probed.body);
+    var twin = spawn(PYTHON, [path.join(PROJECT, 'server.py'), '--port', String(SERVER_PORT), '--data', DATA]), twinOut = '';
+    twin.stdout.on('data', function (d) { twinOut += d; }); twin.stderr.on('data', function (d) { twinOut += d; });
+    var twinCode = await new Promise(function (r) { twin.on('exit', r); });
+    check('server.py: a second copy on the same port says so plainly and stops', twinCode === 1 && /already in use/.test(twinOut), twinCode + ' ' + twinOut);
   } catch (e) {
     failures++;
     console.log('FAIL  the check run itself broke: ' + (e && e.stack || e));
   } finally {
     if (b) b.close();
     chrome.proc.kill();
+    await stopServer(server);
     try { fs.rmSync(chrome.profile, { recursive: true, force: true }); } catch (e) { /* temp folder; the OS will clean it */ }
+    try { fs.rmSync(DATA, { recursive: true, force: true }); } catch (e) { /* temp folder; the OS will clean it */ }
   }
 
   console.log('\n' + (failures ? failures + ' check(s) FAILED' : 'All checks passed'));

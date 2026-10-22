@@ -1,7 +1,11 @@
 Doomscroll AI saves its data here.
 
-On the game's first screen, press "Choose data folder" and pick THIS folder (or the game's folder).
-Chrome asks once whether the page may edit files here: choose "Edit files".
+The saving program writes every file. Start it once per class, from the game's folder:
+
+  python3 server.py
+
+then open http://localhost:8765 in Chrome (or any browser). Keep its window open while the class plays.
+The name screen says "✓ Saving program is running." when it is ready.
 
   data/
     First_Last/         one folder per student: First_Last_tutorial.csv, First_Last_round1.csv, ...

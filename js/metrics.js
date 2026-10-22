@@ -45,9 +45,25 @@
       .map(function (h) { return h.topic; });
   }
 
-  // First half of the round vs second half (the "Variety dropped from 0.72 -> 0.18" line).
-  // Split by push time. If the round ended early (everyone went AFK) pass the real
+  // What one half's watched posts were, in counts: how many different topics, and which topic(s) came up most.
+  // The big picture's loop example uses it ("a topic that was more than half of their second half"). Ties keep
+  // every tied topic, so nothing ever has to pick a winner.
+  function mixOf(topicIds) {
+    var counts = {};
+    topicIds.forEach(function (id) { counts[id] = (counts[id] || 0) + 1; });
+    var topCount = 0;
+    DS.TOPIC_IDS.forEach(function (id) { if ((counts[id] || 0) > topCount) topCount = counts[id]; });
+    return {
+      kinds: Object.keys(counts).length,
+      top: topCount ? DS.TOPIC_IDS.filter(function (id) { return counts[id] === topCount; }) : [],
+      topCount: topCount
+    };
+  }
+
+  // First half of the round vs second half (the big picture's verdict, its loop and the "Average variety" tile; the
+  // person steps no longer show it). Split by push time. If the round ended early (everyone went AFK) pass the real
   // elapsed seconds, not ROUND_SEC, so the halves are still halves of what happened.
+  // The number and the counts come from the very same two lists, so the words can't disagree with it.
   function diversityByHalf(history, elapsedSec) {
     var mid = elapsedSec / 2;
     var first = likedTopics(history, 0, mid);
@@ -56,7 +72,9 @@
       first: diversity(first),     // null if fewer than 2 liked posts in that half
       second: diversity(second),
       firstCount: first.length,
-      secondCount: second.length
+      secondCount: second.length,
+      firstMix: mixOf(first),
+      secondMix: mixOf(second)
     };
   }
 
@@ -118,10 +136,20 @@
 
   // Topics a VP would still happily watch (taste at/above ENJOY_THRESHOLD).
   // Comparing this at the start and end of the round puts a plain number on
-  // the filter bubble: "Maya used to enjoy 3 topics. Now she enjoys 1."
+  // the filter bubble: the big picture's "Topics people enjoy" tile.
   function enjoyedTopics(tastes) {
     return DS.TOPIC_IDS.filter(function (id) { return tastes[id] >= C.ENJOY_THRESHOLD; });
   }
+
+  // The same test on the whole percents the results radars print. The person's story names the topics that crossed
+  // the line, right beside those radars, so it must agree with them: a taste of 0.447 is printed "45", and "lost
+  // interest" next to a 45 would read as a mistake. (About 1 crossing in 4 lands there.) enjoyedTopics stays exact
+  // for the big picture's tile and the simulator.
+  function percent(t) { return Math.round(100 * t); }
+  function enjoyedAsShown(tastes) {
+    return DS.TOPIC_IDS.filter(function (id) { return percent(tastes[id]) >= percent(C.ENJOY_THRESHOLD); });
+  }
+  function missingFrom(ids, others) { return ids.filter(function (id) { return others.indexOf(id) === -1; }); }
 
   // --------------------------------------------------- Everything the reveal shows
   // reveal.js only DRAWS. All the deciding happens here, in plain data, so it can be tested
@@ -155,6 +183,11 @@
     var people = vps.map(function (vp) {
       var summary = feedSummary(vp.history);
       var halves = diversityByHalf(vp.history, elapsedSec);
+      var keptStart = enjoyedAsShown(vp.tasteSnapshotStart), keptEnd = enjoyedAsShown(vp.tastes);
+      // The topic the story says you showed "mostly": more than half of every post shown (the feed line's count), so
+      // a tie can never name a winner. Under 3 posts nothing is "mostly" anything.
+      var focus = summary.total >= 3 && summary.topCount * 2 > summary.total ? summary.topTopic : null;
+      var lost = missingFrom(keptStart, keptEnd);
       return {
         id: vp.id, name: vp.name, avatar: vp.avatar, bio: vp.bio,
         gone: vp.state === 'afk',
@@ -179,11 +212,21 @@
         tastesEnd: Object.assign({}, vp.tastes),
         enjoyedStart: enjoyedTopics(vp.tasteSnapshotStart).length,
         enjoyedEnd: enjoyedTopics(vp.tastes).length,
+        // What the person's story says happened, as the radars print it (enjoyedAsShown). In topic order.
+        lostTopics: lost,                      // enjoyed at the start, not at the end
+        gainedTopics: missingFrom(keptEnd, keptStart),
+        focusTopic: focus,                     // or null
+        focusGrew: focus !== null && percent(vp.tastes[focus]) > percent(vp.tasteSnapshotStart[focus]),
+        // A filter bubble only where one formed: a feed mostly of one topic they still enjoy (so they watched it, and
+        // each watch pulled the others down), and a topic lost on the way. Skips don't move tastes, so a topic shown
+        // a lot but skipped is no bubble. The story and its definition line both read this one flag.
+        bubble: focus !== null && lost.length > 0 && keptEnd.indexOf(focus) !== -1,
         clue: vp.clue,
         observed: observed(vp.history),        // what the player saw (the profile they built of this person)
         variety: {
           first: halves.first, second: halves.second,
           firstCount: halves.firstCount, secondCount: halves.secondCount,
+          firstMix: halves.firstMix, secondMix: halves.secondMix,
           trend: trendOf(halves.first, halves.second)
         }
       };
@@ -194,6 +237,20 @@
     var both = people.filter(function (p) { return p.variety.first !== null && p.variety.second !== null; });
     var first = mean(both.map(function (p) { return p.variety.first; }));
     var second = mean(both.map(function (p) { return p.variety.second; }));
+
+    // The big picture shows how a filter bubble forms as a loop ("you show Maya Sports → they watch → …"). A real
+    // person and topic make it concrete, but only one whose own feed narrowed, and only a topic that was more than
+    // half of their second half: the loop must be true of that person. The narrowest feed makes the best example.
+    // null means no one qualifies, and the wording falls back to "a topic".
+    var loopExample = null;
+    both.filter(function (p) { return p.variety.trend === 'dropped' || p.variety.trend === 'low'; })
+      .sort(function (a, b) { return a.variety.second - b.variety.second; })
+      .some(function (p) {
+        var mix = p.variety.secondMix;
+        if (mix.top.length !== 1 || mix.topCount * 2 <= p.variety.secondCount) return false;
+        loopExample = { name: p.name, topic: mix.top[0] };
+        return true;
+      });
 
     return {
       total: vps.length,
@@ -206,6 +263,7 @@
         varietySecond: second,
         varietyPeople: both.length,            // how many people the two numbers are based on
         trend: trendOf(first, second),
+        loopExample: loopExample,              // { name, topic } or null
         enjoyedStart: mean(people.map(function (p) { return p.enjoyedStart; })),
         enjoyedEnd: mean(people.map(function (p) { return p.enjoyedEnd; }))
       }
@@ -215,6 +273,7 @@
   DS.metrics = {
     diversity: diversity,
     likedTopics: likedTopics,
+    mixOf: mixOf,
     diversityByHalf: diversityByHalf,
     stillScrolling: stillScrolling,
     averageAttention: averageAttention,

@@ -142,6 +142,8 @@ DS.CONFIG = {
   LEADERBOARD_TOP: 10,
   GAMER_TAG_MAX: 16,          // characters. Fits a leaderboard row and a narrow card without cutting it off
   GRADE_MAX: 12,              // characters of a typed grade ("7th", "High school"), which goes in every CSV row
+  SAVE_TIMEOUT_SEC: 8,        // how long to wait for the saving program (server.py) before calling a save failed.
+                              // It answers in milliseconds; a hung one must not leave "Saving your files…" up forever
 
   // --------------------------------------------------------- Game loop / screen
   MAX_FRAME_DT_SEC: 0.25,     // longest step the game loop will take at once. If the tab was

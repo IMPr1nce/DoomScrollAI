@@ -10,23 +10,37 @@ more and more of the same thing, and the people's tastes narrowed. That is a fil
 student made it by chasing attention. The class then talks about whether that was good for those
 people.
 
-No installs. No server. No accounts. The student types their name (it only names their data files),
-their grade, and a gamer tag for the leaderboard.
+No accounts, nothing to install but Python 3, nothing leaves the laptop. One small "saving program" runs on
+each laptop and writes the data files. The student types their name (it only names their data files), their
+grade, and a gamer tag for the leaderboard.
 
 ---
 
 ## How to run it
 
-1. Open the project folder.
-2. **Double-click `index.html`.** Use Chrome or Edge.
-3. **Before class, choose the data folder:** on the first screen, press **📁 Choose data folder** and pick
-   the `data` folder inside the project (or the project folder itself: a `data` folder is made inside it).
-   Chrome asks once whether the page may edit files there: choose *Edit files*.
+Before class, on each laptop:
 
-That's all. It runs straight from the file, offline. Chrome forgets the folder when the tab is closed, so
-choose it again each time you open the game (once per class: *Log out* keeps it for the next student).
-It needs Chrome or Edge: other browsers can't save to a folder, so there the files download when a student
-logs out, and the leaderboard only shows rounds since the page was opened.
+1. Open a terminal in the project folder (on a Mac: right-click the folder in Finder → *New Terminal at Folder*).
+2. Start the saving program:
+
+   ```bash
+   python3 server.py
+   ```
+
+   It prints one line: `Saving to /…/DoomScrollAI/data. Open http://localhost:8765`. **Keep that window open**
+   while the class plays (minimize it); closing it, or pressing Ctrl + C, stops saving.
+3. Open **http://localhost:8765** in Chrome (any current browser works). The first screen says
+   **✓ Saving program is running.** Bookmark the address for next time.
+
+That's all. It runs offline, and only this laptop can reach it. Every file lands in the `data` folder inside
+the project (see [The data it records](#the-data-it-records)); nothing downloads and no browser prompt appears.
+Each laptop keeps its own `data` folder and its own leaderboard, so collect the files from every laptop.
+
+**Python 3:** Macs and Linux laptops have it. On Windows, install it from python.org (tick *Add to PATH*) and
+type `python server.py` if `python3` isn't found. Chromebooks can't run it.
+
+Double-clicking `index.html` no longer works: the first screen then says to start the saving program and
+open `http://localhost:8765`.
 
 **Screen size:** built for a 1366 × 768 school laptop (about 600 px of page height once Chrome's
 toolbars are counted). Everyone fits on screen without scrolling in any window at least 1000 px wide
@@ -36,8 +50,8 @@ still work; the page just scrolls.
 ## What the student does (about 3 minutes)
 
 1. **Who's playing?** The student types their first and last name, ticks **8th** (or types another grade),
-   and picks a **gamer tag** (not their real name; a few rude words are refused). All are needed, and so is
-   the data folder. Then the **title screen** → Start. The name names the student's folder and files; the
+   and picks a **gamer tag** (not their real name; a few rude words are refused). All are needed, and the
+   saving program must be running (*Continue* checks it). Then the **title screen** → Start. The name names the student's folder and files; the
    grade goes in the data; the gamer tag only goes on the leaderboard.
 2. **The tutorial:** one person, Alex, a brand-new user, in two named steps. The radar is Alex's
    **profile**: it starts empty, and each post Alex watches moves that topic
@@ -60,13 +74,17 @@ still work; the page just scrolls.
    longer the spike, the more that person is into the topic, so a glance shows what to show them. The
    radar shows who they were **at the start of the round** and never changes. Every post they like
    quietly shifts their tastes toward it, but that stays hidden until the results.
-4. **Results:** the score first (the win), then one screen per person: what you showed them and how many
-   of the six topics you tried, how much variety they saw, and their radar twice: at the start (the one you
-   played with) and at the end, usually shrunk into a single spike. That's the filter bubble, and the
+4. **Results:** the score first (the win), then one screen per person. It opens with that person's story ("You
+   showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Comics."), with the
+   meaning of "filter bubble" right under it whenever it says "bubble". Then what you showed them and how many of
+   the six topics you tried, and their radar twice: at the start (the one you played with) and at the end, usually
+   shrunk toward a single spike, beside the topics they lost interest in. That's the filter bubble, and the
    student's own feed made it. Then the **🏆 Leaderboard**: every round played on this laptop, ranked by
-   points, with the student's row marked "you". Then the big picture: one line that names the idea ("Exploiting = showing
-   what you know works. Exploring = trying something new to learn more.") and three questions for the class.
-   The tutorial introduced these two words; the round never uses them.
+   points, with the student's row marked "you". Then the big picture. When feeds narrowed, it defines a filter
+   bubble in one line and shows the loop that built it ("you show Maya Sports → they watch → they like Sports
+   more, the rest less → repeat"). One line names exploring and exploiting ("Exploiting = showing what you know
+   works. Exploring = trying something new to learn more."), and three questions for the class follow, the
+   second about the student's own feed. The tutorial introduced the two words; the round never uses them.
 5. **Log out or Play again** (on the big-picture step). The files save themselves as each part ends, and the
    step says where. *Play again* starts a new round. *Log out* saves anything not saved yet, then goes back to
    the name screen for the next student.
@@ -76,10 +94,10 @@ Teacher tips:
 - **Pause** with the button or the **Esc** key. Nothing changes until you resume.
 - On a projector, the results screen moves with the **← →** arrow keys.
 - After the first round, try **Play again** with a rule: "never show the same topic twice in a row".
-  Compare the score and the variety numbers.
+  Compare the score, and the stories and "Average variety" numbers on the results.
 - Switching to another tab pauses the game automatically.
 - **Sharing a laptop:** when a student is done, press **Log out** on the last results step. Their files are
-  saved, and the next student starts on an empty name screen (the data folder stays chosen).
+  saved, and the next student starts on an empty name screen.
 - **The leaderboard** is `data/leaderboard/leaderboard.csv`. To remove a rude gamer tag, delete its row in a
   spreadsheet and save it as CSV. To start a fresh board (a new class), delete or rename the file.
 
@@ -156,8 +174,8 @@ Everything the game does is written to a log in the browser's memory: every post
 was liked, attention before and after, each person's tastes as they change, who left and why, pauses,
 and the start and end of each round.
 
-The game saves itself into the data folder, one file per part of the session, in a folder named after the
-student:
+The saving program writes the files into the `data` folder next to `server.py`, one file per part of the
+session, in a folder named after the student:
 
 ```
 data/
@@ -175,8 +193,11 @@ written over:** if a student plays again later (or two students share a name), t
 like `Kai_Moreno_round1 (2).csv`. (The log holds the people's tastes as they drift, which the player must not
 see until the end, so a round's file is only written once that round is over.)
 
-Without a data folder (Firefox or Safari), nothing is saved until **Log out**, which downloads the files
-instead. Chrome may then ask whether the page may **download multiple files**: choose *Allow*.
+Each file is written whole and swapped in at once, so a crash or a closed laptop never leaves half a CSV.
+**Nothing ever downloads.** If the saving program stops mid-class, the results say the save failed, and *Log
+out* shows **Could not save** with a single *Try again* button: the student's data stays in the game until it
+is saved. Start `python3 server.py` again, then press *Try again*. (Don't reload the page first: that would
+lose the unsaved rounds.)
 
 **Privacy:** the student's name is on the folder and file names only. Inside, the only thing about the
 player is their grade: no name, no gamer tag, no account, no device information. The session id is a random
@@ -228,14 +249,15 @@ fetch('http://localhost:5000/api/log', {
 }).catch(function () { /* the game must never break because the network did */ });
 ```
 
-Keep the line that stores the records (the CSV files need it). The Flask side needs CORS turned
-on, because `index.html` is opened from a file, not from the server.
+Keep the line that stores the records (the CSV files need it). A server at another address needs CORS
+turned on, because the page comes from the saving program's address (`http://localhost:8765`).
 
 ---
 
 ## Project layout
 
 ```
+server.py             the saving program: serves the game at http://localhost:8765 and writes the CSV files
 index.html            the page (all screens live here, one visible at a time)
 css/style.css         all styling. Colors are variables at the top.
 js/config.js          every tunable number and flag
@@ -244,12 +266,12 @@ js/vp.js              the person model: tastes, attention, like/skip, drift, fat
 js/metrics.js         diversity, scores, and every number on the results screen (NO page code)
 js/logger.js          event log, the CSV files, and flush(), the one exit for data
 js/leaderboard.js     the leaderboard: gamer tags, points, ranking, its CSV (NO page code)
-js/datafolder.js      the data folder the teacher chooses, where every file is saved (Chrome/Edge)
+js/datafolder.js      talks to the saving program: is it running? write, read, exists
 js/radar.js           draws the six-topic radar (on the cards and on the results screen)
 js/ui.js              screens, pop-up, scoreboard, profile cards (radar or button layout)
 js/reveal.js          the results screen: the wording (pure, tested) + the drawing
 js/game.js            the conductor: clock, phases, pause, round end, logging hooks
-data/                 where the game saves: one folder per student, and leaderboard/ (not in git)
+data/                 where server.py saves: one folder per student, and leaderboard/ (not in git)
 tests.html            open in Chrome: the model, logger and results-wording tests
 sim.html              open in Chrome: the balance simulator
 tests/                tests.js, plus optional tools: run-node.js (terminal runner), e2e.js (real-Chrome check),
@@ -257,13 +279,14 @@ tests/                tests.js, plus optional tools: run-node.js (terminal runne
 sim/sim.js            the simulator's engine (also page-free)
 steering/             how the project is meant to work, for anyone changing it (people or AI): start with
                       steering/CLAUDE.md, then product.md, tech.md, structure.md, content.md, balance.md
-.claude/              launch.json (a local web server) and CLAUDE.md, which loads the steering docs into Claude Code
+.claude/              launch.json (runs server.py) and CLAUDE.md, which loads the steering docs into Claude Code
 ```
 
-Rules the code follows: plain HTML + CSS + vanilla JS; no modules, frameworks, build step or backend;
-classic `<script>` tags in dependency order sharing one global, `window.DS`; the only disk access is the data
-folder the teacher picks (Chrome's File System Access API); the model files never touch
-the page, so the tests and the simulator can run them without a browser.
+Rules the code follows: plain HTML + CSS + vanilla JS; no modules, frameworks or build step; one small backend,
+`server.py`, using only Python's standard library; classic `<script>` tags in dependency order sharing one
+global, `window.DS`; the only disk access is through the saving program, which writes nothing but
+`data/<folder>/<file>.csv`; the model files never touch the page, so the tests and the simulator can run them
+without a browser.
 
 ## Checking your work
 
@@ -271,16 +294,17 @@ the page, so the tests and the simulator can run them without a browser.
   tuning `config.js` never breaks them.
 - **`sim.html`**: the balance report described above.
 - **Terminal (optional, needs Node):** `node tests/run-node.js` and `node tests/run-node.js sim`.
-- **Real-browser check (optional, needs Node 22+ and Chrome):** `node tests/e2e.js`. It opens the actual
-  game from `file://` in a headless Chrome, plays whole rounds with robot players, and checks about 95
-  things in every version (both radars, and 6 people with buttons): the tutorial's two steps, its profile
+- **Real-browser check (optional, needs Node 22+, Python 3 and Chrome):** `node tests/e2e.js`. It starts the
+  real `server.py` with a temporary data folder (your `data/` is never touched), opens the game in a headless
+  Chrome, plays whole rounds with robot players, and checks about 115 things in every version (both radars, and 6 people with buttons): the tutorial's two steps, its profile
   radar and what its pop-ups say, the avatar reactions, every screen fits a short laptop
   window (and the board a 1024 × 768 one), no radar button overlaps another, the interests radar matches
   each person and never changes mid-round, the results text is sane (no "undefined"), the name screen's
-  checks, the CSV files land in the right folder, well-formed and saying which version was played, the
-  leaderboard file and step, Log out with and without a data folder, the console doors are closed, and the frantic-click and
-  pause loopholes stay closed. Run it after tuning `config.js` or editing `content.js`. It takes 2–3 minutes.
-- **Developer mode:** open `index.html?dev` (add `?dev` to the file's address). This leaves the
+  checks, the CSV files land on disk in the right folder, well-formed and saying which version was played, a
+  second session gets ` (2)` files, the leaderboard file and step, Log out, the saving program stopping
+  mid-session (only *Try again*, nothing downloaded, nothing lost), what the saving program refuses, the console
+  doors are closed, and the frantic-click and pause loopholes stay closed. Run it after tuning `config.js` or editing `content.js`. It takes 2–3 minutes.
+- **Developer mode:** open `http://localhost:8765/index.html?dev`. This leaves the
   console handles open and loads `tests/dev-helpers.js`. In the console (F12):
   - `DS.dev.play()` skips the tutorials, plays a whole round with a robot in an instant, and lands
     on the results screen. Great for demos. `DS.dev.play({ bot: 'spam' })` shows the sharpest filter bubble.
@@ -296,9 +320,11 @@ the page, so the tests and the simulator can run them without a browser.
 - **A fast clicker is protected from themselves.** After any pop-up or new screen appears, its buttons
   ignore clicks for half a second (`CLICK_GUARD_MS`), so the last frantic clicks of a round can't skip the
   results screen or dismiss a pop-up.
-- **The results text only says what happened.** "Variety dropped" appears only if it dropped; a feed that
-  was narrow from the first post gets its own wording; people who left early are shown as "too few
-  watched posts" instead of a made-up number. All of this is tested.
+- **The results text only says what happened.** A person's story says "bubble" only when their feed was mostly
+  one topic they still enjoy and they lost interest in another; a topic shown a lot but skipped is no bubble. "Lost
+  interest in Comics" always matches the percents printed on the radar beside it. A player who mixed topics is
+  told so, even when every watch still nudged a taste away. The big picture names the filter bubble only when
+  feeds narrowed. All of this is tested.
 - **Why it no longer feels like luck.** Favorites used to be skipped 23% of the time, even for a player
   who knew every answer. Now it's under 10%, and never twice in a row (`SKIP_STREAK_BREAK`), so "even
   favorites get skipped sometimes" is still true but rare. Only a handful of ideas fit on the screen at once, so the game uses 2 people (it was 4, and 6 before that: six
@@ -319,11 +345,11 @@ the page, so the tests and the simulator can run them without a browser.
 | Problem | Fix |
 |---|---|
 | The page is blank, or you see "needs JavaScript" | turn JavaScript on, then reload |
-| No "Choose data folder" button | the browser can't save to a folder (Firefox, Safari). Use Chrome or Edge, or let the files download at Log out. |
-| "Choose the data folder first" | press 📁 Choose data folder and pick the project's `data` folder. Chrome forgets it when the tab closes. |
-| Chrome says it can't open that folder | it refuses some system folders (your home or Downloads folder itself). Pick the project's `data` folder. |
-| "Could not save" at Log out | the data folder was moved or deleted. Put it back and press *Try again*, or press *Download them*. |
-| Only one file arrived (no data folder) | Chrome blocked the others as "multiple downloads", and those files are lost. Allow multiple downloads for this page (the icon at the end of the address bar). |
+| "This site can't be reached" at localhost:8765 | the saving program isn't running. Run `python3 server.py` in the project folder, then reload. |
+| "Start the saving program first" | the same: start it (or check its window is still open), then press *Continue* again. If the message adds "Then open http://localhost:8765", the game was opened by double-clicking `index.html`: open that address instead. |
+| "Port 8765 is already in use" | the saving program is already running in another window: use that one. Or start a second copy with `python3 server.py --port 8766` and open `http://localhost:8766`. |
+| `python3: command not found` | install Python 3 (python.org). On Windows, try `python server.py`. |
+| "Could not save" at Log out | the saving program stopped. Start it again, then press *Try again*. Don't reload the page: the unsaved rounds would be lost. |
 | A rude gamer tag on the board | delete its row from `data/leaderboard/leaderboard.csv`. |
 | The cards need scrolling | the window is narrower than 1000 px or shorter than 560 px. Maximize the window, or press Ctrl + minus to zoom out. |
 | Everything is too easy or too hard | see the tuning table above, then check `sim.html` |

@@ -81,11 +81,37 @@ alone, and a skip gets a quick 👆 swipe.
 
 ## Results wording must be honest
 - **Every claim comes from `DS.metrics.buildReveal()`.** `DS.revealText` only turns numbers into sentences.
-- **Each trend has its own sentence:** `dropped`, `low` (narrow from the start), `rose`, `steady`, and
-  `unknown` (too few watched posts; say which half). Never claim a bubble that didn't form.
+- **Each person's step tells a story, not a measurement** (`story`). Students never meet the word "variety" during
+  play, so the person steps don't show it (the 0–1 measure stays on the big picture's "Average variety" tile). The
+  story says what you showed them, then what happened to their tastes, naming topics: "You showed Maya mostly
+  Sports, so Maya is drifting into a Sports bubble and lost interest in Comics."
+- **Its facts come from `buildReveal()`:** `focusTopic` (more than half of every post shown, watched or skipped, with
+  at least 3 posts, so a tie never names a winner), `lostTopics` / `gainedTopics` and `focusGrew`, all compared on
+  the **whole percents the radars print** (a taste of 0.447 shows "45", so it isn't "lost"), and `bubble`.
+- **"Bubble" only where one formed:** a main topic they still enjoy at the end, and at least one topic lost. Skips
+  don't move tastes, so a topic shown a lot but mostly skipped is no bubble ("You showed Jordan mostly Food, which
+  they don't enjoy. The posts they did watch cost them interest in Movies."). Wherever the story says "bubble", the
+  definition sits under it, word for word as on the big picture (`bubbleDefinition`).
+- **The cause is what the player did.** Every watch nudges tastes, so a mix can cost a topic too: "You mixed it up
+  for Maya, but every watch still nudged their tastes: they lost interest in Comics." Never "because you didn't
+  show variety", never "stuck" or "trapped" (tastes drift; nothing is locked).
+- **The other branches:** nothing shown ("…never saw a post, so their tastes didn't change."), 1–2 posts ("You showed
+  Maya just 2 posts, …"), "only Sports" when every post was Sports, "Sports grew on them" only when its printed
+  percent rose, and "They also came to enjoy Food." for a gained topic. Nothing lost reads "they still enjoy all 4
+  topics they started with". Someone who left gets the same facts in the past tense; the status pill says when.
+- **"Topics they'd enjoy", never "favorites":** the start counts the "meh" topic too (usually 4, not 3). The story
+  doesn't repeat the feed line's numbers ("mostly Sports", not "7 of 15").
+- **The chips beside the radars** say the same topics in words: "Lost interest: 💥 Comics", or "Lost interest:
+  none" (always shown), and "Gained interest: 🍕 Food" only when something was gained.
+- **The filter bubble is defined before it is named, and only where it formed.** For `dropped` or `low` the
+  big picture says what happened ("Their feeds got narrower as the round went on."), then "Filter bubble = a
+  feed so full of one thing that you rarely see anything else.", then the loop that built it: "How it forms:
+  you show Maya Sports → they watch → they like Sports more, the rest less → repeat." The person and topic are
+  real (`overall.loopExample`: someone whose feed narrowed, and a topic that was more than half of their second
+  half), or it says "a topic". `rose`, `steady` and `unknown` get neither line. Never claim a bubble that didn't form.
 - **Ties are said as ties** ("Sports and Music were each shown 4 times"). Never pick a winner, and never
   write "1 were".
-- **No fake numbers:** show "—" or "too few watched posts", never a made-up 0.
+- **No fake numbers:** show "—" for a number that needs 2 watched posts, never a made-up 0.
 - **"You tried 3 of 6 topics."** joins the feed sentence on each person's step (no extra height). "All 6"
   when every topic was tried, "…before Maya left." for someone who left, and nothing at all when nothing was
   shown (the feed line already says so).
@@ -94,11 +120,12 @@ alone, and a skip gets a quick 👆 swipe.
   defines; it doesn't judge the player.
 - **The leaderboard says ranks as ranks, and ties as ties:** "You're #3 of 12 rounds.", "You're tied for #3 of 12
   rounds.", "You're #1 of 12 rounds!" (only an untied #1 gets the "!"), "Yours is the first round on the board."
-  Tied rounds share a rank (1, 2, 2, 4). Its note says where the rows come from, and says so when there is no
-  data folder ("Only rounds since the game was opened…") or the file couldn't be saved. Points are explained on
+  Tied rounds share a rank (1, 2, 2, 4). Its note says where the rows come from, and says so when the saving
+  program wasn't running ("Only rounds since the game was opened…") or the file couldn't be saved. Points are explained on
   the step: "Points = everyone's attention when the round ended. Someone who left counts as 0."
-- **Exactly three discussion questions.** The third is "If you always order your favorite food, you never find
-  a new favorite. When should an app show something new?"
+- **Exactly three discussion questions.** The second takes the lesson to the student's own phone: "Does your own
+  TikTok or YouTube feed do this? How would you find out?" The third is "If you always order your favorite food,
+  you never find a new favorite. When should an app show something new?"
 - **A new outcome needs** a sentence in `DS.revealText` and a "reveal text: …" test in `tests/tests.js`.
 - **The discussion questions ask; they don't preach.**
 
@@ -106,14 +133,21 @@ alone, and a skip gets a quick 👆 swipe.
 - **The why, in one line:** "Your name labels your data files. Only your gamer tag goes on the leaderboard."
 - **Messages, the first missing thing only:** "Type your first and last name.", "Tick 8th grade, or type your
   grade.", "Pick a gamer tag for the leaderboard.", "Pick a different gamer tag." (a refused word: never say
-  which word, or why), "Choose the data folder first (ask your teacher)."
+  which word, or why), "Start the saving program first (ask your teacher)."
 - **The gamer tag's placeholder says "Not your real name".** The tag is shown to the class.
 - **Refused words** live in `DS.BLOCKED_TAG_WORDS` (`content.js`): `anywhere` words are refused even inside a tag
   and spelled around ("sh1t", "f.u_c k"), so they must never hide inside an ordinary word; `whole` words are
   refused only as a word of their own ("ass" but not "class"). Tested both ways. It's a speed bump: the teacher
   can delete a row from `leaderboard.csv`.
-- **The folder status:** "Not chosen yet.", "✓ Saving to the data folder.", and, in a browser without one, "This
-  browser can't save to a folder. Your files will download when you log out."
+- **The saving program's status line:** "Checking the saving program…", then "✓ Saving program is running." or
+  "Start the saving program first (ask your teacher)." Opened from a file (`file://`), it adds which address to
+  open: "Then open http://localhost:8765." Students call it "the saving program", never "the server".
+- **Saving, after the round:** "✓ Your data is saved in data/Kai_Moreno.", "Saving your data…", "Saving failed: is
+  the saving program still running? Log out will try again." and, if it never answered, "The saving program isn't
+  running, so nothing is saved yet. Log out will try again." The leaderboard's note: "…the saving program wasn't
+  running." **Nothing ever says "download".**
+- **"Could not save" at Log out:** "Your files didn't reach the saving program. Ask your teacher to check that it is
+  running, then try again." Its only button is **Try again**.
 
 ## Accessibility
 - **Emoji + words, never color alone:** topics, status chips, watched vs skipped in the feed, the +/− pills.
@@ -138,5 +172,5 @@ alone, and a skip gets a quick 👆 swipe.
 | Results labels, captions and legends | the drawing half of `js/reveal.js` | no |
 | The leaderboard's sentences, the "saved in data/…" line | `DS.revealText` in `js/reveal.js` | yes |
 | Title screen, and the name screen's labels | `index.html` | the name screen, in `tests/e2e.js` |
-| The name screen's messages and folder status, the Log out pop-ups | `askName()`, `folderStatus()`, `logOut()` in `js/game.js` | the messages and status, in `tests/e2e.js` |
+| The name screen's messages and the saving program's status, the Log out pop-ups | `askName()`, `serverStatus()`, `logOut()` in `js/game.js` | the messages, status and "Could not save", in `tests/e2e.js` |
 | Refused gamer-tag words | `DS.BLOCKED_TAG_WORDS` in `js/content.js` | yes |

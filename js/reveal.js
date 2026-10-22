@@ -4,7 +4,7 @@
  * It walks the player through the steps one at a time (5 with the default 2 people):
  *
  *   Score            "the win": still scrolling, average attention and points. (They did well!)
- *   One per VP       what you showed them, how their tastes changed, how their variety changed.
+ *   One per VP       their story (what you showed them, what happened to their tastes), the feed, the radars.
  *   Leaderboard      every round on this laptop, ranked by points (leaderboard.js). Before the big
  *                    picture, so the class discussion still comes last.
  *   Big picture      the average story, a verdict, the question, and 3 discussion prompts.
@@ -12,7 +12,7 @@
  * Two layers in this file:
  *   DS.revealText   PURE functions that turn numbers into sentences. No DOM, so tests.html can
  *                   check them. This is where the screen's honesty lives: every sentence has a
- *                   branch for "it didn't happen" (variety didn't drop, nobody left, no data).
+ *                   branch for "it didn't happen" (nothing lost, nobody left, no data).
  *   DS.reveal       draws the screen with those sentences. Numbers come from
  *                   DS.metrics.buildReveal() and are never recomputed here.
  *
@@ -86,26 +86,48 @@
       return 'Bright = they watched it (' + p.likedCount + '). Faded = they skipped it (' + (p.total - p.likedCount) + ').';
     },
 
-    // The headline number. It only says "dropped" if variety really dropped.
-    varietyLine: function (v) {
-      if (v.trend === 'dropped') return 'Variety dropped from ' + two(v.first) + ' → ' + two(v.second) + '.';
-      if (v.trend === 'low')     return 'Variety stayed low: ' + two(v.first) + ' → ' + two(v.second) + '.';
-      if (v.trend === 'rose')    return 'Variety went up from ' + two(v.first) + ' → ' + two(v.second) + '.';
-      if (v.trend === 'steady')  return 'Variety stayed about the same: ' + two(v.first) + ' → ' + two(v.second) + '.';
-      // unknown: say which half was too thin, instead of inventing a number
-      // (Kept short on purpose: a 2-line sentence here pushes the screen past a 600px-tall window.)
-      if (v.first === null && v.second === null) return 'Too few watched posts to measure variety.';
-      return v.second === null
-        ? 'Too few watched posts in the second half.'
-        : 'Too few watched posts in the first half.';
+    // The person's step opens with their story: what you showed them, then what happened to their tastes. Students
+    // never meet the word "variety" during play, so this names topics instead of measuring them. Every fact comes from
+    // buildReveal(): lostTopics / gainedTopics / focusGrew compare the percents the radars beside it print, and
+    // `bubble` decides the one sentence that says "bubble" (renderVP draws the definition under exactly that one).
+    // The cause is always what the player did: every watch nudges tastes, so even a mix can cost a topic, and a
+    // player who mixed is told so, never "because you didn't show variety". "Enjoy" counts the "meh" topic too
+    // (the start is usually 4), so never "favorites". Someone who left gets the same facts in the past tense; the
+    // status pill already says when.
+    story: function (p) {
+      var now = !p.gone;
+      var kept = 'they still ' + (now ? 'enjoy ' : 'enjoyed ') +
+                 (p.enjoyedStart === 1 ? 'the 1 topic' : 'all ' + p.enjoyedStart + ' topics') + ' they started with.';
+      var still = ', and ' + kept;
+      var lost = joinLabels(p.lostTopics);
+      var line;
+      if (!p.total) return p.name + ' never saw a post, so their tastes didn\'t change.';   // tastes move only on a watch
+      if (p.total < 3) {
+        line = 'You showed ' + p.name + ' just ' + plural(p.total, 'post') +
+               (lost ? ', but even that cost them interest in ' + lost + '.' : still);
+      } else if (p.focusTopic) {
+        var topic = topicLabel(p.focusTopic);
+        line = 'You showed ' + p.name + (p.topCount === p.total ? ' only ' : ' mostly ') + topic;
+        if (p.bubble) {
+          line += ', so ' + p.name + (now ? ' is drifting' : ' drifted') + ' into a ' + topic + ' bubble and lost interest in ' + lost + '.';
+        } else if (lost) {
+          // No bubble with a loss means the main topic isn't one they enjoy: mostly skipped, so it didn't pull them in.
+          line += ', which they ' + (now ? 'don\'t' : 'didn\'t') + ' enjoy. The posts they did watch cost them interest in ' + lost + '.';
+        } else if (p.focusGrew) {
+          line += '. ' + topic + ' grew on them, but ' + kept;
+        } else {
+          line += still;
+        }
+      } else {
+        line = 'You mixed it up for ' + p.name +
+               (lost ? ', but every watch still nudged their tastes: they lost interest in ' + lost + '.' : still);
+      }
+      return p.gainedTopics.length ? line + ' They also came to enjoy ' + joinLabels(p.gainedTopics) + '.' : line;
     },
-    varietyHint: '0 = all the same. 1 = all different.',
-
-    // "enjoys" = a taste of at least ENJOY_THRESHOLD, i.e. they'd like it close to half the time or more.
-    tasteLine: function (p) {
-      return 'At the start, ' + p.name + ' enjoyed ' + plural(p.enjoyedStart, 'topic') +
-             '. At the end: ' + p.enjoyedEnd + '.';
-    },
+    // The chips beside the radars: the same topics as the story, in words (with the emoji) for screen readers too.
+    lostLabel: 'Lost interest:',
+    gainedLabel: 'Gained interest:',
+    noneLost: 'none',
 
     // ---- Step 8: the big picture
     closingTitle: function (still, total) {
@@ -114,17 +136,13 @@
       return 'You lost everyone. What would a real app try next?';
     },
 
-    // The verdict is chosen from the data. It must never claim a bubble that didn't form.
+    // The verdict is chosen from the data. It must never claim a bubble that didn't form. For a narrow result it
+    // only says what happened; bubbleDefinition and bubbleLoop then name the idea and show the cause, so the term
+    // is defined before it is used.
     verdict: function (overall) {
-      if (overall.trend === 'dropped') {
-        return 'Their feeds got narrower. Each time you showed a post someone liked, they liked that topic more ' +
-               'and everything else less. That is how a filter bubble forms.';
-      }
-      if (overall.trend === 'low') {
-        // Narrow from the start: there was no "drop" to point at, but it is the same lesson, so say what happened.
-        return 'Their feeds were narrow all round. Most of what each person watched was the same topic. ' +
-               'That is a filter bubble, and it forms fast when an app only chases attention.';
-      }
+      if (overall.trend === 'dropped') return 'Their feeds got narrower as the round went on.';
+      // Narrow from the start: there was no "drop" to point at, but it is the same lesson, so say what happened.
+      if (overall.trend === 'low') return 'Their feeds were narrow from the start.';
       if (overall.trend === 'rose') {
         return 'Variety went up this time. Apps that only chase attention can end up doing the opposite.';
       }
@@ -132,6 +150,18 @@
         return 'Feeds stayed fairly mixed this time. Play again and only show what each person already likes. What changes?';
       }
       return 'There weren\'t enough watched posts to measure variety. Play again and keep people watching longer.';
+    },
+    // Said only where the bubble really formed (bubbleLoop is '' otherwise, and renderBig skips both).
+    bubbleDefinition: 'Filter bubble = a feed so full of one thing that you rarely see anything else.',
+    // The cause, as a loop a student can follow. It names a real person and topic when one fits (see loopExample in
+    // metrics.js); "they like Sports more, the rest less" is the taste drift that the radars on each step show.
+    bubbleLoop: function (overall) {
+      if (overall.trend !== 'dropped' && overall.trend !== 'low') return '';
+      var ex = overall.loopExample;
+      if (!ex) return 'How it forms: you show a topic → they watch it → they like it more, the rest less → repeat.';
+      var topic = topicLabel(ex.topic);
+      return 'How it forms: you show ' + ex.name + ' ' + topic + ' → they watch → they like ' + topic +
+             ' more, the rest less → repeat.';
     },
     varietyTile: function (o, total) {
       if (o.varietyFirst === null) return { value: '—', sub: 'not enough watched posts' };
@@ -159,10 +189,10 @@
       return 'You\'re ' + (view.mine.tied ? 'tied for ' : '') + '#' + view.mine.rank + ' of ' + view.count + ' rounds' +
              (view.mine.rank === 1 && !view.mine.tied ? '!' : '.');
     },
-    // Says where the rounds come from, because without a data folder the board is only this visit's.
+    // Says where the rounds come from, because without the saving program the board is only this visit's.
     boardNote: function (saved) {
       if (saved === 'folder') return 'Rounds played on this laptop.';
-      if (saved === 'memory') return 'Only rounds since the game was opened: no data folder was chosen.';
+      if (saved === 'memory') return 'Only rounds since the game was opened: the saving program wasn\'t running.';
       return 'The leaderboard file couldn\'t be saved, so only rounds since the game was opened are shown.';
     },
 
@@ -170,13 +200,14 @@
     savedLine: function (s) {
       if (s.where === 'folder') return '✓ Your data is saved in data/' + s.folder + '.';
       if (s.where === 'pending') return 'Saving your data…';
-      if (s.where === 'failed') return 'Saving to the data folder failed. Log out will try again.';
-      return 'No data folder: your files download when you log out.';
+      if (s.where === 'failed') return 'Saving failed: is the saving program still running? Log out will try again.';
+      return 'The saving program isn\'t running, so nothing is saved yet. Log out will try again.';
     },
 
     questions: [
       'Did anyone\'s feed get narrower? What did you do that caused it?',
-      'The game only gave you points for attention. What did it never reward?',
+      // Takes the lesson off the laptop: the student's own feed. It asks; it doesn't tell them their apps are bad.
+      'Does your own TikTok or YouTube feed do this? How would you find out?',
       'If you always order your favorite food, you never find a new favorite. When should an app show something new?'
     ]
   };
@@ -250,10 +281,13 @@
   // ---- Steps 2-7: one person
   function renderFeed(p) {
     var box = h('section', 'panel feedbox');
-    box.appendChild(h('h3', 'panel__title', 'What you showed ' + p.name));
-    // The "tried" count joins the feed sentence instead of taking a line of its own: each step must fit ~445px.
+    // The title and the sentence share one line, and the "tried" count joins the sentence: the step is a stack of
+    // three panels in ~445px, and the radars get whatever height this panel doesn't take.
+    var head = h('div', 'feedbox__head');
+    head.appendChild(h('h3', 'panel__title', 'What you showed ' + p.name));
     var tried = text.triedLine(p);
-    box.appendChild(h('p', 'panel__line', text.feedLine(p) + (tried ? ' ' + tried : '')));
+    head.appendChild(h('p', 'panel__line', text.feedLine(p) + (tried ? ' ' + tried : '')));
+    box.appendChild(head);
 
     var row = h('div', 'feed');
     // The row is a picture for sighted users; give everyone else the summary instead of 40 emoji.
@@ -321,10 +355,24 @@
   //   learned    start (dashed) vs end (filled) in one radar, and beside it what the player learned: the
   //              same spikes they saw on the card. "Your profile of Maya said Sports only... and your
   //              feed made it true."
+  // "Lost interest: 💥 Comics": the story's topics again, beside the radars that show them. Emoji and word, never
+  // color alone. A step with nothing lost still says "none", so the column never looks half-empty.
+  function topicChips(label, ids, none) {
+    var line = h('p', 'tchips');
+    line.appendChild(h('span', 'tchips__label', label));
+    ids.forEach(function (id) { line.appendChild(h('span', 'tchip', DS.TOPIC_BY_ID[id].emoji + ' ' + topicLabel(id))); });
+    if (!ids.length) line.appendChild(h('span', 'tchips__none', none));
+    return line;
+  }
+
+  // The radars sit side by side, and a third column beside them holds the chips and the hints, so the row has no
+  // empty space. There is no title: the captions under each radar say what it is.
   function renderTastes(p) {
     var box = h('section', 'panel tastebox');
-    box.appendChild(h('h3', 'panel__title', 'What ' + p.name + ' likes'));
-    box.appendChild(h('p', 'panel__hint', 'Chance they\'d like each topic, in %.'));
+    var side = h('div', 'tastes__side');
+    side.appendChild(topicChips(text.lostLabel, p.lostTopics, text.noneLost));
+    if (p.gainedTopics.length) side.appendChild(topicChips(text.gainedLabel, p.gainedTopics));
+    side.appendChild(h('p', 'panel__hint', 'Chance they\'d like each topic, in %.'));
 
     var n = DS.TOPICS.length;
     // Highlight what was shown most, but only if something really stood out (shown 2+ times).
@@ -338,8 +386,8 @@
       row.appendChild(spikeChart(p.tastesStart, 'Start (your radar)', [], 'Chance ' + p.name + ' would like each topic at the start'));
       row.appendChild(spikeChart(p.tastesEnd, 'End of round', highlight, 'Chance ' + p.name + ' would like each topic at the end'));
       box.appendChild(row);
-      if (highlight.length) box.appendChild(h('p', 'legend', 'Highlighted: what you showed most.'));
-      box.appendChild(h('p', 'panel__line', text.tasteLine(p)));
+      if (highlight.length) side.appendChild(h('p', 'legend', 'Highlighted: what you showed most.'));
+      box.appendChild(side);
       return box;
     }
 
@@ -393,55 +441,33 @@
     legend.appendChild(document.createTextNode(' start of round   '));
     legend.appendChild(h('span', 'legend__swatch legend__swatch--end'));
     legend.appendChild(document.createTextNode(' end of round'));
-    if (highlight.length) legend.appendChild(document.createTextNode('   ·   Highlighted: what you showed most.'));
-    box.appendChild(legend);
-    box.appendChild(h('p', 'panel__line', text.tasteLine(p)));
+    side.appendChild(legend);
+    // A line of its own here: the side column is narrow, and a "·" joined line would wrap mid-phrase.
+    if (highlight.length) side.appendChild(h('p', 'legend', 'Highlighted: what you showed most.'));
+    box.appendChild(side);
     return box;
   }
 
-  function renderVariety(p) {
-    var box = h('section', 'panel varietybox');
-    box.appendChild(h('h3', 'panel__title', 'Variety of what they watched'));
-    box.appendChild(h('p', 'panel__line panel__line--big', text.varietyLine(p.variety)));
-
-    function row(label, value, count) {
-      var r = h('div', 'vrow');
-      r.appendChild(h('span', 'vrow__label', label));
-      var track = h('div', 'vrow__track');
-      var fill = h('div', 'vrow__fill');
-      fill.style.setProperty('--v', value === null ? 0 : value);
-      track.appendChild(fill);
-      r.appendChild(track);
-      r.appendChild(h('span', 'vrow__value', value === null ? '—' : two(value)));
-      r.appendChild(h('span', 'vrow__count', plural(count, 'watched post')));
-      return r;
-    }
-    box.appendChild(row('First half', p.variety.first, p.variety.firstCount));
-    box.appendChild(row('Second half', p.variety.second, p.variety.secondCount));
-    box.appendChild(h('p', 'panel__hint', text.varietyHint));
-    return box;
-  }
-
+  // One person's step, stacked top to bottom: who they are and their story, what you showed them, and their radars.
+  // The radars take whatever height is left (flex: 1 in style.css), so a longer story makes them smaller, never the
+  // page taller.
   function renderVP(p) {
     var wrap = h('div', 'vpstage');
-
-    var left = h('div', 'vpstage__col');
     var who = h('header', 'panel who' + (p.gone ? ' who--gone' : ''));
     who.appendChild(h('div', 'who__avatar', p.avatar));
     var names = h('div', 'who__text');
-    names.appendChild(h('h2', 'who__name', p.name));
-    names.appendChild(h('p', 'who__bio', p.bio));
+    var line = h('div', 'who__line');
+    line.appendChild(h('h2', 'who__name', p.name));
+    line.appendChild(h('p', 'who__bio', p.bio));
+    names.appendChild(line);
+    names.appendChild(h('p', 'who__story', text.story(p)));
+    // The term is defined on every step that uses it, word for word as on the big picture.
+    if (p.bubble) names.appendChild(h('p', 'who__def', text.bubbleDefinition));
     who.appendChild(names);
     who.appendChild(h('p', 'who__status', text.statusLine(p)));
-    left.appendChild(who);
-    left.appendChild(renderFeed(p));
-    left.appendChild(renderVariety(p));
-
-    var right = h('div', 'vpstage__col');
-    right.appendChild(renderTastes(p));
-
-    wrap.appendChild(left);
-    wrap.appendChild(right);
+    wrap.appendChild(who);
+    wrap.appendChild(renderFeed(p));
+    wrap.appendChild(renderTastes(p));
     return wrap;
   }
 
@@ -507,6 +533,12 @@
     tiles.appendChild(tile('Topics people enjoy', text.enjoyTile(data.overall)));
     left.appendChild(tiles);
     left.appendChild(h('p', 'big__verdict', text.verdict(data.overall)));
+    // Only where a bubble really formed: the term, defined in one line, then the loop that built it.
+    var loop = text.bubbleLoop(data.overall);
+    if (loop) {
+      left.appendChild(h('p', 'big__def', text.bubbleDefinition));
+      left.appendChild(h('p', 'big__loop', loop));
+    }
     box.appendChild(left);
 
     var talk = h('section', 'panel talk');

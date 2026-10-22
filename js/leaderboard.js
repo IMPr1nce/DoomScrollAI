@@ -14,8 +14,9 @@
  * (logger.js). The real name names the data folders, never this file. No session id either, so the board
  * can't be joined to anyone's data.
  *
- * Model code (no DOM), so the tests run it in Node. add() reads and writes the file through DS.dataFolder,
- * looked up when it runs; without a folder, the board only holds the rounds played since the page opened.
+ * Model code (no DOM), so the tests run it in Node. add() reads and writes the file through DS.dataFolder (the
+ * saving program, server.py), looked up when it runs; without it, the board only holds the rounds played since
+ * the page opened.
  */
 (function () {
   'use strict';
@@ -123,20 +124,20 @@
   };
 
   // ------------------------------------------------------------------ Adding a round
-  // The rounds of this page visit, for when there is no data folder (or it couldn't be read).
+  // The rounds of this page visit, for when the saving program isn't running (or the file couldn't be read).
   var memory = [];
 
   // value-or-promise, as in logger.js: the tests replace the file functions with plain ones.
   function when(x, fn) { return x && typeof x.then === 'function' ? x.then(fn) : fn(x); }
 
-  // Replaceable, so the tests can stand in for the folder. readFile gives the text, or null if there is no file yet.
+  // Replaceable, so the tests can stand in for the saving program. readFile gives the text, or null if there is no file yet.
   lb.hasFolder = function () { return !!(DS.dataFolder && DS.dataFolder.ready()); };
   lb.readFile = function () { return DS.dataFolder.read(lb.FOLDER, lb.FILE); };
   lb.writeFile = function (text) { return DS.dataFolder.write(lb.FOLDER, lb.FILE, text); };
 
   // Adds one round to the board and saves it. Reads the file first, so rounds from earlier sessions (and other
   // students on this laptop) are all there, and a row the teacher deleted stays deleted.
-  // Returns (or promises) { view, saved }: saved is 'folder', 'memory' (no folder) or 'failed'.
+  // Returns (or promises) { view, saved }: saved is 'folder', 'memory' (no saving program) or 'failed'.
   lb.add = function (entry, version) {
     function inMemory(saved) {
       memory.push(entry);
@@ -153,7 +154,7 @@
         });
       });
     } catch (e) { return inMemory('failed'); }
-    // The folder can disappear or lose its permission. The round still shows on the board, honestly marked.
+    // The saving program can stop mid-session. The round still shows on the board, honestly marked.
     return result && typeof result.then === 'function' ? result.then(null, function () { return inMemory('failed'); }) : result;
   };
 

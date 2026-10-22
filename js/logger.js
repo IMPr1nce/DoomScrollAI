@@ -8,7 +8,7 @@
  *
  * flush() is the ONLY function that moves data out of the logger. Today it just files the
  * batch into `store`, which is what the CSV files are written from. Later, to also send every batch to
- * a small Python/Flask server, add ONE line inside flush() (an example is in the comment
+ * a server, add ONE line inside flush() (an example is in the comment
  * there). Nothing else in the game has to change, because the game never talks to the
  * network, it only ever calls log*() and flushPending().
  *
@@ -19,8 +19,9 @@
  * One session = one player, from the name screen to "Log out". It saves one file per part of the
  * session, in a folder named after the player inside the data folder (see js/datafolder.js):
  *   data/Kai_Moreno/Kai_Moreno_tutorial.csv, Kai_Moreno_round1.csv, Kai_Moreno_round2.csv...
- * Each part is written as soon as it ends (saveFinished). Without a data folder (a browser that can't
- * write to one, or the dev helpers), nothing is written until "Log out", which downloads the files instead.
+ * Each part is written as soon as it ends (saveFinished). The saving program (server.py) does the writing.
+ * If it isn't running, nothing is written as parts end, and "Log out" tries again. Nothing is ever downloaded:
+ * a failed save keeps every row in memory until a save gets through.
  */
 (function () {
   'use strict';
@@ -183,7 +184,7 @@
   //
   //  Today: file the batch into `store`, which the CSV files are written from. Keep that line.
   //
-  //  To also send batches to the Flask server later, add (inside this function):
+  //  To also send batches to a server later (say, a class-wide Flask one), add (inside this function):
   //
   //    fetch('http://localhost:5000/api/log', {
   //      method: 'POST',
@@ -191,7 +192,8 @@
   //      body: JSON.stringify(records)       // an array of objects, one per CSV row
   //    }).catch(function () { /* the game must never break because the network did */ });
   //
-  //  (The Flask side needs CORS turned on, because index.html is opened from a file.)
+  //  (A server at another address needs CORS turned on: the page comes from server.py's address. An /api/log
+  //  endpoint added to server.py itself wouldn't: fetch('/api/log', ...) is the same site.)
   // ==========================================================================
   logger.flush = function (records) {
     Array.prototype.push.apply(store, records);
@@ -223,24 +225,13 @@
   };
 
   // ------------------------------------------------------------------ Where the files go
-  // All four are replaceable, like now(), so the tests can catch the files without a page or a folder.
+  // All three are replaceable, like now(), so the tests can catch the files without a page or the saving program.
   // writeFile and fileExists may return a value or a promise; the code below copes with both (when()), so
-  // the tests can stay synchronous while the real folder is asynchronous.
+  // the tests can stay synchronous while the real saving program is asynchronous.
+  // hasFolder = the saving program answered the name screen's check (see js/datafolder.js).
   logger.hasFolder = function () { return !!(DS.dataFolder && DS.dataFolder.ready()); };
   logger.writeFile = function (folder, name, text) { return DS.dataFolder.write(folder, name, text); };
   logger.fileExists = function (folder, name) { return DS.dataFolder.exists(folder, name); };
-  // The fallback without a data folder: a normal browser download (everything lands in Downloads).
-  logger.download = function (filename, text) {
-    var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);          // some browsers ignore clicks on links that aren't in the page
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-  };
 
   // ------------------------------------------------------------------ The files' names
   // The teacher collects the files per student, so they are named after the player: Kai_Moreno_round1.csv.
@@ -329,8 +320,13 @@
       var name = n === 1 ? base + '.csv' : base + ' (' + n + ').csv';
       return when(logger.fileExists(folder, name), function (taken) { return taken && n < 99 ? pick(n + 1) : name; });
     }
-    s.names[part] = pick(1);
-    return s.names[part];
+    var picked = s.names[part] = pick(1);
+    // If the saving program couldn't be asked (it stopped), forget the failed answer, so "Try again" asks
+    // again once it is back. Kept, it would fail every later save of this part.
+    if (picked && typeof picked.then === 'function') {
+      picked.then(null, function () { if (s.names[part] === picked) delete s.names[part]; });
+    }
+    return picked;
   }
 
   // Write each file into the player's folder, whole (a file is rewritten when its part gets more rows).
@@ -348,13 +344,6 @@
       });
     }));
   }
-  function saveAsDownloads(files) {
-    files.forEach(function (f) {
-      logger.download(f.name, logger.buildCSV(f.records));
-      session.saved[f.part] = f.records.length;
-    });
-    return files.map(function (f) { return f.name; });
-  }
 
   // The part being played right now, which must not be written yet: its rows hold the tastes of a round that
   // is still going. null when nothing is being played.
@@ -364,25 +353,22 @@
   }
 
   // game.js calls this whenever a part has ended (a round is over, or the game starts after the tutorial):
-  // every finished part with new rows is written to the data folder. Without a folder it does nothing, and
-  // the files wait for "Log out". Returns the paths written, or a promise of them.
+  // every finished part with new rows is written to the data folder. If the saving program didn't answer the
+  // name screen's check, it does nothing, and the files wait for "Log out". Returns the paths written, or a
+  // promise of them (it rejects if the saving program stopped: the part stays unsaved, to be tried again).
   logger.saveFinished = function () {
     if (!logger.hasFolder()) return [];
     var live = livePart();
     return saveToFolder(unsaved(collect()).filter(function (f) { return f.part !== live; }));
   };
 
-  // "Log out": saves every file with new rows, so nothing the student played is lost. To the data folder if
-  // there is one, otherwise as downloads (several at once can make Chrome ask "download multiple files?").
-  // Returns the names (or a promise of them), or null if the log is sealed.
+  // "Log out": saves every file with new rows, so nothing the student played is lost. It always asks the saving
+  // program, even if the last check said it was down: it may be back, and there is no other way out (nothing
+  // downloads). Returns the paths (or a promise of them; it rejects if a save failed, and the unsaved rows stay
+  // in memory for the next try), or null if the log is sealed.
   logger.saveUnsaved = function () {
     if (sealed()) return null;
-    var files = unsaved(collect());
-    return logger.hasFolder() ? saveToFolder(files) : saveAsDownloads(files);
-  };
-  // If writing to the folder failed at "Log out", the student can still take their files as downloads.
-  logger.downloadUnsaved = function () {
-    return sealed() ? null : saveAsDownloads(unsaved(collect()));
+    return saveToFolder(unsaved(collect()));
   };
 
   // The log holds every person's HIDDEN tastes, so it stays sealed while a game is being played.

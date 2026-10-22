@@ -7,8 +7,8 @@
  *         +---------------------------------------------------------------+  "Log out" (the next player)
  *
  * The name screen comes first but isn't a phase: nothing is played or logged there. It asks for the
- * player's name (it names their folder and CSV files, logger.fileName), their grade (a CSV column), a gamer
- * tag (the leaderboard only) and, once per visit, the data folder the files are saved in (datafolder.js).
+ * player's name (it names their folder and CSV files, logger.fileName), their grade (a CSV column) and a gamer
+ * tag (the leaderboard only), and checks that the saving program (server.py, see datafolder.js) is running.
  *
  * Saving: each part of the session is written as soon as it ends (logger.saveFinished): the tutorial when the
  * game starts, each round when it ends. The round's leaderboard row is saved at the same moment.
@@ -576,9 +576,12 @@
   // From the results screen: the player is done, and the laptop goes to the next student. Their files are
   // saved first (the parts not saved yet; usually none, as each part saves when it ends), because a new session
   // starts with an empty log. Then everything about this player is forgotten: the round count, the session id,
-  // the name, grade and gamer tag. The data folder stays chosen: it's the laptop's, not the player's.
+  // the name, grade and gamer tag. The name screen then checks the saving program again for the next player.
+  // If the save fails, nothing is forgotten: the only way on is "Try again" (nothing downloads), so a student's
+  // rows can't be lost by a click. The teacher restarts the saving program, and the retry saves everything.
   function logOut() {
-    var result = logger.saveUnsaved();
+    var result;
+    try { result = logger.saveUnsaved(); } catch (e) { result = Promise.reject(e); }
     if (!result || typeof result.then !== 'function') { forgetPlayer(); return; }
     // Writing takes a moment: nothing can be clicked meanwhile (a "Play again" would start a round that the
     // log-out then throws away).
@@ -586,9 +589,8 @@
     result.then(forgetPlayer, function () {
       ui.showOverlay({
         title: 'Could not save',
-        text: 'Your files didn\'t reach the data folder. Check that it is still there, then try again.\nOr download them instead.',
-        buttons: [{ label: 'Try again', primary: true, onClick: logOut },
-                  { label: 'Download them', onClick: function () { logger.downloadUnsaved(); forgetPlayer(); } }]
+        text: 'Your files didn\'t reach the saving program. Ask your teacher to check that it is running, then try again.',
+        buttons: [{ label: 'Try again', primary: true, onClick: logOut }]
       });
     });
   }
@@ -606,17 +608,26 @@
 
   // ---------------------------------------------------------------- Start-up
   // The first screen: who is playing. Everything is needed: both names (the teacher sorts the folders by them),
-  // a grade (8th, or typed), a gamer tag, and the data folder (in a browser that can write to one).
+  // a grade (8th, or typed), a gamer tag, and the saving program (server.py), which writes every file.
   // The checks use the CLEANED values, so "???" counts as an empty name instead of making a folder called "_".
   var form = null;                           // the first screen's fields, found once (askName)
+  var START_SERVER = 'Start the saving program first (ask your teacher).';
 
-  function folderStatus() {
-    var folder = DS.dataFolder;
-    form.folderBtn.hidden = !folder.supported();
-    form.folderStatus.textContent = !folder.supported()
-      ? 'This browser can\'t save to a folder. Your files will download when you log out.'
-      : folder.ready() ? '✓ Saving to the data folder.' : 'Not chosen yet.';
-    form.folderStatus.classList.toggle('folder__status--ok', folder.ready());
+  // The status line under the fields. Opened from a file (a double-click), the page can never reach the
+  // saving program, so the line also says which address to open instead.
+  function serverStatus(state) {
+    form.serverStatus.textContent = state === 'checking' ? 'Checking the saving program…'
+      : state === 'ok' ? '✓ Saving program is running.'
+      : START_SERVER + (DS.dataFolder.supported() ? '' : ' Then open ' + DS.dataFolder.URL + '.');
+    form.serverStatus.classList.toggle('server-status--ok', state === 'ok');
+  }
+  // Asks the saving program, shows the answer, and resolves true if it is running.
+  function checkServer() {
+    serverStatus('checking');
+    return DS.dataFolder.check().then(function (up) {
+      serverStatus(up ? 'ok' : 'down');
+      return up;
+    });
   }
 
   function showNameScreen() {
@@ -624,7 +635,7 @@
     form.grade8.checked = false;
     form.grade.classList.remove('grade--invalid');
     form.error.textContent = '';
-    folderStatus();
+    checkServer();
     ui.showScreen('name');
     form.first.focus();
   }
@@ -634,19 +645,13 @@
     form = {
       el: $('name-form'), first: $('name-first'), last: $('name-last'),
       grade: $('grade'), grade8: $('grade-8th'), gradeOther: $('grade-other'), tag: $('gamer-tag'),
-      folderBtn: $('btn-folder'), folderStatus: $('folder-status'), error: $('name-error')
+      go: $('btn-name'), serverStatus: $('server-status'), error: $('name-error')
     };
     form.tag.maxLength = C.GAMER_TAG_MAX;
     form.gradeOther.maxLength = C.GRADE_MAX;
     // One grade or the other: ticking 8th clears a typed grade, and typing one unticks 8th.
     form.grade8.addEventListener('change', function () { if (form.grade8.checked) form.gradeOther.value = ''; });
     form.gradeOther.addEventListener('input', function () { if (form.gradeOther.value) form.grade8.checked = false; });
-
-    form.folderBtn.addEventListener('click', function () {
-      DS.dataFolder.choose().then(folderStatus, function () {
-        form.folderStatus.textContent = 'That folder can\'t be used. Pick the game\'s data folder.';
-      });
-    });
 
     // Says what is missing (the first thing only), marks it and puts the cursor there.
     function problem(message, focus, invalid) {
@@ -655,8 +660,10 @@
       focus.focus();
     }
 
+    var checking = false;                    // a Continue is waiting for the saving program's answer
     form.el.addEventListener('submit', function (e) {
       e.preventDefault();                    // a real submit would reload the page
+      if (checking) return;                  // a double-click: the first one is already on its way
       var names = [form.first, form.last];
       var missing = names.filter(function (input) { return !logger.cleanName(input.value); });
       [form.first, form.last, form.gradeOther, form.tag].forEach(function (input) { input.setAttribute('aria-invalid', 'false'); });
@@ -669,16 +676,21 @@
       if (!grade) return problem('Tick 8th grade, or type your grade.', form.grade8, [form.gradeOther]);
       if (!tag) return problem('Pick a gamer tag for the leaderboard.', form.tag, [form.tag]);
       if (!DS.leaderboard.tagAllowed(tag)) return problem('Pick a different gamer tag.', form.tag, [form.tag]);
-      if (DS.dataFolder.supported() && !DS.dataFolder.ready()) {
-        return problem('Choose the data folder first (ask your teacher).', form.folderBtn);
-      }
+      // Last, the saving program, asked again now: it may have stopped (or been started) since the screen opened.
+      // The names are read here, before the answer, so what is saved is what was on screen at the click.
+      var first = form.first.value, last = form.last.value;
       form.error.textContent = '';
-      logger.setPlayer(form.first.value, form.last.value, grade);
-      gamerTag = tag;
-      ui.showScreen('title');
-      // A double-click (or a held Enter) on Continue must not land on Start and skip the title.
-      ui.armGuard();
-      document.getElementById('btn-start').focus();
+      checking = true;
+      checkServer().then(function (up) {
+        checking = false;
+        if (!up) return problem(START_SERVER, form.go);
+        logger.setPlayer(first, last, grade);
+        gamerTag = tag;
+        ui.showScreen('title');
+        // A double-click (or a held Enter) on Continue must not land on Start and skip the title.
+        ui.armGuard();
+        document.getElementById('btn-start').focus();
+      });
     });
     showNameScreen();
   }

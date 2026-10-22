@@ -43,6 +43,11 @@
   function eq(actual, expected, msg) {
     if (actual !== expected) fail((msg || 'not equal') + ': expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
   }
+  function throws(fn, msg) {
+    var threw = false;
+    try { fn(); } catch (e) { threw = true; }
+    if (!threw) fail((msg || 'expected an error') + ': nothing was thrown');
+  }
   function approx(actual, expected, eps, msg) {
     if (typeof actual !== 'number' || Math.abs(actual - expected) > (eps === undefined ? 1e-6 : eps)) {
       fail((msg || 'not close') + ': expected ~' + expected + ', got ' + actual);
@@ -837,6 +842,77 @@
     eq(r.total, 3);
   });
 
+  test('reveal: the counts per half (firstMix / secondMix) come from the same split as the 0–1 number', function () {
+    var vp = calmVP();
+    play(vp, [
+      [1, 'sports', true], [1, 'music', true], [1, 'music', true], [1, 'food', false],   // 1st half: Sports, Music x2
+      [16, 'sports', true], [1, 'sports', true], [1, 'sports', true], [1, 'dance', true]  // 2nd half: Sports x3, Dance
+    ]);
+    var v = DS.metrics.buildReveal([vp], 40).vps[0].variety;
+    var halves = DS.metrics.diversityByHalf(vp.history, 40);
+    eq(v.firstCount, halves.firstCount); eq(v.secondCount, halves.secondCount);
+    eq(v.firstMix.kinds, 2, 'the skipped Food is not counted'); eq(v.firstMix.top.join(','), 'music'); eq(v.firstMix.topCount, 2);
+    eq(v.secondMix.kinds, 2); eq(v.secondMix.top.join(','), 'sports'); eq(v.secondMix.topCount, 3);
+    var tie = DS.metrics.mixOf(['sports', 'music', 'music', 'sports']);
+    eq(tie.top.join(','), 'sports,music', 'a tie keeps both, so the words never pick a winner'); eq(tie.kinds, 2);
+    var none = DS.metrics.mixOf([]);
+    eq(none.kinds, 0); eq(none.top.length, 0); eq(none.topCount, 0);
+  });
+
+  test('reveal: lostTopics, gainedTopics, focusTopic, focusGrew and bubble say what the radars print', function () {
+    function vpWith(over) {
+      var vp = calmVP();
+      var t = Object.assign({ sports: 0.85, dance: 0.85, music: 0.47, comics: 0.08, movies: 0.08, food: 0.85 }, over);   // PINNED: max 0.95
+      vp.tastes = Object.assign({}, t); vp.tasteSnapshotStart = Object.assign({}, t);
+      return vp;
+    }
+    var watch = function (topic) { return [1, topic, true]; }, skip = function (topic) { return [1, topic, false]; };
+    // 4 Sports, all watched: Sports grows (85 -> 88), and the "meh" Music drifts from 47 to 41: a bubble
+    var a = vpWith({}); play(a, [watch('sports'), watch('sports'), watch('sports'), watch('sports')]);
+    var p = DS.metrics.buildReveal([a], 40).vps[0];
+    eq(p.focusTopic, 'sports'); eq(p.focusGrew, true); eq(p.lostTopics.join(','), 'music'); eq(p.gainedTopics.join(','), '');
+    eq(p.bubble, true);
+    // mostly Comics, all skipped: skips don't move tastes, so Comics never pulled them in. The one watch cost Music: no bubble
+    var b = vpWith({ music: 0.455 }); play(b, [skip('comics'), skip('comics'), skip('comics'), watch('sports')]);
+    p = DS.metrics.buildReveal([b], 40).vps[0];
+    eq(p.focusTopic, 'comics'); eq(p.focusGrew, false); eq(p.lostTopics.join(','), 'music'); eq(p.bubble, false);
+    // the printed percent decides: Music at 0.446 is under 0.45 (the exact count drops it) but the radar prints 45
+    var c = vpWith({ music: 0.4625 }); play(c, [watch('sports')]);
+    p = DS.metrics.buildReveal([c], 40).vps[0];
+    ok(c.tastes.music < 0.45 && Math.round(100 * c.tastes.music) === 45, 'the case this test is about: ' + c.tastes.music);
+    eq(p.lostTopics.join(','), '', 'a printed 45 is still enjoyed'); eq(p.enjoyedEnd, 3, 'the exact count (the big picture tile) is unchanged');
+    // a topic that crossed upward: Comics from 42 to 46
+    var d = vpWith({ comics: 0.42 }); play(d, [watch('comics')]);
+    eq(DS.metrics.buildReveal([d], 40).vps[0].gainedTopics.join(','), 'comics');
+    // "mostly" is more than half of every post shown: a 2-2 tie is no focus, 2 of 3 is; under 3 posts there is none
+    var e = vpWith({}); play(e, [watch('sports'), watch('music'), watch('sports'), watch('music')]);
+    eq(DS.metrics.buildReveal([e], 40).vps[0].focusTopic, null, 'a tie never names a winner');
+    var f = vpWith({}); play(f, [watch('sports'), skip('comics'), watch('sports')]);
+    eq(DS.metrics.buildReveal([f], 40).vps[0].focusTopic, 'sports', 'skipped posts count too, as on the feed line');
+    var g = vpWith({}); play(g, [watch('sports'), watch('sports')]);
+    eq(DS.metrics.buildReveal([g], 40).vps[0].focusTopic, null, '2 posts are too few to say "mostly"');
+    p = DS.metrics.buildReveal([vpWith({})], 40).vps[0];
+    eq(p.focusTopic, null); eq(p.bubble, false); eq(p.lostTopics.length + p.gainedTopics.length, 0, 'nothing shown, nothing changed');
+  });
+
+  test('reveal: the loop example is a real person whose feed narrowed onto one topic, or null', function () {
+    var a = calmVP('a');                                                       // 1 -> 0, all Sports: the example
+    a.name = 'Ana';
+    play(a, [[1, 'sports', true], [1, 'music', true], [20, 'sports', true], [1, 'sports', true], [1, 'sports', true]]);
+    var b = calmVP('b');                                                       // 1 -> 1: never the example
+    play(b, [[1, 'sports', true], [1, 'music', true], [20, 'food', true], [1, 'dance', true]]);
+    var r = DS.metrics.buildReveal([b, a], 40);
+    eq(r.overall.loopExample.name, 'Ana'); eq(r.overall.loopExample.topic, 'sports');
+    // Narrowed, but the second half is a tie (Sports x2, Music x2, Dance): no topic was more than half, so no example
+    var c = calmVP('c');
+    play(c, [[1, 'sports', true], [1, 'music', true], [1, 'dance', true], [1, 'food', true],
+             [17, 'sports', true], [1, 'sports', true], [1, 'music', true], [1, 'music', true], [1, 'dance', true]]);
+    r = DS.metrics.buildReveal([c], 40);
+    eq(r.vps[0].variety.trend, 'dropped');
+    eq(r.overall.loopExample, null);
+    eq(DS.metrics.buildReveal([b], 40).overall.loopExample, null, 'a feed that stayed mixed gives no example');
+  });
+
   test('reveal: the numbers are copies (drawing the screen can never change a VP)', function () {
     var vp = calmVP();
     play(vp, [[1, 'sports', true]]);
@@ -871,13 +947,13 @@
     L.now = function () { return 1700000000000; };
     return L;
   }
-  var REAL = ['download', 'hasFolder', 'writeFile', 'fileExists'].reduce(function (o, k) { o[k] = DS.logger[k]; return o; }, {});
+  var REAL = ['hasFolder', 'writeFile', 'fileExists'].reduce(function (o, k) { o[k] = DS.logger[k]; return o; }, {});
   function restoreLogger() {
     DS.logger.now = function () { return Date.now(); };
     Object.keys(REAL).forEach(function (k) { DS.logger[k] = REAL[k]; });
     DS.logger.reset();
   }
-  // A pretend data folder, with plain (not promise) answers, so a test reads like a story.
+  // A pretend saving program (server.py), with plain (not promise) answers, so a test reads like a story.
   // folder.files['Kai_Moreno/Kai_Moreno_round1.csv'] = the text written there.
   function fakeFolder(L) {
     var folder = { files: {}, writes: [] };
@@ -1013,34 +1089,40 @@
     } finally { restoreLogger(); }
   });
 
-  test('logger: without a data folder nothing is written until Log out, which downloads instead', function () {
+  test('logger: without the saving program nothing is written as parts end; Log out still tries it, and nothing downloads', function () {
     var L = freshLogger();
     try {
-      var saved = [];
-      L.hasFolder = function () { return false; };
-      L.download = function (name) { saved.push(name); };
+      var folder = fakeFolder(L);
+      L.hasFolder = function () { return false; };            // the name screen's check got no answer
       L.setPlayer('Kai', 'Moreno');
       L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 1);
       L.setContext({ phase: 'reveal' });
-      eq(L.saveFinished().length, 0); eq(saved.length, 0);
-      eq(L.saveUnsaved().join(' '), 'Kai_Moreno_round1.csv', 'Log out downloads what was never saved');
+      eq(L.saveFinished().length, 0); eq(folder.writes.length, 0);
+      eq(L.saveUnsaved().join(' '), 'Kai_Moreno/Kai_Moreno_round1.csv', 'Log out asks the saving program anyway: it may be back');
       eq(L.saveUnsaved().length, 0, 'and only once');
+      eq([typeof L.download, typeof L.downloadUnsaved].join(' '), 'undefined undefined', 'there is no download fallback');
     } finally { restoreLogger(); }
   });
 
-  test('logger: Log out saves what is still unsaved into the folder; a failed folder can still download', function () {
+  test('logger: a failed save keeps every row; the next try (Log out\'s "Try again") saves them', function () {
     var L = freshLogger();
     try {
-      var folder = fakeFolder(L), downloads = [];
-      L.download = function (name) { downloads.push(name); };
+      var folder = fakeFolder(L), working = L.writeFile, asking = L.fileExists;
+      var down = function () { throw new Error('the saving program stopped'); };
       L.setPlayer('Kai', 'Moreno');
       L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 1);
       L.setContext({ phase: 'reveal' });
       eq(L.saveUnsaved().join(' '), 'Kai_Moreno/Kai_Moreno_round1.csv');
       eq(L.saveUnsaved().length, 0, 'saved: nothing left');
       L.setContext({ phase: 'main', round: 2 }); L.logGame('pause', 2); L.setContext({ phase: 'reveal' });
-      eq(L.downloadUnsaved().join(' '), 'Kai_Moreno_round2.csv', 'the fallback downloads only the unsaved file');
-      eq(folder.writes.length, 1);
+      L.fileExists = down;                                   // stopped before round 2's name was picked...
+      throws(function () { L.saveUnsaved(); }, 'the failure reaches game.js, which shows "Could not save"');
+      L.fileExists = asking; L.writeFile = down;             // ...and, once back, stopped again mid-write
+      throws(function () { L.saveUnsaved(); });
+      eq(L.files().length, 2, 'both rounds are still in the log');
+      L.writeFile = working;
+      eq(L.saveUnsaved().join(' '), 'Kai_Moreno/Kai_Moreno_round2.csv', 'the retry saves only the unsaved round');
+      eq(folder.writes.join(' '), 'Kai_Moreno/Kai_Moreno_round1.csv Kai_Moreno/Kai_Moreno_round2.csv');
       L.reset();
       eq(L.files().length, 0, 'the next player starts with an empty log');
       eq(L.fileName('round1'), 'doomscroll_' + L.sessionId + '_round1.csv', 'and without the last player\'s name');
@@ -1173,8 +1255,7 @@
         vp.push('sports');                                  // (refused while watching; the first one is logged)
         L.flushPending();
         eq(L.stored().length, 0, 'stored() must be empty during ' + phase);
-        eq(L.saveUnsaved(), null, 'saveUnsaved() must refuse during ' + phase);   // returns before touching the page
-        eq(L.downloadUnsaved(), null, 'downloadUnsaved() too');
+        eq(L.saveUnsaved(), null, 'saveUnsaved() must refuse during ' + phase);   // returns before touching the disk
       });
       ['reveal', 'title'].forEach(function (phase) {
         L.setContext({ phase: phase });
@@ -1299,17 +1380,21 @@
   // ---------------------------------------------------- Reveal wording (reveal.js)
   // These call the PURE sentence functions in DS.revealText, so no browser is needed.
   var T = function () { return DS.revealText; };
+  // A person as buildReveal() gives them. The default: mostly Sports, Comics lost, a bubble.
   function person(over) {
     return Object.assign({
       name: 'Maya', total: 14, likedCount: 9, topTopic: 'sports', topTopics: ['sports'], topCount: 12, topicsShown: 2,
-      gone: false, afkAt: null, finalAttention: 71.4, enjoyedStart: 3, enjoyedEnd: 1,
-      variety: { first: 0.72, second: 0.18, firstCount: 6, secondCount: 5, trend: 'dropped' }
+      gone: false, afkAt: null, finalAttention: 71.4, enjoyedStart: 4, enjoyedEnd: 3,
+      lostTopics: ['comics'], gainedTopics: [], focusTopic: 'sports', focusGrew: true, bubble: true
     }, over);
   }
+  // The story's cases, as buildReveal() would fill them (each branch's fields).
+  var MIX = { focusTopic: null, focusGrew: false, bubble: false, topCount: 4, topTopics: ['sports', 'music'] };
+  var KEPT = { lostTopics: [], bubble: false };
 
-  test('reveal text: the headline sentences match the brief', function () {
+  test('reveal text: the key sentences match the brief', function () {
     eq(T().feedLine(person()), 'You showed Maya 14 posts. 12 were Sports.');
-    eq(T().varietyLine(person().variety), 'Variety dropped from 0.72 → 0.18.');
+    eq(T().story(person()), 'You showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Comics.');
     eq(T().closingTitle(4, 6), 'You kept their attention. Was that good for them?');
     eq(T().questions.length, 3, '2-3 discussion questions');
   });
@@ -1352,39 +1437,118 @@
     eq(T().questions[2], 'If you always order your favorite food, you never find a new favorite. When should an app show something new?');
     // the words belong to the big-picture step: no per-person sentence, verdict or tile may use them
     var elsewhere = [T().triedLine(person()), T().triedLine(person({ topicsShown: 6, gone: true, afkAt: 3 })),
-                     T().feedLine(person()), T().tasteLine(person()), T().winTease(1), T().closingTitle(2, 2)];
-    ['dropped', 'low', 'rose', 'steady', 'unknown'].forEach(function (trend) { elsewhere.push(T().verdict({ trend: trend })); });
+                     T().feedLine(person()), T().story(person()), T().story(person(MIX)), T().winTease(1), T().closingTitle(2, 2),
+                     T().bubbleDefinition];
+    ['dropped', 'low', 'rose', 'steady', 'unknown'].forEach(function (trend) {
+      elsewhere.push(T().verdict({ trend: trend }), T().bubbleLoop({ trend: trend, loopExample: { name: 'Maya', topic: 'sports' } }));
+    });
     elsewhere.forEach(function (line) { ok(!/explor|exploit/i.test(line), 'named outside the big picture: ' + line); });
     ok(!/explor|exploit/i.test(T().questions.join(' ')), 'the questions ask in plain words; the definition line names the idea');
   });
 
-  test('reveal text: variety sentence is honest for each trend (dropped / rose / steady / unknown)', function () {
-    var v = function (first, second, trend) { return { first: first, second: second, trend: trend }; };
-    ok(/dropped/.test(T().varietyLine(v(0.9, 0.2, 'dropped'))));
-    ok(/went up/.test(T().varietyLine(v(0.2, 0.9, 'rose'))));
-    var low = T().varietyLine(v(0, 0, 'low'));
-    ok(/stayed low/.test(low) && !/about the same|mixed/.test(low), low);
-    var steady = T().varietyLine(v(0.5, 0.55, 'steady'));
-    ok(/about the same/.test(steady) && !/dropped|went up/.test(steady), steady);
-    ok(/Too few/.test(T().varietyLine(v(null, null, 'unknown'))));
-    ok(/second half/.test(T().varietyLine(v(0.5, null, 'unknown'))), 'says WHICH half is missing');
-    ok(/first half/.test(T().varietyLine(v(null, 0.5, 'unknown'))));
-    ['dropped', 'low', 'rose', 'steady'].forEach(function (trend) {
-      ok(T().varietyLine(v(0.5, 0.5, trend)).indexOf('0.50') !== -1, trend + ' shows the numbers');
+  test('reveal text: story: nothing shown, and 1–2 posts', function () {
+    eq(T().story(person({ total: 0, topCount: 0, topTopics: [], focusTopic: null, focusGrew: false, bubble: false, lostTopics: [] })),
+       'Maya never saw a post, so their tastes didn\'t change.');
+    eq(T().story(person({ total: 0, focusTopic: null, bubble: false, lostTopics: [], gone: true, afkAt: 12 })),
+       'Maya never saw a post, so their tastes didn\'t change.', 'left without a post: the same (the status pill says when)');
+    var few = { focusTopic: null, focusGrew: false, bubble: false };
+    eq(T().story(person(Object.assign({ total: 2, topCount: 1, lostTopics: [] }, few))),
+       'You showed Maya just 2 posts, and they still enjoy all 4 topics they started with.');
+    eq(T().story(person(Object.assign({ total: 1, topCount: 1, lostTopics: [], gone: true, afkAt: 9 }, few))),
+       'You showed Maya just 1 post, and they still enjoyed all 4 topics they started with.', 'one post, and left: past tense');
+    eq(T().story(person(Object.assign({ total: 2, topCount: 2, lostTopics: ['comics'] }, few))),
+       'You showed Maya just 2 posts, but even that cost them interest in Comics.');
+  });
+
+  test('reveal text: story: mostly one topic, with 1, 2 or 3 topics lost (a bubble), "only" when every post was it', function () {
+    eq(T().story(person()), 'You showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Comics.');
+    eq(T().story(person({ lostTopics: ['music', 'comics'] })),
+       'You showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Music and Comics.');
+    eq(T().story(person({ lostTopics: ['music', 'comics', 'food'] })),
+       'You showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Music, Comics and Food.');
+    eq(T().story(person({ gone: true, afkAt: 22 })),
+       'You showed Maya mostly Sports, so Maya drifted into a Sports bubble and lost interest in Comics.', 'left: past tense');
+    eq(T().story(person({ total: 8, topCount: 8 })),
+       'You showed Maya only Sports, so Maya is drifting into a Sports bubble and lost interest in Comics.');
+  });
+
+  test('reveal text: story: mostly one topic, nothing lost (it grew on them, or it didn\'t)', function () {
+    eq(T().story(person(KEPT)), 'You showed Maya mostly Sports. Sports grew on them, but they still enjoy all 4 topics they started with.');
+    eq(T().story(person(Object.assign({ focusGrew: false }, KEPT))),
+       'You showed Maya mostly Sports, and they still enjoy all 4 topics they started with.');
+    eq(T().story(person(Object.assign({ gone: true, afkAt: 20 }, KEPT))),
+       'You showed Maya mostly Sports. Sports grew on them, but they still enjoyed all 4 topics they started with.');
+  });
+
+  test('reveal text: story: a topic shown mostly but not enjoyed is never a bubble; the loss is put on the watched posts', function () {
+    var skipped = { focusTopic: 'food', topTopic: 'food', topTopics: ['food'], focusGrew: false, bubble: false, lostTopics: ['movies'] };
+    eq(T().story(person(Object.assign({ name: 'Jordan' }, skipped))),
+       'You showed Jordan mostly Food, which they don\'t enjoy. The posts they did watch cost them interest in Movies.');
+    eq(T().story(person(Object.assign({ name: 'Jordan', gone: true, afkAt: 14 }, skipped))),
+       'You showed Jordan mostly Food, which they didn\'t enjoy. The posts they did watch cost them interest in Movies.');
+  });
+
+  test('reveal text: story: a mix says what you did (never "because you didn\'t show variety"), and a tie never names a winner', function () {
+    eq(T().story(person(Object.assign({}, MIX, KEPT))), 'You mixed it up for Maya, and they still enjoy all 4 topics they started with.');
+    eq(T().story(person(Object.assign({ lostTopics: ['comics'] }, MIX))),
+       'You mixed it up for Maya, but every watch still nudged their tastes: they lost interest in Comics.');
+    eq(T().story(person(Object.assign({ lostTopics: ['sports', 'comics'] }, MIX))),
+       'You mixed it up for Maya, but every watch still nudged their tastes: they lost interest in Sports and Comics.');
+    // Sports and Music tied for most shown: neither is named as what you showed
+    var tie = T().story(person(Object.assign({}, MIX, KEPT)));
+    ok(!/Sports|Music|mostly|only/.test(tie), tie);
+  });
+
+  test('reveal text: story: gained topics are added, and "bubble" is said only (and always) with a bubble', function () {
+    eq(T().story(person({ gainedTopics: ['food'] })),
+       'You showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Comics. They also came to enjoy Food.');
+    eq(T().story(person(Object.assign({ gainedTopics: ['movies', 'food'] }, MIX, KEPT))),
+       'You mixed it up for Maya, and they still enjoy all 4 topics they started with. They also came to enjoy Movies and Food.');
+    storyCases().forEach(function (p) {
+      var line = T().story(p);
+      eq(/bubble/i.test(line), !!p.bubble, 'says "bubble" exactly when buildReveal found one: ' + line);
+      ok(!/favou?rite/i.test(line), 'the start counts the "meh" topic too, so never "favorites": ' + line);
+      ok(!/variety|explor|exploit|stuck|trapped|fail/i.test(line), 'no lab words, no blame: ' + line);
+      ok(!/\d/.test(line.replace(/all \d topics|the 1 topic|just [12] posts?/g, '')), 'no counts the feed line already says: ' + line);
     });
   });
 
-  test('reveal text: the verdict only talks about a filter bubble when feeds were really narrow', function () {
+  // Every branch of the story, with the longest name and the most topics each branch can name.
+  function storyCases() {
+    var j = { name: 'Jordan' }, three = ['comics', 'music', 'food'], four = ['sports', 'comics', 'music', 'food'];
+    var skipped = { focusTopic: 'movies', bubble: false, focusGrew: false };
+    return [
+      { total: 0, focusTopic: null, bubble: false, lostTopics: [] },
+      { total: 2, topCount: 1, focusTopic: null, bubble: false, lostTopics: [] },
+      { total: 2, topCount: 1, focusTopic: null, bubble: false, lostTopics: three, gone: true, afkAt: 13 },
+      { lostTopics: three, focusTopic: 'movies' }, { lostTopics: three, focusTopic: 'movies', gone: true, afkAt: 13, gainedTopics: ['sports'] },
+      Object.assign({ lostTopics: three }, skipped), Object.assign({ lostTopics: three, gone: true, afkAt: 13, gainedTopics: ['dance', 'sports'] }, skipped),
+      Object.assign({ focusGrew: true }, KEPT), Object.assign({ focusGrew: false, gone: true, afkAt: 13 }, KEPT),
+      Object.assign({}, MIX, KEPT), Object.assign({ lostTopics: four, gainedTopics: ['dance', 'movies'] }, MIX)
+    ].map(function (over) { return person(Object.assign({}, j, over)); });
+  }
+
+  test('reveal text: the verdict only talks about a filter bubble when feeds were really narrow, and defines it first', function () {
+    var ex = { name: 'Maya', topic: 'sports' };
     ['rose', 'steady', 'unknown'].forEach(function (trend) {
       var line = T().verdict({ trend: trend });
       ok(!/bubble|narrow/i.test(line), 'a "' + trend + '" result must not claim a bubble: ' + line);
+      eq(T().bubbleLoop({ trend: trend, loopExample: ex }), '', 'no loop (and so no definition) for "' + trend + '"');
     });
-    ok(/narrower/.test(T().verdict({ trend: 'dropped' })) && /filter bubble/.test(T().verdict({ trend: 'dropped' })));
+    eq(T().verdict({ trend: 'dropped' }), 'Their feeds got narrower as the round went on.');
     ok(/Play again/.test(T().verdict({ trend: 'steady' })), 'a steady result invites another try');
     // a feed that was narrow from the start must NOT be called "mixed"
     var low = T().verdict({ trend: 'low' });
-    ok(/narrow/.test(low) && /filter bubble/.test(low) && !/mixed/.test(low), low);
+    ok(/narrow/.test(low) && !/mixed/.test(low), low);
     ok(!/mixed/.test(T().verdict({ trend: 'dropped' })));
+    // the term is defined in its own line (drawn before the loop), and the verdicts themselves never use it undefined
+    eq(T().bubbleDefinition, 'Filter bubble = a feed so full of one thing that you rarely see anything else.');
+    ['dropped', 'low'].forEach(function (trend) { ok(!/bubble/i.test(T().verdict({ trend: trend })), 'defined before it is used'); });
+    // the loop: a real person and topic when there is one, otherwise "a topic"
+    eq(T().bubbleLoop({ trend: 'dropped', loopExample: ex }),
+       'How it forms: you show Maya Sports → they watch → they like Sports more, the rest less → repeat.');
+    eq(T().bubbleLoop({ trend: 'low', loopExample: null }),
+       'How it forms: you show a topic → they watch it → they like it more, the rest less → repeat.');
   });
 
   test('reveal text: the closing question fits the result (kept / kept some / lost everyone)', function () {
@@ -1398,12 +1562,10 @@
     ok(/anyway/.test(T().winTease(0)));
   });
 
-  test('reveal text: status, taste and tile lines', function () {
+  test('reveal text: status and tile lines', function () {
     eq(T().statusLine(person({ gone: true, afkAt: 41.2 })), 'Left the app after 0:41.');
     eq(T().statusLine(person({ gone: true, afkAt: 75 })), 'Left the app after 1:15.');
     eq(T().statusLine(person()), 'Still scrolling (attention 71).');
-    eq(T().tasteLine(person()), 'At the start, Maya enjoyed 3 topics. At the end: 1.');
-    eq(T().tasteLine(person({ enjoyedStart: 1, enjoyedEnd: 1 })), 'At the start, Maya enjoyed 1 topic. At the end: 1.');
     var o = { varietyFirst: 0.71, varietySecond: 0.28, varietyPeople: 4, enjoyedStart: 3.5, enjoyedEnd: 1.4 };
     eq(T().varietyTile(o, 6).value, '0.71 → 0.28');
     ok(/4 of 6 people/.test(T().varietyTile(o, 6).sub), 'says when it is based on fewer than everyone');
@@ -1418,10 +1580,11 @@
     eq(T().boardRank(v(1, 12, true)), 'You\'re tied for #1 of 12 rounds.', 'a shared #1 is no win');
     eq(T().boardRank(v(15, 16)), 'You\'re #15 of 16 rounds.');
     eq(T().boardRank({ mine: null, count: 3 }), '');
-    ok(/no data folder/.test(T().boardNote('memory')), 'says when the board is only this visit');
+    ok(/saving program wasn't running/.test(T().boardNote('memory')), 'says when the board is only this visit');
     ok(/couldn't be saved/.test(T().boardNote('failed')));
     eq(T().savedLine({ where: 'folder', folder: 'Kai_Moreno' }), '✓ Your data is saved in data/Kai_Moreno.');
-    ok(/download when you log out/.test(T().savedLine({ where: 'none' })));
+    ok(/saving program isn't running/.test(T().savedLine({ where: 'none' })) && /Log out will try again/.test(T().savedLine({ where: 'failed' })));
+    ok(!/download/i.test([T().savedLine({ where: 'none' }), T().savedLine({ where: 'failed' }), T().boardNote('memory')].join(' ')), 'nothing downloads now');
   });
 
   test('reveal text: no he/she anywhere, and every sentence is short (8th-grade reading level)', function () {
@@ -1429,16 +1592,22 @@
     var vs = [{ first: 0.9, second: 0.1, trend: 'dropped' }, { first: 0, second: 0, trend: 'low' }, { first: 0.1, second: 0.9, trend: 'rose' },
               { first: 0.5, second: 0.5, trend: 'steady' }, { first: null, second: 0.5, trend: 'unknown' },
               { first: 0.5, second: null, trend: 'unknown' }, { first: null, second: null, trend: 'unknown' }];
-    vs.forEach(function (v) { pool.push(T().varietyLine(v)); pool.push(T().verdict({ trend: v.trend })); });
+    vs.forEach(function (v) {
+      pool.push(T().verdict({ trend: v.trend }));
+      pool.push(T().bubbleLoop({ trend: v.trend, loopExample: { name: 'Jordan', topic: 'comics' } }), T().bubbleLoop({ trend: v.trend, loopExample: null }));
+    });
+    pool.push(T().bubbleDefinition);
+    // every story branch, with the longest name and the most topics each can name
+    storyCases().forEach(function (p) { pool.push(T().story(p)); });
+    pool.push(T().lostLabel + ' ' + T().noneLost, T().gainedLabel);
     [person(), person({ total: 0, topTopic: null }), person({ total: 1, topCount: 1 }), person({ total: 5, topCount: 5, gone: true, afkAt: 12 })]
-      .forEach(function (p) { pool.push(T().feedLine(p), T().feedLegend(p), T().tasteLine(p), T().statusLine(p)); });
+      .forEach(function (p) { pool.push(T().feedLine(p), T().feedLegend(p), T().statusLine(p)); });
     [0, 1, 2, 3, 4, 5, 6].forEach(function (n) { pool.push(T().winTitle(n, 6), T().winTease(n), T().closingTitle(n, 6)); });
     // the "tried" line, as it reads joined to the feed line on the screen, for every case
     [person({ total: 1, topCount: 1, topicsShown: 1 }), person({ topicsShown: 3 }), person({ topicsShown: 6 }),
      person({ topicsShown: 6, gone: true, afkAt: 20 }), person({ name: 'Jordan', topicsShown: 4, gone: true, afkAt: 7 })]
       .forEach(function (p) { pool.push(T().feedLine(p) + ' ' + T().triedLine(p)); });
     pool.push(T().exploreDefinition);
-    pool.push(T().varietyHint);
     pool.push(T().boardHint, T().boardLoading);
     ['folder', 'memory', 'failed'].forEach(function (x) { pool.push(T().boardNote(x)); });
     [{ where: 'folder', folder: 'Kai_Moreno' }, { where: 'pending' }, { where: 'failed' }, { where: 'none' }].forEach(function (x) { pool.push(T().savedLine(x)); });
