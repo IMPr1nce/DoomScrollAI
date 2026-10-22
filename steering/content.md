@@ -81,11 +81,29 @@ alone, and a skip gets a quick 👆 swipe.
 
 ## Results wording must be honest
 - **Every claim comes from `DS.metrics.buildReveal()`.** `DS.revealText` only turns numbers into sentences.
-- **Each trend has its own sentence:** `dropped`, `low` (narrow from the start), `rose`, `steady`, and
-  `unknown` (too few watched posts; say which half). Never claim a bubble that didn't form.
+- **Counts a student can picture, not lab numbers.** The 0–1 variety numbers stay on the bars, for the
+  teacher; the sentences say what was watched. Each person's step opens with a headline in the tastes panel
+  (`headline`): "Maya started with 4 topics they'd enjoy. By the end, only 2." "Enjoy" includes the "meh"
+  topic, so it says "topics they'd enjoy", **never "favorites"**. When the count didn't move it says "the same as
+  at the start", not "nothing narrowed" (the radar's percentages may still have shrunk).
+- **Each trend has its own sentence** (`varietyLine`): the trend in words, taken from the 0–1 number's own
+  trend so the two can't disagree, then each half's watched posts from the same split ("Less variety: Maya
+  watched 4 different topics in the first half, then mostly Sports (5 of 7)."). The leads: `dropped` "Less
+  variety", `low` "Narrow all round", `rose` "More variety", `steady` "About the same variety", `unknown` "Too
+  few to compare". A half reads "nothing", "just 1 post (Music)", "only Sports", "mostly Sports (5 of 7)"
+  (more than half only, so a tie never names a winner) or "4 different topics".
+- **No dead ends.** A half too thin for the number still says what it holds. Someone who left in the first half
+  gets "Maya left at 0:14, too soon to compare halves. They watched only Sports."; someone who left without
+  watching anything gets "Maya left at 0:09 without watching a single post."
+- **The filter bubble is defined before it is named, and only where it formed.** For `dropped` or `low` the
+  big picture says what happened ("Their feeds got narrower as the round went on."), then "Filter bubble = a
+  feed so full of one thing that you rarely see anything else.", then the loop that built it: "How it forms:
+  you show Maya Sports → they watch → they like Sports more, the rest less → repeat." The person and topic are
+  real (`overall.loopExample`: someone whose feed narrowed, and a topic that was more than half of their second
+  half), or it says "a topic". `rose`, `steady` and `unknown` get neither line. Never claim a bubble that didn't form.
 - **Ties are said as ties** ("Sports and Music were each shown 4 times"). Never pick a winner, and never
   write "1 were".
-- **No fake numbers:** show "—" or "too few watched posts", never a made-up 0.
+- **No fake numbers:** show "—" for a number that needs 2 watched posts, never a made-up 0.
 - **"You tried 3 of 6 topics."** joins the feed sentence on each person's step (no extra height). "All 6"
   when every topic was tried, "…before Maya left." for someone who left, and nothing at all when nothing was
   shown (the feed line already says so).
@@ -97,8 +115,9 @@ alone, and a skip gets a quick 👆 swipe.
   Tied rounds share a rank (1, 2, 2, 4). Its note says where the rows come from, and says so when the saving
   program wasn't running ("Only rounds since the game was opened…") or the file couldn't be saved. Points are explained on
   the step: "Points = everyone's attention when the round ended. Someone who left counts as 0."
-- **Exactly three discussion questions.** The third is "If you always order your favorite food, you never find
-  a new favorite. When should an app show something new?"
+- **Exactly three discussion questions.** The second takes the lesson to the student's own phone: "Does your own
+  TikTok or YouTube feed do this? How would you find out?" The third is "If you always order your favorite food,
+  you never find a new favorite. When should an app show something new?"
 - **A new outcome needs** a sentence in `DS.revealText` and a "reveal text: …" test in `tests/tests.js`.
 - **The discussion questions ask; they don't preach.**
 

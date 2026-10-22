@@ -645,7 +645,6 @@ body.guarded .title-card .btn { opacity: 0.55; }
 }
 .panel__title { margin: 0 0 2px; font-size: 20px; }
 .panel__line { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
-.panel__line--big { font-size: 22px; }
 .panel__hint { margin: 4px 0 0; font-size: 16px; color: var(--muted); }
 
 /* ---- Step 1: the score */
@@ -719,6 +718,7 @@ body.guarded .title-card .btn { opacity: 0.55; }
    (--pair) it is two radars drawn like the card's instead: the start (the radar the player used) and
    the end. */
 .tastebox { flex: 1; display: flex; flex-direction: column; }
+.tastes__headline { margin: 2px 0 0; font-size: 20px; line-height: 1.25; }   /* what happened to this person */
 .tastes__row { flex: 1; min-height: 228px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 8px; }
 .tastes__row--pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .rchart-wrap { display: flex; flex-direction: column; min-height: 0; }
@@ -810,6 +810,10 @@ body.guarded .title-card .btn { opacity: 0.55; }
 .tile__value { font-size: 30px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tile__sub { font-size: 16px; color: var(--muted); }
 .big__verdict { margin: 0; font-size: 20px; font-weight: 700; }
+/* The filter bubble, named and shown as a loop, only when one formed. The left column has room under the
+   verdict (the questions beside it are taller), so these two lines don't make the step taller. */
+.big__def { margin: -4px 0 0; font-size: 18px; color: var(--muted); }
+.big__loop { margin: 0; font-size: 18px; font-weight: 700; color: var(--primary); }
 .talk__def { margin: 2px 0 0; font-size: 18px; color: var(--muted); }    /* explore/exploit, named only here */
 .talk__list { margin: 4px 0 0; padding-left: 1.4em; font-size: 20px; }
 .talk__list li { margin: 4px 0; }

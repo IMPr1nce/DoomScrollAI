@@ -842,6 +842,49 @@
     eq(r.total, 3);
   });
 
+  test('reveal: the counts per half (firstMix / secondMix) come from the same split as the 0–1 number', function () {
+    var vp = calmVP();
+    play(vp, [
+      [1, 'sports', true], [1, 'music', true], [1, 'music', true], [1, 'food', false],   // 1st half: Sports, Music x2
+      [16, 'sports', true], [1, 'sports', true], [1, 'sports', true], [1, 'dance', true]  // 2nd half: Sports x3, Dance
+    ]);
+    var v = DS.metrics.buildReveal([vp], 40).vps[0].variety;
+    var halves = DS.metrics.diversityByHalf(vp.history, 40);
+    eq(v.firstCount, halves.firstCount); eq(v.secondCount, halves.secondCount);
+    eq(v.firstMix.kinds, 2, 'the skipped Food is not counted'); eq(v.firstMix.top.join(','), 'music'); eq(v.firstMix.topCount, 2);
+    eq(v.secondMix.kinds, 2); eq(v.secondMix.top.join(','), 'sports'); eq(v.secondMix.topCount, 3);
+    var tie = DS.metrics.mixOf(['sports', 'music', 'music', 'sports']);
+    eq(tie.top.join(','), 'sports,music', 'a tie keeps both, so the words never pick a winner'); eq(tie.kinds, 2);
+    var none = DS.metrics.mixOf([]);
+    eq(none.kinds, 0); eq(none.top.length, 0); eq(none.topCount, 0);
+  });
+
+  test('reveal: leftEarly is only for someone who left in the first half', function () {
+    var gone = makeVP(); gone.id = 'gone';
+    run(gone, 31);                                     // leaves at ~30 s
+    eq(DS.metrics.buildReveal([gone], 90).vps[0].variety.leftEarly, true, 'left at 30 of 90 s: the first half');
+    eq(DS.metrics.buildReveal([gone], 31).vps[0].variety.leftEarly, false, 'left at 30 of 31 s: the second half');
+    eq(DS.metrics.buildReveal([makeVP()], 90).vps[0].variety.leftEarly, false, 'still scrolling');
+  });
+
+  test('reveal: the loop example is a real person whose feed narrowed onto one topic, or null', function () {
+    var a = calmVP('a');                                                       // 1 -> 0, all Sports: the example
+    a.name = 'Ana';
+    play(a, [[1, 'sports', true], [1, 'music', true], [20, 'sports', true], [1, 'sports', true], [1, 'sports', true]]);
+    var b = calmVP('b');                                                       // 1 -> 1: never the example
+    play(b, [[1, 'sports', true], [1, 'music', true], [20, 'food', true], [1, 'dance', true]]);
+    var r = DS.metrics.buildReveal([b, a], 40);
+    eq(r.overall.loopExample.name, 'Ana'); eq(r.overall.loopExample.topic, 'sports');
+    // Narrowed, but the second half is a tie (Sports x2, Music x2, Dance): no topic was more than half, so no example
+    var c = calmVP('c');
+    play(c, [[1, 'sports', true], [1, 'music', true], [1, 'dance', true], [1, 'food', true],
+             [17, 'sports', true], [1, 'sports', true], [1, 'music', true], [1, 'music', true], [1, 'dance', true]]);
+    r = DS.metrics.buildReveal([c], 40);
+    eq(r.vps[0].variety.trend, 'dropped');
+    eq(r.overall.loopExample, null);
+    eq(DS.metrics.buildReveal([b], 40).overall.loopExample, null, 'a feed that stayed mixed gives no example');
+  });
+
   test('reveal: the numbers are copies (drawing the screen can never change a VP)', function () {
     var vp = calmVP();
     play(vp, [[1, 'sports', true]]);
@@ -1312,14 +1355,22 @@
   function person(over) {
     return Object.assign({
       name: 'Maya', total: 14, likedCount: 9, topTopic: 'sports', topTopics: ['sports'], topCount: 12, topicsShown: 2,
-      gone: false, afkAt: null, finalAttention: 71.4, enjoyedStart: 3, enjoyedEnd: 1,
-      variety: { first: 0.72, second: 0.18, firstCount: 6, secondCount: 5, trend: 'dropped' }
+      gone: false, afkAt: null, finalAttention: 71.4, enjoyedStart: 4, enjoyedEnd: 2,
+      variety: half(0.72, 0.18, 'dropped', mix(6, 4, ['sports'], 2), mix(5, 1, ['sports'], 5))
     }, over);
   }
+  // One half's counts, as metrics.mixOf() gives them (with the count of watched posts beside them).
+  function mix(count, kinds, top, topCount) { return { count: count, kinds: kinds, top: top, topCount: topCount }; }
+  function half(first, second, trend, firstMix, secondMix, leftEarly) {
+    return { first: first, second: second, trend: trend, firstCount: firstMix.count, secondCount: secondMix.count,
+             firstMix: firstMix, secondMix: secondMix, leftEarly: !!leftEarly };
+  }
+  var NONE = mix(0, 0, [], 0);
 
   test('reveal text: the headline sentences match the brief', function () {
     eq(T().feedLine(person()), 'You showed Maya 14 posts. 12 were Sports.');
-    eq(T().varietyLine(person().variety), 'Variety dropped from 0.72 → 0.18.');
+    eq(T().varietyLine(person()), 'Less variety: Maya watched 4 different topics in the first half, then only Sports.');
+    eq(T().headline(person()), 'Maya started with 4 topics they\'d enjoy. By the end, only 2.');
     eq(T().closingTitle(4, 6), 'You kept their attention. Was that good for them?');
     eq(T().questions.length, 3, '2-3 discussion questions');
   });
@@ -1362,39 +1413,98 @@
     eq(T().questions[2], 'If you always order your favorite food, you never find a new favorite. When should an app show something new?');
     // the words belong to the big-picture step: no per-person sentence, verdict or tile may use them
     var elsewhere = [T().triedLine(person()), T().triedLine(person({ topicsShown: 6, gone: true, afkAt: 3 })),
-                     T().feedLine(person()), T().tasteLine(person()), T().winTease(1), T().closingTitle(2, 2)];
-    ['dropped', 'low', 'rose', 'steady', 'unknown'].forEach(function (trend) { elsewhere.push(T().verdict({ trend: trend })); });
+                     T().feedLine(person()), T().headline(person()), T().varietyLine(person()), T().winTease(1), T().closingTitle(2, 2),
+                     T().bubbleDefinition];
+    ['dropped', 'low', 'rose', 'steady', 'unknown'].forEach(function (trend) {
+      elsewhere.push(T().verdict({ trend: trend }), T().bubbleLoop({ trend: trend, loopExample: { name: 'Maya', topic: 'sports' } }));
+    });
     elsewhere.forEach(function (line) { ok(!/explor|exploit/i.test(line), 'named outside the big picture: ' + line); });
     ok(!/explor|exploit/i.test(T().questions.join(' ')), 'the questions ask in plain words; the definition line names the idea');
   });
 
-  test('reveal text: variety sentence is honest for each trend (dropped / rose / steady / unknown)', function () {
-    var v = function (first, second, trend) { return { first: first, second: second, trend: trend }; };
-    ok(/dropped/.test(T().varietyLine(v(0.9, 0.2, 'dropped'))));
-    ok(/went up/.test(T().varietyLine(v(0.2, 0.9, 'rose'))));
-    var low = T().varietyLine(v(0, 0, 'low'));
-    ok(/stayed low/.test(low) && !/about the same|mixed/.test(low), low);
-    var steady = T().varietyLine(v(0.5, 0.55, 'steady'));
-    ok(/about the same/.test(steady) && !/dropped|went up/.test(steady), steady);
-    ok(/Too few/.test(T().varietyLine(v(null, null, 'unknown'))));
-    ok(/second half/.test(T().varietyLine(v(0.5, null, 'unknown'))), 'says WHICH half is missing');
-    ok(/first half/.test(T().varietyLine(v(null, 0.5, 'unknown'))));
+  test('reveal text: the variety sentence says the trend in plain words, then counts a student can picture', function () {
+    var line = function (v, over) { return T().varietyLine(person(Object.assign({ variety: v }, over))); };
+    eq(line(half(0.9, 0.29, 'dropped', mix(6, 4, ['music'], 2), mix(7, 3, ['sports'], 5))),
+       'Less variety: Maya watched 4 different topics in the first half, then mostly Sports (5 of 7).');
+    eq(line(half(0, 0, 'low', mix(5, 1, ['sports'], 5), mix(6, 1, ['sports'], 6))), 'Narrow all round: Maya watched only Sports in both halves.');
+    eq(line(half(0.2, 0, 'low', mix(5, 2, ['sports'], 4), mix(6, 1, ['sports'], 6))),
+       'Narrow all round: Maya watched mostly Sports (4 of 5) in the first half, then only Sports.');
+    eq(line(half(0, 0.8, 'rose', mix(4, 1, ['music'], 4), mix(5, 3, ['music'], 2))),
+       'More variety: Maya watched only Music in the first half, then 3 different topics.');
+    eq(line(half(0.8, 0.8, 'steady', mix(5, 3, ['music'], 2), mix(5, 3, ['food'], 2))),
+       'About the same variety: Maya watched 3 different topics in both halves.');
+    // exactly half is not "mostly", and a tie never names one topic
+    eq(line(half(0.6, 0.6, 'steady', mix(6, 2, ['sports', 'music'], 3), mix(6, 3, ['sports'], 3))),
+       'About the same variety: Maya watched 2 different topics in the first half, then 3 different topics.');
+    // the direction always comes from the trend (the 0–1 number), never from the counts
     ['dropped', 'low', 'rose', 'steady'].forEach(function (trend) {
-      ok(T().varietyLine(v(0.5, 0.5, trend)).indexOf('0.50') !== -1, trend + ' shows the numbers');
+      var words = line(half(0.5, 0.5, trend, mix(4, 3, ['sports'], 2), mix(4, 3, ['sports'], 2)));
+      var lead = { dropped: /^Less variety:/, low: /^Narrow all round:/, rose: /^More variety:/, steady: /^About the same variety:/ }[trend];
+      ok(lead.test(words), trend + ': ' + words);
+      ok(!/\d\.\d/.test(words), 'the 0–1 number stays on the bars: ' + words);
     });
   });
 
-  test('reveal text: the verdict only talks about a filter bubble when feeds were really narrow', function () {
+  test('reveal text: a thin half is never a dead end (too few to compare, left early), and never a made-up 0', function () {
+    var line = function (v, over) { return T().varietyLine(person(Object.assign({ variety: v }, over))); };
+    eq(line(half(null, 1, 'unknown', mix(1, 1, ['music'], 1), mix(4, 3, ['sports'], 2))),
+       'Too few to compare: Maya watched just 1 post (Music) in the first half, then 3 different topics.');
+    eq(line(half(null, 0.5, 'unknown', NONE, mix(4, 2, ['sports'], 3))),
+       'Too few to compare: Maya watched nothing in the first half, then mostly Sports (3 of 4).');
+    eq(line(half(null, null, 'unknown', mix(1, 1, ['music'], 1), mix(1, 1, ['music'], 1))),
+       'Too few to compare: Maya watched just 1 post (Music) in the first half, then just 1 post (Music).',
+       'one post a half keeps the long form: "in both halves" would read as one post in all');
+    eq(line(half(null, null, 'unknown', NONE, NONE)), 'Too few to compare: Maya watched nothing in both halves.');
+    // left in the first half: say so, and say what they did watch
+    var early = { gone: true, afkAt: 14.2 };
+    eq(line(half(0, null, 'unknown', mix(3, 1, ['sports'], 3), NONE, true), early),
+       'Maya left at 0:14, too soon to compare halves. They watched only Sports.');
+    eq(line(half(null, null, 'unknown', mix(1, 1, ['music'], 1), NONE, true), early),
+       'Maya left at 0:14, too soon to compare halves. They watched just 1 post (Music).');
+    eq(line(half(null, null, 'unknown', NONE, NONE, true), { gone: true, afkAt: 9 }), 'Maya left at 0:09 without watching a single post.');
+    eq(line(half(null, null, 'unknown', NONE, NONE, false), { gone: true, afkAt: 12.4 }), 'Maya left at 0:12 without watching a single post.',
+       'everyone left, so the round ended at the last exit: still said plainly, not "nothing in both halves"');
+    // left in the second half: the halves are still compared as far as they go
+    ok(/^Too few to compare: Maya watched 4 different topics in the first half, then just 1 post \(Sports\)\.$/.test(
+       line(half(0.9, null, 'unknown', mix(5, 4, ['music'], 2), mix(1, 1, ['sports'], 1)), { gone: true, afkAt: 21 })));
+  });
+
+  test('reveal text: the headline says what happened to each person, in topics they\'d enjoy (never "favorites")', function () {
+    var hl = function (over) { return T().headline(person(over)); };
+    eq(hl({ enjoyedStart: 4, enjoyedEnd: 1 }), 'Maya started with 4 topics they\'d enjoy. By the end, only 1.');
+    eq(hl({ enjoyedStart: 4, enjoyedEnd: 0 }), 'Maya started with 4 topics they\'d enjoy. By the end, none.');
+    eq(hl({ enjoyedStart: 4, enjoyedEnd: 3, gone: true, afkAt: 20 }), 'Maya started with 4 topics they\'d enjoy. By the time they left, only 3.');
+    eq(hl({ enjoyedStart: 4, enjoyedEnd: 4 }), 'Maya still had 4 topics they\'d enjoy at the end, the same as at the start.');
+    eq(hl({ enjoyedStart: 4, enjoyedEnd: 4, gone: true, afkAt: 20 }), 'When Maya left, they still had 4 topics they\'d enjoy, the same as at the start.');
+    eq(hl({ enjoyedStart: 3, enjoyedEnd: 4 }), 'Maya started with 3 topics they\'d enjoy. By the end, 4.', 'more, said plainly');
+    eq(hl({ enjoyedStart: 1, enjoyedEnd: 1 }), 'Maya still had 1 topic they\'d enjoy at the end, the same as at the start.');
+    eq(hl({ total: 0, enjoyedStart: 4, enjoyedEnd: 4, gone: true, afkAt: 12 }), 'Maya never saw a post, so they still had the same 4 topics they\'d enjoy.');
+    [{}, { enjoyedEnd: 4, enjoyedStart: 4 }, { total: 0, enjoyedEnd: 4, enjoyedStart: 4 }].forEach(function (over) {
+      ok(!/favou?rite/i.test(hl(over)), 'the start counts the "meh" topic too, so never "favorites": ' + hl(over));
+    });
+  });
+
+  test('reveal text: the verdict only talks about a filter bubble when feeds were really narrow, and defines it first', function () {
+    var ex = { name: 'Maya', topic: 'sports' };
     ['rose', 'steady', 'unknown'].forEach(function (trend) {
       var line = T().verdict({ trend: trend });
       ok(!/bubble|narrow/i.test(line), 'a "' + trend + '" result must not claim a bubble: ' + line);
+      eq(T().bubbleLoop({ trend: trend, loopExample: ex }), '', 'no loop (and so no definition) for "' + trend + '"');
     });
-    ok(/narrower/.test(T().verdict({ trend: 'dropped' })) && /filter bubble/.test(T().verdict({ trend: 'dropped' })));
+    eq(T().verdict({ trend: 'dropped' }), 'Their feeds got narrower as the round went on.');
     ok(/Play again/.test(T().verdict({ trend: 'steady' })), 'a steady result invites another try');
     // a feed that was narrow from the start must NOT be called "mixed"
     var low = T().verdict({ trend: 'low' });
-    ok(/narrow/.test(low) && /filter bubble/.test(low) && !/mixed/.test(low), low);
+    ok(/narrow/.test(low) && !/mixed/.test(low), low);
     ok(!/mixed/.test(T().verdict({ trend: 'dropped' })));
+    // the term is defined in its own line (drawn before the loop), and the verdicts themselves never use it undefined
+    eq(T().bubbleDefinition, 'Filter bubble = a feed so full of one thing that you rarely see anything else.');
+    ['dropped', 'low'].forEach(function (trend) { ok(!/bubble/i.test(T().verdict({ trend: trend })), 'defined before it is used'); });
+    // the loop: a real person and topic when there is one, otherwise "a topic"
+    eq(T().bubbleLoop({ trend: 'dropped', loopExample: ex }),
+       'How it forms: you show Maya Sports → they watch → they like Sports more, the rest less → repeat.');
+    eq(T().bubbleLoop({ trend: 'low', loopExample: null }),
+       'How it forms: you show a topic → they watch it → they like it more, the rest less → repeat.');
   });
 
   test('reveal text: the closing question fits the result (kept / kept some / lost everyone)', function () {
@@ -1408,12 +1518,10 @@
     ok(/anyway/.test(T().winTease(0)));
   });
 
-  test('reveal text: status, taste and tile lines', function () {
+  test('reveal text: status and tile lines', function () {
     eq(T().statusLine(person({ gone: true, afkAt: 41.2 })), 'Left the app after 0:41.');
     eq(T().statusLine(person({ gone: true, afkAt: 75 })), 'Left the app after 1:15.');
     eq(T().statusLine(person()), 'Still scrolling (attention 71).');
-    eq(T().tasteLine(person()), 'At the start, Maya enjoyed 3 topics. At the end: 1.');
-    eq(T().tasteLine(person({ enjoyedStart: 1, enjoyedEnd: 1 })), 'At the start, Maya enjoyed 1 topic. At the end: 1.');
     var o = { varietyFirst: 0.71, varietySecond: 0.28, varietyPeople: 4, enjoyedStart: 3.5, enjoyedEnd: 1.4 };
     eq(T().varietyTile(o, 6).value, '0.71 → 0.28');
     ok(/4 of 6 people/.test(T().varietyTile(o, 6).sub), 'says when it is based on fewer than everyone');
@@ -1440,9 +1548,22 @@
     var vs = [{ first: 0.9, second: 0.1, trend: 'dropped' }, { first: 0, second: 0, trend: 'low' }, { first: 0.1, second: 0.9, trend: 'rose' },
               { first: 0.5, second: 0.5, trend: 'steady' }, { first: null, second: 0.5, trend: 'unknown' },
               { first: 0.5, second: null, trend: 'unknown' }, { first: null, second: null, trend: 'unknown' }];
-    vs.forEach(function (v) { pool.push(T().varietyLine(v)); pool.push(T().verdict({ trend: v.trend })); });
-    [person(), person({ total: 0, topTopic: null }), person({ total: 1, topCount: 1 }), person({ total: 5, topCount: 5, gone: true, afkAt: 12 })]
-      .forEach(function (p) { pool.push(T().feedLine(p), T().feedLegend(p), T().tasteLine(p), T().statusLine(p)); });
+    vs.forEach(function (v) {
+      pool.push(T().verdict({ trend: v.trend }));
+      pool.push(T().bubbleLoop({ trend: v.trend, loopExample: { name: 'Jordan', topic: 'comics' } }), T().bubbleLoop({ trend: v.trend, loopExample: null }));
+    });
+    pool.push(T().bubbleDefinition);
+    // every variety branch, with the longest name and topic phrases
+    var thin = mix(1, 1, ['comics'], 1), most = mix(7, 3, ['comics'], 5), many = mix(6, 4, ['music'], 2);
+    [half(0.9, 0.3, 'dropped', many, most), half(0, 0, 'low', most, mix(6, 1, ['movies'], 6)), half(0.2, 0.9, 'rose', most, many),
+     half(0.6, 0.6, 'steady', many, many), half(null, 0.6, 'unknown', thin, most), half(null, null, 'unknown', NONE, NONE)]
+      .forEach(function (v) { pool.push(T().varietyLine(person({ name: 'Jordan', variety: v }))); });
+    [half(null, null, 'unknown', many, NONE, true), half(null, null, 'unknown', thin, NONE, true), half(null, null, 'unknown', NONE, NONE, true)]
+      .forEach(function (v) { pool.push(T().varietyLine(person({ name: 'Jordan', gone: true, afkAt: 13, variety: v }))); });
+    [person(), person({ total: 0, topTopic: null }), person({ total: 1, topCount: 1 }), person({ total: 5, topCount: 5, gone: true, afkAt: 12 }),
+     person({ enjoyedEnd: 4, enjoyedStart: 4 }), person({ enjoyedEnd: 4, enjoyedStart: 4, gone: true, afkAt: 12 }),
+     person({ enjoyedStart: 3, enjoyedEnd: 4 }), person({ total: 0, enjoyedStart: 4, enjoyedEnd: 4 }), person({ enjoyedEnd: 0 })]
+      .forEach(function (p) { pool.push(T().feedLine(p), T().feedLegend(p), T().headline(p), T().statusLine(p)); });
     [0, 1, 2, 3, 4, 5, 6].forEach(function (n) { pool.push(T().winTitle(n, 6), T().winTease(n), T().closingTitle(n, 6)); });
     // the "tried" line, as it reads joined to the feed line on the screen, for every case
     [person({ total: 1, topCount: 1, topicsShown: 1 }), person({ topicsShown: 3 }), person({ topicsShown: 6 }),

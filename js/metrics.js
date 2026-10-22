@@ -45,9 +45,26 @@
       .map(function (h) { return h.topic; });
   }
 
-  // First half of the round vs second half (the "Variety dropped from 0.72 -> 0.18" line).
+  // What one half's watched posts were, in counts a 13-year-old can picture ("mostly Sports, 5 of 7"):
+  // how many different topics, and which topic(s) came up most. Unlike diversity() this works from a
+  // single post, so a thin half still has something true to say. Ties keep every tied topic, so the
+  // wording never has to pick a winner.
+  function mixOf(topicIds) {
+    var counts = {};
+    topicIds.forEach(function (id) { counts[id] = (counts[id] || 0) + 1; });
+    var topCount = 0;
+    DS.TOPIC_IDS.forEach(function (id) { if ((counts[id] || 0) > topCount) topCount = counts[id]; });
+    return {
+      kinds: Object.keys(counts).length,
+      top: topCount ? DS.TOPIC_IDS.filter(function (id) { return counts[id] === topCount; }) : [],
+      topCount: topCount
+    };
+  }
+
+  // First half of the round vs second half (the variety line on each person's results step).
   // Split by push time. If the round ended early (everyone went AFK) pass the real
   // elapsed seconds, not ROUND_SEC, so the halves are still halves of what happened.
+  // The number and the counts come from the very same two lists, so the words can't disagree with it.
   function diversityByHalf(history, elapsedSec) {
     var mid = elapsedSec / 2;
     var first = likedTopics(history, 0, mid);
@@ -56,7 +73,9 @@
       first: diversity(first),     // null if fewer than 2 liked posts in that half
       second: diversity(second),
       firstCount: first.length,
-      secondCount: second.length
+      secondCount: second.length,
+      firstMix: mixOf(first),
+      secondMix: mixOf(second)
     };
   }
 
@@ -118,7 +137,7 @@
 
   // Topics a VP would still happily watch (taste at/above ENJOY_THRESHOLD).
   // Comparing this at the start and end of the round puts a plain number on
-  // the filter bubble: "Maya used to enjoy 3 topics. Now she enjoys 1."
+  // the filter bubble: "Maya started with 4 topics they'd enjoy. By the end, only 2."
   function enjoyedTopics(tastes) {
     return DS.TOPIC_IDS.filter(function (id) { return tastes[id] >= C.ENJOY_THRESHOLD; });
   }
@@ -184,6 +203,9 @@
         variety: {
           first: halves.first, second: halves.second,
           firstCount: halves.firstCount, secondCount: halves.secondCount,
+          firstMix: halves.firstMix, secondMix: halves.secondMix,
+          // Left before the second half began: the results say so instead of "too few watched posts".
+          leftEarly: vp.state === 'afk' && vp.afkAt !== null && vp.afkAt < elapsedSec / 2,
           trend: trendOf(halves.first, halves.second)
         }
       };
@@ -194,6 +216,20 @@
     var both = people.filter(function (p) { return p.variety.first !== null && p.variety.second !== null; });
     var first = mean(both.map(function (p) { return p.variety.first; }));
     var second = mean(both.map(function (p) { return p.variety.second; }));
+
+    // The big picture shows how a filter bubble forms as a loop ("you show Maya Sports → they watch → …"). A real
+    // person and topic make it concrete, but only one whose own feed narrowed, and only a topic that was more than
+    // half of their second half: the loop must be true of that person. The narrowest feed makes the best example.
+    // null means no one qualifies, and the wording falls back to "a topic".
+    var loopExample = null;
+    both.filter(function (p) { return p.variety.trend === 'dropped' || p.variety.trend === 'low'; })
+      .sort(function (a, b) { return a.variety.second - b.variety.second; })
+      .some(function (p) {
+        var mix = p.variety.secondMix;
+        if (mix.top.length !== 1 || mix.topCount * 2 <= p.variety.secondCount) return false;
+        loopExample = { name: p.name, topic: mix.top[0] };
+        return true;
+      });
 
     return {
       total: vps.length,
@@ -206,6 +242,7 @@
         varietySecond: second,
         varietyPeople: both.length,            // how many people the two numbers are based on
         trend: trendOf(first, second),
+        loopExample: loopExample,              // { name, topic } or null
         enjoyedStart: mean(people.map(function (p) { return p.enjoyedStart; })),
         enjoyedEnd: mean(people.map(function (p) { return p.enjoyedEnd; }))
       }
@@ -215,6 +252,7 @@
   DS.metrics = {
     diversity: diversity,
     likedTopics: likedTopics,
+    mixOf: mixOf,
     diversityByHalf: diversityByHalf,
     stillScrolling: stillScrolling,
     averageAttention: averageAttention,

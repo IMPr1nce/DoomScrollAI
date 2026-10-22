@@ -86,25 +86,56 @@
       return 'Bright = they watched it (' + p.likedCount + '). Faded = they skipped it (' + (p.total - p.likedCount) + ').';
     },
 
-    // The headline number. It only says "dropped" if variety really dropped.
-    varietyLine: function (v) {
-      if (v.trend === 'dropped') return 'Variety dropped from ' + two(v.first) + ' → ' + two(v.second) + '.';
-      if (v.trend === 'low')     return 'Variety stayed low: ' + two(v.first) + ' → ' + two(v.second) + '.';
-      if (v.trend === 'rose')    return 'Variety went up from ' + two(v.first) + ' → ' + two(v.second) + '.';
-      if (v.trend === 'steady')  return 'Variety stayed about the same: ' + two(v.first) + ' → ' + two(v.second) + '.';
-      // unknown: say which half was too thin, instead of inventing a number
-      // (Kept short on purpose: a 2-line sentence here pushes the screen past a 600px-tall window.)
-      if (v.first === null && v.second === null) return 'Too few watched posts to measure variety.';
-      return v.second === null
-        ? 'Too few watched posts in the second half.'
-        : 'Too few watched posts in the first half.';
+    // One half's watched posts, in words: "only Sports", "mostly Sports (5 of 7)", "4 different topics".
+    // A 0.62 means nothing to a 13-year-old; a count they can picture does. "mostly" needs more than half,
+    // so a tie can never read as one topic winning.
+    halfFacts: function (mix, count) {
+      if (count === 0) return 'nothing';
+      if (count === 1) return 'just 1 post (' + topicLabel(mix.top[0]) + ')';
+      if (mix.kinds === 1) return 'only ' + topicLabel(mix.top[0]);
+      if (mix.top.length === 1 && mix.topCount * 2 > count) {
+        return 'mostly ' + topicLabel(mix.top[0]) + ' (' + mix.topCount + ' of ' + count + ')';
+      }
+      return mix.kinds + ' different topics';
+    },
+
+    // The variety sentence. The direction ("Less variety") comes from the trend, which is the 0–1 number's own
+    // verdict, and the rest are plain counts from the same halves, so the words and the bars can't disagree.
+    // The numbers stay on the bars below it, for the teacher. A thin half still says what it holds, so a
+    // 30-second round never ends in a dead end; only the 0–1 number shows "—".
+    varietyLine: function (p) {
+      var v = p.variety;
+      // Someone who left with nothing watched gets that said plainly, whenever they left: when everyone leaves, the
+      // round ends at the last exit, so even an early exit can fall in the "second half" of what was played.
+      var left = p.name + ' left at ' + mmss(p.afkAt === null ? 0 : p.afkAt);
+      if (v.trend === 'unknown' && p.gone && v.firstCount + v.secondCount === 0) return left + ' without watching a single post.';
+      if (v.trend === 'unknown' && v.leftEarly) {
+        return left + ', too soon to compare halves. They watched ' + text.halfFacts(v.firstMix, v.firstCount) + '.';
+      }
+      var lead = { dropped: 'Less variety', low: 'Narrow all round', rose: 'More variety',
+                   steady: 'About the same variety', unknown: 'Too few to compare' }[v.trend];
+      var first = text.halfFacts(v.firstMix, v.firstCount), second = text.halfFacts(v.secondMix, v.secondCount);
+      // "just 1 post (Music) in both halves" could read as one post in all, so a single post keeps the long form.
+      if (first === second && v.firstCount !== 1) return lead + ': ' + p.name + ' watched ' + first + ' in both halves.';
+      return lead + ': ' + p.name + ' watched ' + first + ' in the first half, then ' + second + '.';
     },
     varietyHint: '0 = all the same. 1 = all different.',
 
-    // "enjoys" = a taste of at least ENJOY_THRESHOLD, i.e. they'd like it close to half the time or more.
-    tasteLine: function (p) {
-      return 'At the start, ' + p.name + ' enjoyed ' + plural(p.enjoyedStart, 'topic') +
-             '. At the end: ' + p.enjoyedEnd + '.';
+    // The person's step opens with what happened to them, in one human sentence. "Enjoy" = a taste of at least
+    // ENJOY_THRESHOLD, which includes the "meh" topic, so it says "topics they'd enjoy", never "favorites"
+    // (the start is usually 4, not 3). It says "the same" plainly rather than "nothing narrowed": the radar's
+    // percentages may still have shrunk without crossing the line.
+    headline: function (p) {
+      var s = p.enjoyedStart, e = p.enjoyedEnd;
+      var topics = function (n) { return plural(n, 'topic') + ' they\'d enjoy'; };
+      if (!p.total && e === s) return p.name + ' never saw a post, so they still had the same ' + topics(s) + '.';
+      if (e === s) {
+        return p.gone
+          ? 'When ' + p.name + ' left, they still had ' + topics(s) + ', the same as at the start.'
+          : p.name + ' still had ' + topics(s) + ' at the end, the same as at the start.';
+      }
+      var when = p.gone ? 'By the time they left, ' : 'By the end, ';
+      return p.name + ' started with ' + topics(s) + '. ' + when + (e > s ? e : e === 0 ? 'none' : 'only ' + e) + '.';
     },
 
     // ---- Step 8: the big picture
@@ -114,17 +145,13 @@
       return 'You lost everyone. What would a real app try next?';
     },
 
-    // The verdict is chosen from the data. It must never claim a bubble that didn't form.
+    // The verdict is chosen from the data. It must never claim a bubble that didn't form. For a narrow result it
+    // only says what happened; bubbleDefinition and bubbleLoop then name the idea and show the cause, so the term
+    // is defined before it is used.
     verdict: function (overall) {
-      if (overall.trend === 'dropped') {
-        return 'Their feeds got narrower. Each time you showed a post someone liked, they liked that topic more ' +
-               'and everything else less. That is how a filter bubble forms.';
-      }
-      if (overall.trend === 'low') {
-        // Narrow from the start: there was no "drop" to point at, but it is the same lesson, so say what happened.
-        return 'Their feeds were narrow all round. Most of what each person watched was the same topic. ' +
-               'That is a filter bubble, and it forms fast when an app only chases attention.';
-      }
+      if (overall.trend === 'dropped') return 'Their feeds got narrower as the round went on.';
+      // Narrow from the start: there was no "drop" to point at, but it is the same lesson, so say what happened.
+      if (overall.trend === 'low') return 'Their feeds were narrow from the start.';
       if (overall.trend === 'rose') {
         return 'Variety went up this time. Apps that only chase attention can end up doing the opposite.';
       }
@@ -132,6 +159,18 @@
         return 'Feeds stayed fairly mixed this time. Play again and only show what each person already likes. What changes?';
       }
       return 'There weren\'t enough watched posts to measure variety. Play again and keep people watching longer.';
+    },
+    // Said only where the bubble really formed (bubbleLoop is '' otherwise, and renderBig skips both).
+    bubbleDefinition: 'Filter bubble = a feed so full of one thing that you rarely see anything else.',
+    // The cause, as a loop a student can follow. It names a real person and topic when one fits (see loopExample in
+    // metrics.js); "they like Sports more, the rest less" is the taste drift that the radars on each step show.
+    bubbleLoop: function (overall) {
+      if (overall.trend !== 'dropped' && overall.trend !== 'low') return '';
+      var ex = overall.loopExample;
+      if (!ex) return 'How it forms: you show a topic → they watch it → they like it more, the rest less → repeat.';
+      var topic = topicLabel(ex.topic);
+      return 'How it forms: you show ' + ex.name + ' ' + topic + ' → they watch → they like ' + topic +
+             ' more, the rest less → repeat.';
     },
     varietyTile: function (o, total) {
       if (o.varietyFirst === null) return { value: '—', sub: 'not enough watched posts' };
@@ -176,7 +215,8 @@
 
     questions: [
       'Did anyone\'s feed get narrower? What did you do that caused it?',
-      'The game only gave you points for attention. What did it never reward?',
+      // Takes the lesson off the laptop: the student's own feed. It asks; it doesn't tell them their apps are bad.
+      'Does your own TikTok or YouTube feed do this? How would you find out?',
       'If you always order your favorite food, you never find a new favorite. When should an app show something new?'
     ]
   };
@@ -324,6 +364,9 @@
   function renderTastes(p) {
     var box = h('section', 'panel tastebox');
     box.appendChild(h('h3', 'panel__title', 'What ' + p.name + ' likes'));
+    // The step's headline sits here, at the top, where the old taste line sat at the bottom: the radars below
+    // flex to make room, so the step gets no taller.
+    box.appendChild(h('p', 'panel__line tastes__headline', text.headline(p)));
     box.appendChild(h('p', 'panel__hint', 'Chance they\'d like each topic, in %.'));
 
     var n = DS.TOPICS.length;
@@ -339,7 +382,6 @@
       row.appendChild(spikeChart(p.tastesEnd, 'End of round', highlight, 'Chance ' + p.name + ' would like each topic at the end'));
       box.appendChild(row);
       if (highlight.length) box.appendChild(h('p', 'legend', 'Highlighted: what you showed most.'));
-      box.appendChild(h('p', 'panel__line', text.tasteLine(p)));
       return box;
     }
 
@@ -395,14 +437,15 @@
     legend.appendChild(document.createTextNode(' end of round'));
     if (highlight.length) legend.appendChild(document.createTextNode('   ·   Highlighted: what you showed most.'));
     box.appendChild(legend);
-    box.appendChild(h('p', 'panel__line', text.tasteLine(p)));
     return box;
   }
 
   function renderVariety(p) {
     var box = h('section', 'panel varietybox');
     box.appendChild(h('h3', 'panel__title', 'Variety of what they watched'));
-    box.appendChild(h('p', 'panel__line panel__line--big', text.varietyLine(p.variety)));
+    // A sentence now, not a number, so it uses the normal line size: at 22px the longest branch took 3 lines and
+    // pushed the step past ~445px.
+    box.appendChild(h('p', 'panel__line varietybox__line', text.varietyLine(p)));
 
     function row(label, value, count) {
       var r = h('div', 'vrow');
@@ -507,6 +550,12 @@
     tiles.appendChild(tile('Topics people enjoy', text.enjoyTile(data.overall)));
     left.appendChild(tiles);
     left.appendChild(h('p', 'big__verdict', text.verdict(data.overall)));
+    // Only where a bubble really formed: the term, defined in one line, then the loop that built it.
+    var loop = text.bubbleLoop(data.overall);
+    if (loop) {
+      left.appendChild(h('p', 'big__def', text.bubbleDefinition));
+      left.appendChild(h('p', 'big__loop', loop));
+    }
     box.appendChild(left);
 
     var talk = h('section', 'panel talk');

@@ -112,4 +112,8 @@ Paths in backticks are relative to the project root.
   `http://localhost:8765` and writes every CSV into `data/`: no folder picker and nothing ever downloads. The name
   screen checks it ("✓ Saving program is running.") and Continue waits for it; a failed save offers only *Try
   again*. Files, names, `(2)` and columns are unchanged. The game no longer opens with a double-click.
+- 2026-10-21: the results speak in counts: a headline per person ("…4 topics they'd enjoy. By the end, only 2."),
+  the variety line in watched topics per half (the 0–1 numbers stay on the bars), no "too few watched posts" dead
+  ends, a filter-bubble definition and loop on the big picture (only when feeds narrowed), and question 2 asks about
+  the student's own feed ([content.md](content.md#results-wording-must-be-honest)).
 - Not built, by design: a shared or Flask server (one `fetch` in `logger.flush`), sound, accounts, a class-wide leaderboard.
