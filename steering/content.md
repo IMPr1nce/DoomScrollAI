@@ -81,20 +81,28 @@ alone, and a skip gets a quick 👆 swipe.
 
 ## Results wording must be honest
 - **Every claim comes from `DS.metrics.buildReveal()`.** `DS.revealText` only turns numbers into sentences.
-- **Counts a student can picture, not lab numbers.** The 0–1 variety numbers stay on the bars, for the
-  teacher; the sentences say what was watched. Each person's step opens with a headline in the tastes panel
-  (`headline`): "Maya started with 4 topics they'd enjoy. By the end, only 2." "Enjoy" includes the "meh"
-  topic, so it says "topics they'd enjoy", **never "favorites"**. When the count didn't move it says "the same as
-  at the start", not "nothing narrowed" (the radar's percentages may still have shrunk).
-- **Each trend has its own sentence** (`varietyLine`): the trend in words, taken from the 0–1 number's own
-  trend so the two can't disagree, then each half's watched posts from the same split ("Less variety: Maya
-  watched 4 different topics in the first half, then mostly Sports (5 of 7)."). The leads: `dropped` "Less
-  variety", `low` "Narrow all round", `rose` "More variety", `steady` "About the same variety", `unknown` "Too
-  few to compare". A half reads "nothing", "just 1 post (Music)", "only Sports", "mostly Sports (5 of 7)"
-  (more than half only, so a tie never names a winner) or "4 different topics".
-- **No dead ends.** A half too thin for the number still says what it holds. Someone who left in the first half
-  gets "Maya left at 0:14, too soon to compare halves. They watched only Sports."; someone who left without
-  watching anything gets "Maya left at 0:09 without watching a single post."
+- **Each person's step tells a story, not a measurement** (`story`). Students never meet the word "variety" during
+  play, so the person steps don't show it (the 0–1 measure stays on the big picture's "Average variety" tile). The
+  story says what you showed them, then what happened to their tastes, naming topics: "You showed Maya mostly
+  Sports, so Maya is drifting into a Sports bubble and lost interest in Comics."
+- **Its facts come from `buildReveal()`:** `focusTopic` (more than half of every post shown, watched or skipped, with
+  at least 3 posts, so a tie never names a winner), `lostTopics` / `gainedTopics` and `focusGrew`, all compared on
+  the **whole percents the radars print** (a taste of 0.447 shows "45", so it isn't "lost"), and `bubble`.
+- **"Bubble" only where one formed:** a main topic they still enjoy at the end, and at least one topic lost. Skips
+  don't move tastes, so a topic shown a lot but mostly skipped is no bubble ("You showed Jordan mostly Food, which
+  they don't enjoy. The posts they did watch cost them interest in Movies."). Wherever the story says "bubble", the
+  definition sits under it, word for word as on the big picture (`bubbleDefinition`).
+- **The cause is what the player did.** Every watch nudges tastes, so a mix can cost a topic too: "You mixed it up
+  for Maya, but every watch still nudged their tastes: they lost interest in Comics." Never "because you didn't
+  show variety", never "stuck" or "trapped" (tastes drift; nothing is locked).
+- **The other branches:** nothing shown ("…never saw a post, so their tastes didn't change."), 1–2 posts ("You showed
+  Maya just 2 posts, …"), "only Sports" when every post was Sports, "Sports grew on them" only when its printed
+  percent rose, and "They also came to enjoy Food." for a gained topic. Nothing lost reads "they still enjoy all 4
+  topics they started with". Someone who left gets the same facts in the past tense; the status pill says when.
+- **"Topics they'd enjoy", never "favorites":** the start counts the "meh" topic too (usually 4, not 3). The story
+  doesn't repeat the feed line's numbers ("mostly Sports", not "7 of 15").
+- **The chips beside the radars** say the same topics in words: "Lost interest: 💥 Comics", or "Lost interest:
+  none" (always shown), and "Gained interest: 🍕 Food" only when something was gained.
 - **The filter bubble is defined before it is named, and only where it formed.** For `dropped` or `low` the
   big picture says what happened ("Their feeds got narrower as the round went on."), then "Filter bubble = a
   feed so full of one thing that you rarely see anything else.", then the loop that built it: "How it forms:

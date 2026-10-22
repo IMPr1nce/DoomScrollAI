@@ -74,11 +74,11 @@ still work; the page just scrolls.
    longer the spike, the more that person is into the topic, so a glance shows what to show them. The
    radar shows who they were **at the start of the round** and never changes. Every post they like
    quietly shifts their tastes toward it, but that stays hidden until the results.
-4. **Results:** the score first (the win), then one screen per person. It opens with a plain headline ("Maya
-   started with 4 topics they'd enjoy. By the end, only 2."), then what you showed them and how many of the six
-   topics you tried, how much variety they watched, in counts a student can picture ("Less variety: Maya watched 4
-   different topics in the first half, then mostly Sports (5 of 7)."), and their radar twice: at the start (the
-   one you played with) and at the end, usually shrunk into a single spike. That's the filter bubble, and the
+4. **Results:** the score first (the win), then one screen per person. It opens with that person's story ("You
+   showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Comics."), with the
+   meaning of "filter bubble" right under it whenever it says "bubble". Then what you showed them and how many of
+   the six topics you tried, and their radar twice: at the start (the one you played with) and at the end, usually
+   shrunk toward a single spike, beside the topics they lost interest in. That's the filter bubble, and the
    student's own feed made it. Then the **🏆 Leaderboard**: every round played on this laptop, ranked by
    points, with the student's row marked "you". Then the big picture. When feeds narrowed, it defines a filter
    bubble in one line and shows the loop that built it ("you show Maya Sports → they watch → they like Sports
@@ -94,7 +94,7 @@ Teacher tips:
 - **Pause** with the button or the **Esc** key. Nothing changes until you resume.
 - On a projector, the results screen moves with the **← →** arrow keys.
 - After the first round, try **Play again** with a rule: "never show the same topic twice in a row".
-  Compare the score and the variety numbers.
+  Compare the score, and the stories and "Average variety" numbers on the results.
 - Switching to another tab pauses the game automatically.
 - **Sharing a laptop:** when a student is done, press **Log out** on the last results step. Their files are
   saved, and the next student starts on an empty name screen.
@@ -320,10 +320,11 @@ without a browser.
 - **A fast clicker is protected from themselves.** After any pop-up or new screen appears, its buttons
   ignore clicks for half a second (`CLICK_GUARD_MS`), so the last frantic clicks of a round can't skip the
   results screen or dismiss a pop-up.
-- **The results text only says what happened.** "Less variety" appears only if the variety number dropped; a
-  feed that was narrow from the first post gets its own wording; the filter bubble is only named when one
-  formed. When a half has too few watched posts to measure, the step still says what was watched, or when the
-  person left, instead of inventing a number. All of this is tested.
+- **The results text only says what happened.** A person's story says "bubble" only when their feed was mostly
+  one topic they still enjoy and they lost interest in another; a topic shown a lot but skipped is no bubble. "Lost
+  interest in Comics" always matches the percents printed on the radar beside it. A player who mixed topics is
+  told so, even when every watch still nudged a taste away. The big picture names the filter bubble only when
+  feeds narrowed. All of this is tested.
 - **Why it no longer feels like luck.** Favorites used to be skipped 23% of the time, even for a player
   who knew every answer. Now it's under 10%, and never twice in a row (`SKIP_STREAK_BREAK`), so "even
   favorites get skipped sometimes" is still true but rare. Only a handful of ideas fit on the screen at once, so the game uses 2 people (it was 4, and 6 before that: six

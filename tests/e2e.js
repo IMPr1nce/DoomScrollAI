@@ -539,6 +539,11 @@ async function main() {
       var steps = await b.eval("DS.dev.measureReveal()");
       check('  every results step (score, each person, leaderboard, big picture) fits a 600px-tall window (' + bot + ')',
             steps.length === radar.cards + 3 && steps.every(function (s) { return /fits$/.test(s); }), steps.join(' | '));
+      await b.viewport(1024, 768); await sleep(300);
+      var steps1024 = await b.eval("DS.dev.measureReveal()");
+      await b.viewport(1366, 600); await sleep(300);
+      check('  ...and a 1024x768 window (' + bot + ')',
+            steps1024.length === radar.cards + 3 && steps1024.every(function (s) { return /fits$/.test(s); }), steps1024.join(' | '));
       // Every sentence on every step must be real text: no "undefined", "NaN", "null" or "[object".
       var texts = await b.eval("(async function () { var out = []; var st = [].slice.call(document.querySelectorAll('#reveal-steps .step'));" +
         "for (var k = 0; k < st.length; k++) { st[k].click(); await new Promise(function (r) { setTimeout(r, 250); }); out.push(document.getElementById('reveal-stage').innerText); } return out; })()");
@@ -558,6 +563,20 @@ async function main() {
       if (bot === 'none') check('  nobody was shown anything, so no step says "You tried" (none)', texts.every(function (t) { return !/You tried/.test(t); }), personSteps.join(' ... ').slice(0, 200));
       else check('  each person\'s step says how many topics you tried (' + bot + ')',
                  personSteps.every(function (t) { return /You tried (all \d+|\d+ of \d+) topics( before \w+ left)?\./.test(t); }), personSteps.join(' ... ').slice(0, 300));
+      // Each person's step is a story now: no variety panel, the definition of "filter bubble" under exactly the stories
+      // that say "bubble", the lost-interest chips, and radars still readable after shrinking to fit the stack.
+      var persons = await b.eval("(async function () { var out = []; var st = [].slice.call(document.querySelectorAll('#reveal-steps .step'));" +
+        "for (var k = 1; k < st.length - 2; k++) { st[k].click(); await new Promise(function (r) { setTimeout(r, 250); });" +
+        "  var story = document.querySelector('.who__story'), def = document.querySelector('.who__def'), svg = document.querySelector('.rchart svg');" +
+        "  out.push({ story: story ? story.textContent : '', def: def ? def.textContent : null, vrow: document.querySelectorAll('.vrow, .varietybox').length," +
+        "    variety: /Variety of what they watched|0 = all the same/.test(document.getElementById('reveal-stage').innerText)," +
+        "    chips: (document.querySelector('.tchips') || {}).textContent || '', radar: svg ? Math.round(svg.getBoundingClientRect().height) : 0 }); }" +
+        "return out; })()");
+      check('  each person\'s step tells their story with no variety panel, defines "filter bubble" exactly where it says "bubble", and keeps radars 110px+ (' + bot + ')',
+            persons.length === radar.cards && persons.every(function (p) {
+              return p.story.length > 20 && !p.vrow && !p.variety && /^Lost interest:/.test(p.chips) && p.radar >= 110 &&
+                     (/bubble/.test(p.story) ? p.def === 'Filter bubble = a feed so full of one thing that you rarely see anything else.' : p.def === null);
+            }), JSON.stringify(persons).slice(0, 500));
       if (bot !== 'none') {
         var verdict = await b.eval("(function () { var st = [].slice.call(document.querySelectorAll('#reveal-steps .step')); st[st.length - 1].click(); return document.querySelector('.big__verdict').textContent; })()");
         // A bot that shows people only what they like must be told feeds got narrow; never "mixed".

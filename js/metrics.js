@@ -45,10 +45,9 @@
       .map(function (h) { return h.topic; });
   }
 
-  // What one half's watched posts were, in counts a 13-year-old can picture ("mostly Sports, 5 of 7"):
-  // how many different topics, and which topic(s) came up most. Unlike diversity() this works from a
-  // single post, so a thin half still has something true to say. Ties keep every tied topic, so the
-  // wording never has to pick a winner.
+  // What one half's watched posts were, in counts: how many different topics, and which topic(s) came up most.
+  // The big picture's loop example uses it ("a topic that was more than half of their second half"). Ties keep
+  // every tied topic, so nothing ever has to pick a winner.
   function mixOf(topicIds) {
     var counts = {};
     topicIds.forEach(function (id) { counts[id] = (counts[id] || 0) + 1; });
@@ -61,8 +60,8 @@
     };
   }
 
-  // First half of the round vs second half (the variety line on each person's results step).
-  // Split by push time. If the round ended early (everyone went AFK) pass the real
+  // First half of the round vs second half (the big picture's verdict, its loop and the "Average variety" tile; the
+  // person steps no longer show it). Split by push time. If the round ended early (everyone went AFK) pass the real
   // elapsed seconds, not ROUND_SEC, so the halves are still halves of what happened.
   // The number and the counts come from the very same two lists, so the words can't disagree with it.
   function diversityByHalf(history, elapsedSec) {
@@ -137,10 +136,20 @@
 
   // Topics a VP would still happily watch (taste at/above ENJOY_THRESHOLD).
   // Comparing this at the start and end of the round puts a plain number on
-  // the filter bubble: "Maya started with 4 topics they'd enjoy. By the end, only 2."
+  // the filter bubble: the big picture's "Topics people enjoy" tile.
   function enjoyedTopics(tastes) {
     return DS.TOPIC_IDS.filter(function (id) { return tastes[id] >= C.ENJOY_THRESHOLD; });
   }
+
+  // The same test on the whole percents the results radars print. The person's story names the topics that crossed
+  // the line, right beside those radars, so it must agree with them: a taste of 0.447 is printed "45", and "lost
+  // interest" next to a 45 would read as a mistake. (About 1 crossing in 4 lands there.) enjoyedTopics stays exact
+  // for the big picture's tile and the simulator.
+  function percent(t) { return Math.round(100 * t); }
+  function enjoyedAsShown(tastes) {
+    return DS.TOPIC_IDS.filter(function (id) { return percent(tastes[id]) >= percent(C.ENJOY_THRESHOLD); });
+  }
+  function missingFrom(ids, others) { return ids.filter(function (id) { return others.indexOf(id) === -1; }); }
 
   // --------------------------------------------------- Everything the reveal shows
   // reveal.js only DRAWS. All the deciding happens here, in plain data, so it can be tested
@@ -174,6 +183,11 @@
     var people = vps.map(function (vp) {
       var summary = feedSummary(vp.history);
       var halves = diversityByHalf(vp.history, elapsedSec);
+      var keptStart = enjoyedAsShown(vp.tasteSnapshotStart), keptEnd = enjoyedAsShown(vp.tastes);
+      // The topic the story says you showed "mostly": more than half of every post shown (the feed line's count), so
+      // a tie can never name a winner. Under 3 posts nothing is "mostly" anything.
+      var focus = summary.total >= 3 && summary.topCount * 2 > summary.total ? summary.topTopic : null;
+      var lost = missingFrom(keptStart, keptEnd);
       return {
         id: vp.id, name: vp.name, avatar: vp.avatar, bio: vp.bio,
         gone: vp.state === 'afk',
@@ -198,14 +212,21 @@
         tastesEnd: Object.assign({}, vp.tastes),
         enjoyedStart: enjoyedTopics(vp.tasteSnapshotStart).length,
         enjoyedEnd: enjoyedTopics(vp.tastes).length,
+        // What the person's story says happened, as the radars print it (enjoyedAsShown). In topic order.
+        lostTopics: lost,                      // enjoyed at the start, not at the end
+        gainedTopics: missingFrom(keptEnd, keptStart),
+        focusTopic: focus,                     // or null
+        focusGrew: focus !== null && percent(vp.tastes[focus]) > percent(vp.tasteSnapshotStart[focus]),
+        // A filter bubble only where one formed: a feed mostly of one topic they still enjoy (so they watched it, and
+        // each watch pulled the others down), and a topic lost on the way. Skips don't move tastes, so a topic shown
+        // a lot but skipped is no bubble. The story and its definition line both read this one flag.
+        bubble: focus !== null && lost.length > 0 && keptEnd.indexOf(focus) !== -1,
         clue: vp.clue,
         observed: observed(vp.history),        // what the player saw (the profile they built of this person)
         variety: {
           first: halves.first, second: halves.second,
           firstCount: halves.firstCount, secondCount: halves.secondCount,
           firstMix: halves.firstMix, secondMix: halves.secondMix,
-          // Left before the second half began: the results say so instead of "too few watched posts".
-          leftEarly: vp.state === 'afk' && vp.afkAt !== null && vp.afkAt < elapsedSec / 2,
           trend: trendOf(halves.first, halves.second)
         }
       };

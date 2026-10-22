@@ -16,6 +16,7 @@ Paths in backticks are relative to the project root.
 | [structure.md](structure.md) | look for where something lives, how the pieces talk, the game's states, the radar, or how to add things |
 | [content.md](content.md) | write anything a player sees: people, speech bubbles, tutorial and results wording, accessibility |
 | [balance.md](balance.md) | change a number in `js/config.js`: what "balanced" means, the current tuning, the simulator's goals |
+| [results-story.md](results-story.md) | want the history of a person's results step: the spec for the story sentence and stacked layout (built 2026-10-22; its rules now live in content.md and product.md) |
 
 ## Working agreement
 - Match the code around you: ES5, one `DS` global, comments that explain why.
@@ -48,7 +49,8 @@ Paths in backticks are relative to the project root.
 - **Tests pin their own config** (`PINNED` in `tests/tests.js`), so tuning never breaks them. A new key that
   a test depends on goes into `PINNED`.
 - **Layout budgets:** the board and the name screen fit windows at least 1001px wide and about 560px tall; each results
-  step must fit about 445px (the leaderboard's 10 rows only fit as two columns). `tests/e2e.js` and `DS.dev.measureReveal()` check this.
+  step must fit about 445px (the leaderboard's 10 rows only fit as two columns; a person's step is three stacked panels whose
+  radars take the rest, about 136px tall at 1366 × 600, and must stay 110px+). `tests/e2e.js` and `DS.dev.measureReveal()` check this.
 - **The radar lives in two places that must agree:** `js/radar.js` and the `.radar` rules in
   `css/style.css` ([structure.md](structure.md#the-radar)).
 - **Words have rules** (results must be honest; no he/she; sentences of 24 words or fewer; speech bubbles
@@ -116,4 +118,8 @@ Paths in backticks are relative to the project root.
   the variety line in watched topics per half (the 0–1 numbers stay on the bars), no "too few watched posts" dead
   ends, a filter-bubble definition and loop on the big picture (only when feeds narrowed), and question 2 asks about
   the student's own feed ([content.md](content.md#results-wording-must-be-honest)).
+- 2026-10-22: each person's results step tells a story ("You showed Maya mostly Sports, so Maya is drifting into a Sports
+  bubble and lost interest in Comics."), with the bubble's definition under it; the variety panel and the headline are
+  gone (variety stays on the big picture). One column of three panels, lost/gained chips beside the radars, which shrink
+  to about 136px. "Bubble" needs a main topic still enjoyed; lost topics use the radar's printed percents.
 - Not built, by design: a shared or Flask server (one `fetch` in `logger.flush`), sound, accounts, a class-wide leaderboard.

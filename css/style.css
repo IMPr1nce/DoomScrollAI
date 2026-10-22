@@ -683,25 +683,32 @@ body.guarded .title-card .btn { opacity: 0.55; }
 .chip--gone .chip__state { color: var(--muted); }
 
 /* ---- Steps 2-7: one person */
-.vpstage { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 0; }
-.vpstage__col { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* One column, three panels: who + story, the feed, the radars. The radars' panel takes the rest of the height
+   (flex: 1 below), so a longer story shrinks the radars instead of making the page scroll. */
+.vpstage { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 
-.who { display: flex; align-items: center; gap: 12px; padding: 6px 16px; }
+.who { display: flex; align-items: flex-start; gap: 12px; padding: 8px 16px; }
 .who__avatar {
   flex: none; width: 48px; height: 48px; display: grid; place-items: center;
   font-size: 30px; border-radius: 50%;
   background: linear-gradient(135deg, #ffe0f0, #e0e4ff);
   border: 3px solid #fff; box-shadow: 0 0 0 3px var(--line);
 }
-.who__text { min-width: 0; }
+.who__text { flex: 1; min-width: 0; }
+.who__line { display: flex; align-items: baseline; gap: 10px; min-width: 0; }    /* name and bio share a line */
 .who__name { margin: 0; font-size: 26px; line-height: 1.1; }
-.who__bio { margin: 0; font-size: 16px; color: var(--muted); }
+.who__bio { margin: 0; font-size: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who__story { margin: 2px 0 0; font-size: 20px; font-weight: 800; line-height: 1.25; }   /* what happened to them */
+.who__def { margin: 2px 0 0; font-size: 16px; color: var(--muted); }                     /* only when it says "bubble" */
 .who__status {
   flex: none; margin: 0 0 0 auto; padding: 4px 12px; border-radius: 999px;
   background: #dff6e8; color: var(--good);
   font-size: 16px; font-weight: 700; line-height: 1.3; text-align: center;
 }
 .who--gone .who__status { background: #ece9f0; color: var(--muted); }
+
+.feedbox__head { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; }
+.feedbox__head .panel__title, .feedbox__head .panel__line { margin: 0; }
 
 /* The feed: one emoji per post shown. Watched = bright and big. Skipped = faded, smaller, gray.
    (Size and brightness differ, not just color, and the legend says so in words.) */
@@ -716,10 +723,11 @@ body.guarded .title-card .btn { opacity: 0.55; }
 /* The tastes radar: real tastes at the start (dashed) and the end (filled) of the round, and, beside
    it, what the player learned (the same picture as on the card during play). With the interests radar
    (--pair) it is two radars drawn like the card's instead: the start (the radar the player used) and
-   the end. */
-.tastebox { flex: 1; display: flex; flex-direction: column; }
-.tastes__headline { margin: 2px 0 0; font-size: 20px; line-height: 1.25; }   /* what happened to this person */
-.tastes__row { flex: 1; min-height: 228px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 8px; }
+   the end. Beside them, a column with the lost/gained chips and the hints.
+   The row's min-height is only a floor; at 1366 x 600 the radars are ~136px tall (they were ~183px when the step had
+   two columns). At 1000px and under the page scrolls, and the narrow-window block gives the row its old 228px. */
+.tastebox { flex: 1; min-height: 0; display: flex; gap: 12px; padding-top: 6px; padding-bottom: 6px; }
+.tastes__row { flex: 2; min-width: 0; min-height: 150px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 8px; }
 .tastes__row--pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .rchart-wrap { display: flex; flex-direction: column; min-height: 0; }
 .rchart {
@@ -748,6 +756,12 @@ body.guarded .title-card .btn { opacity: 0.55; }
   animation: radarIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;            /* grows out from the middle */
 }
 
+.tastes__side { flex: 0.9; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.tastes__side .panel__hint, .tastes__side .legend { margin: 0; }
+.tchips { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 16px; font-weight: 700; }
+.tchip { padding: 2px 10px; border: 2px solid var(--line); border-radius: 999px; background: #f4f1ff; white-space: nowrap; }
+.tchips__none { color: var(--muted); }
+
 .legend { margin: 8px 0 4px; font-size: 16px; color: var(--muted); }
 .legend__swatch {
   display: inline-block; width: 18px; height: 14px; vertical-align: -2px;
@@ -755,18 +769,6 @@ body.guarded .title-card .btn { opacity: 0.55; }
 }
 .legend__swatch--start { background: transparent; border: 2px dashed #7a7891; }
 .legend__swatch--end   { background: rgba(91, 61, 245, 0.2); border-color: var(--primary); }
-
-/* Variety: two horizontal bars, first half vs second half. */
-.vrow { display: grid; grid-template-columns: 104px 1fr 44px 138px; align-items: center; gap: 8px; margin: 4px 0; font-size: 16px; }
-.vrow__label { font-weight: 700; }
-.vrow__track { height: 18px; border-radius: 999px; background: #e9e7f5; overflow: hidden; }
-.vrow__fill {
-  height: 100%; width: calc(var(--v, 0) * 100%);
-  background: var(--primary); border-radius: 999px;
-  animation: growX 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
-}
-.vrow__value { font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
-.vrow__count { color: var(--muted); }
 
 /* ---- The leaderboard: the top rows in two columns, your row marked "you", and one line on where you ranked. */
 .lb {
@@ -873,7 +875,8 @@ body.guarded .title-card .btn { opacity: 0.55; }
   .hud { flex-wrap: wrap; justify-content: center; }
   .hud__stats { flex: none; }
   .board { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: minmax(250px, auto); }
-  .vpstage, .big { grid-template-columns: 1fr; }
+  .big { grid-template-columns: 1fr; }
+  .tastes__row { min-height: 228px; }      /* the page scrolls here anyway, so the radars keep their old height */
   .steps { flex-wrap: wrap; }
   .step { flex: 1 1 22%; }
   .win__stats, .tiles { flex-wrap: wrap; justify-content: center; }
@@ -885,6 +888,7 @@ body.guarded .title-card .btn { opacity: 0.55; }
   .board { grid-template-columns: 1fr; }
   .name-card__fields { flex-direction: column; }
   .lb__cols { flex-direction: column; align-items: center; }
+  .tastebox { flex-direction: column; }
   .banner span { font-size: 40px; padding: 10px 24px; }
 }
 
@@ -934,9 +938,6 @@ body.guarded .title-card .btn { opacity: 0.55; }
 }
 @keyframes radarIn {
   from { transform: scale(0); }        /* SVG transforms start at the viewBox origin: the radar's middle */
-}
-@keyframes growX {
-  from { width: 0; }
 }
 @keyframes feedIn {
   from { opacity: 0; transform: scale(0.4); }

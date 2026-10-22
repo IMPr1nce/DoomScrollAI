@@ -123,6 +123,10 @@ It lives in two places that must agree.
   `DS.radar.spikes()`. `'profile'` (the tutorial only) draws `PROFILE_RINGS` rings (`DS.radar.frame(n, rings)`)
   and `DS.radar.profile()`: each topic reaches the ring of its watch count, joined by a purple shape; its buttons read "✓2 ✗1" (the `.card--profile` rules in `style.css`). `ui.showsInterests()` tells `game.js` and `reveal.js` which one the round uses.
 - Six people always get the button grid instead (decided in `game.js`), because six radars don't fit.
+- **On a person's results step** the radars sit in the last of three stacked panels (`.tastebox`, `flex: 1`), beside a
+  column of chips and hints. `--r` still sizes from the box (`cqw`/`cqh`), so the radars take whatever height the
+  story and the feed leave: about 136px at 1366 × 600. `.tastes__row`'s `min-height` (150px, 228px at 1000px and
+  under, where the page scrolls) is only a floor.
 
 ## How to add…
 - **A setting:** add the key to `js/config.js` with a comment saying why, and read it as `C.KEY` when you

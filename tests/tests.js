@@ -859,12 +859,40 @@
     eq(none.kinds, 0); eq(none.top.length, 0); eq(none.topCount, 0);
   });
 
-  test('reveal: leftEarly is only for someone who left in the first half', function () {
-    var gone = makeVP(); gone.id = 'gone';
-    run(gone, 31);                                     // leaves at ~30 s
-    eq(DS.metrics.buildReveal([gone], 90).vps[0].variety.leftEarly, true, 'left at 30 of 90 s: the first half');
-    eq(DS.metrics.buildReveal([gone], 31).vps[0].variety.leftEarly, false, 'left at 30 of 31 s: the second half');
-    eq(DS.metrics.buildReveal([makeVP()], 90).vps[0].variety.leftEarly, false, 'still scrolling');
+  test('reveal: lostTopics, gainedTopics, focusTopic, focusGrew and bubble say what the radars print', function () {
+    function vpWith(over) {
+      var vp = calmVP();
+      var t = Object.assign({ sports: 0.85, dance: 0.85, music: 0.47, comics: 0.08, movies: 0.08, food: 0.85 }, over);   // PINNED: max 0.95
+      vp.tastes = Object.assign({}, t); vp.tasteSnapshotStart = Object.assign({}, t);
+      return vp;
+    }
+    var watch = function (topic) { return [1, topic, true]; }, skip = function (topic) { return [1, topic, false]; };
+    // 4 Sports, all watched: Sports grows (85 -> 88), and the "meh" Music drifts from 47 to 41: a bubble
+    var a = vpWith({}); play(a, [watch('sports'), watch('sports'), watch('sports'), watch('sports')]);
+    var p = DS.metrics.buildReveal([a], 40).vps[0];
+    eq(p.focusTopic, 'sports'); eq(p.focusGrew, true); eq(p.lostTopics.join(','), 'music'); eq(p.gainedTopics.join(','), '');
+    eq(p.bubble, true);
+    // mostly Comics, all skipped: skips don't move tastes, so Comics never pulled them in. The one watch cost Music: no bubble
+    var b = vpWith({ music: 0.455 }); play(b, [skip('comics'), skip('comics'), skip('comics'), watch('sports')]);
+    p = DS.metrics.buildReveal([b], 40).vps[0];
+    eq(p.focusTopic, 'comics'); eq(p.focusGrew, false); eq(p.lostTopics.join(','), 'music'); eq(p.bubble, false);
+    // the printed percent decides: Music at 0.446 is under 0.45 (the exact count drops it) but the radar prints 45
+    var c = vpWith({ music: 0.4625 }); play(c, [watch('sports')]);
+    p = DS.metrics.buildReveal([c], 40).vps[0];
+    ok(c.tastes.music < 0.45 && Math.round(100 * c.tastes.music) === 45, 'the case this test is about: ' + c.tastes.music);
+    eq(p.lostTopics.join(','), '', 'a printed 45 is still enjoyed'); eq(p.enjoyedEnd, 3, 'the exact count (the big picture tile) is unchanged');
+    // a topic that crossed upward: Comics from 42 to 46
+    var d = vpWith({ comics: 0.42 }); play(d, [watch('comics')]);
+    eq(DS.metrics.buildReveal([d], 40).vps[0].gainedTopics.join(','), 'comics');
+    // "mostly" is more than half of every post shown: a 2-2 tie is no focus, 2 of 3 is; under 3 posts there is none
+    var e = vpWith({}); play(e, [watch('sports'), watch('music'), watch('sports'), watch('music')]);
+    eq(DS.metrics.buildReveal([e], 40).vps[0].focusTopic, null, 'a tie never names a winner');
+    var f = vpWith({}); play(f, [watch('sports'), skip('comics'), watch('sports')]);
+    eq(DS.metrics.buildReveal([f], 40).vps[0].focusTopic, 'sports', 'skipped posts count too, as on the feed line');
+    var g = vpWith({}); play(g, [watch('sports'), watch('sports')]);
+    eq(DS.metrics.buildReveal([g], 40).vps[0].focusTopic, null, '2 posts are too few to say "mostly"');
+    p = DS.metrics.buildReveal([vpWith({})], 40).vps[0];
+    eq(p.focusTopic, null); eq(p.bubble, false); eq(p.lostTopics.length + p.gainedTopics.length, 0, 'nothing shown, nothing changed');
   });
 
   test('reveal: the loop example is a real person whose feed narrowed onto one topic, or null', function () {
@@ -1352,25 +1380,21 @@
   // ---------------------------------------------------- Reveal wording (reveal.js)
   // These call the PURE sentence functions in DS.revealText, so no browser is needed.
   var T = function () { return DS.revealText; };
+  // A person as buildReveal() gives them. The default: mostly Sports, Comics lost, a bubble.
   function person(over) {
     return Object.assign({
       name: 'Maya', total: 14, likedCount: 9, topTopic: 'sports', topTopics: ['sports'], topCount: 12, topicsShown: 2,
-      gone: false, afkAt: null, finalAttention: 71.4, enjoyedStart: 4, enjoyedEnd: 2,
-      variety: half(0.72, 0.18, 'dropped', mix(6, 4, ['sports'], 2), mix(5, 1, ['sports'], 5))
+      gone: false, afkAt: null, finalAttention: 71.4, enjoyedStart: 4, enjoyedEnd: 3,
+      lostTopics: ['comics'], gainedTopics: [], focusTopic: 'sports', focusGrew: true, bubble: true
     }, over);
   }
-  // One half's counts, as metrics.mixOf() gives them (with the count of watched posts beside them).
-  function mix(count, kinds, top, topCount) { return { count: count, kinds: kinds, top: top, topCount: topCount }; }
-  function half(first, second, trend, firstMix, secondMix, leftEarly) {
-    return { first: first, second: second, trend: trend, firstCount: firstMix.count, secondCount: secondMix.count,
-             firstMix: firstMix, secondMix: secondMix, leftEarly: !!leftEarly };
-  }
-  var NONE = mix(0, 0, [], 0);
+  // The story's cases, as buildReveal() would fill them (each branch's fields).
+  var MIX = { focusTopic: null, focusGrew: false, bubble: false, topCount: 4, topTopics: ['sports', 'music'] };
+  var KEPT = { lostTopics: [], bubble: false };
 
-  test('reveal text: the headline sentences match the brief', function () {
+  test('reveal text: the key sentences match the brief', function () {
     eq(T().feedLine(person()), 'You showed Maya 14 posts. 12 were Sports.');
-    eq(T().varietyLine(person()), 'Less variety: Maya watched 4 different topics in the first half, then only Sports.');
-    eq(T().headline(person()), 'Maya started with 4 topics they\'d enjoy. By the end, only 2.');
+    eq(T().story(person()), 'You showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Comics.');
     eq(T().closingTitle(4, 6), 'You kept their attention. Was that good for them?');
     eq(T().questions.length, 3, '2-3 discussion questions');
   });
@@ -1413,7 +1437,7 @@
     eq(T().questions[2], 'If you always order your favorite food, you never find a new favorite. When should an app show something new?');
     // the words belong to the big-picture step: no per-person sentence, verdict or tile may use them
     var elsewhere = [T().triedLine(person()), T().triedLine(person({ topicsShown: 6, gone: true, afkAt: 3 })),
-                     T().feedLine(person()), T().headline(person()), T().varietyLine(person()), T().winTease(1), T().closingTitle(2, 2),
+                     T().feedLine(person()), T().story(person()), T().story(person(MIX)), T().winTease(1), T().closingTitle(2, 2),
                      T().bubbleDefinition];
     ['dropped', 'low', 'rose', 'steady', 'unknown'].forEach(function (trend) {
       elsewhere.push(T().verdict({ trend: trend }), T().bubbleLoop({ trend: trend, loopExample: { name: 'Maya', topic: 'sports' } }));
@@ -1422,67 +1446,87 @@
     ok(!/explor|exploit/i.test(T().questions.join(' ')), 'the questions ask in plain words; the definition line names the idea');
   });
 
-  test('reveal text: the variety sentence says the trend in plain words, then counts a student can picture', function () {
-    var line = function (v, over) { return T().varietyLine(person(Object.assign({ variety: v }, over))); };
-    eq(line(half(0.9, 0.29, 'dropped', mix(6, 4, ['music'], 2), mix(7, 3, ['sports'], 5))),
-       'Less variety: Maya watched 4 different topics in the first half, then mostly Sports (5 of 7).');
-    eq(line(half(0, 0, 'low', mix(5, 1, ['sports'], 5), mix(6, 1, ['sports'], 6))), 'Narrow all round: Maya watched only Sports in both halves.');
-    eq(line(half(0.2, 0, 'low', mix(5, 2, ['sports'], 4), mix(6, 1, ['sports'], 6))),
-       'Narrow all round: Maya watched mostly Sports (4 of 5) in the first half, then only Sports.');
-    eq(line(half(0, 0.8, 'rose', mix(4, 1, ['music'], 4), mix(5, 3, ['music'], 2))),
-       'More variety: Maya watched only Music in the first half, then 3 different topics.');
-    eq(line(half(0.8, 0.8, 'steady', mix(5, 3, ['music'], 2), mix(5, 3, ['food'], 2))),
-       'About the same variety: Maya watched 3 different topics in both halves.');
-    // exactly half is not "mostly", and a tie never names one topic
-    eq(line(half(0.6, 0.6, 'steady', mix(6, 2, ['sports', 'music'], 3), mix(6, 3, ['sports'], 3))),
-       'About the same variety: Maya watched 2 different topics in the first half, then 3 different topics.');
-    // the direction always comes from the trend (the 0–1 number), never from the counts
-    ['dropped', 'low', 'rose', 'steady'].forEach(function (trend) {
-      var words = line(half(0.5, 0.5, trend, mix(4, 3, ['sports'], 2), mix(4, 3, ['sports'], 2)));
-      var lead = { dropped: /^Less variety:/, low: /^Narrow all round:/, rose: /^More variety:/, steady: /^About the same variety:/ }[trend];
-      ok(lead.test(words), trend + ': ' + words);
-      ok(!/\d\.\d/.test(words), 'the 0–1 number stays on the bars: ' + words);
+  test('reveal text: story: nothing shown, and 1–2 posts', function () {
+    eq(T().story(person({ total: 0, topCount: 0, topTopics: [], focusTopic: null, focusGrew: false, bubble: false, lostTopics: [] })),
+       'Maya never saw a post, so their tastes didn\'t change.');
+    eq(T().story(person({ total: 0, focusTopic: null, bubble: false, lostTopics: [], gone: true, afkAt: 12 })),
+       'Maya never saw a post, so their tastes didn\'t change.', 'left without a post: the same (the status pill says when)');
+    var few = { focusTopic: null, focusGrew: false, bubble: false };
+    eq(T().story(person(Object.assign({ total: 2, topCount: 1, lostTopics: [] }, few))),
+       'You showed Maya just 2 posts, and they still enjoy all 4 topics they started with.');
+    eq(T().story(person(Object.assign({ total: 1, topCount: 1, lostTopics: [], gone: true, afkAt: 9 }, few))),
+       'You showed Maya just 1 post, and they still enjoyed all 4 topics they started with.', 'one post, and left: past tense');
+    eq(T().story(person(Object.assign({ total: 2, topCount: 2, lostTopics: ['comics'] }, few))),
+       'You showed Maya just 2 posts, but even that cost them interest in Comics.');
+  });
+
+  test('reveal text: story: mostly one topic, with 1, 2 or 3 topics lost (a bubble), "only" when every post was it', function () {
+    eq(T().story(person()), 'You showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Comics.');
+    eq(T().story(person({ lostTopics: ['music', 'comics'] })),
+       'You showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Music and Comics.');
+    eq(T().story(person({ lostTopics: ['music', 'comics', 'food'] })),
+       'You showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Music, Comics and Food.');
+    eq(T().story(person({ gone: true, afkAt: 22 })),
+       'You showed Maya mostly Sports, so Maya drifted into a Sports bubble and lost interest in Comics.', 'left: past tense');
+    eq(T().story(person({ total: 8, topCount: 8 })),
+       'You showed Maya only Sports, so Maya is drifting into a Sports bubble and lost interest in Comics.');
+  });
+
+  test('reveal text: story: mostly one topic, nothing lost (it grew on them, or it didn\'t)', function () {
+    eq(T().story(person(KEPT)), 'You showed Maya mostly Sports. Sports grew on them, but they still enjoy all 4 topics they started with.');
+    eq(T().story(person(Object.assign({ focusGrew: false }, KEPT))),
+       'You showed Maya mostly Sports, and they still enjoy all 4 topics they started with.');
+    eq(T().story(person(Object.assign({ gone: true, afkAt: 20 }, KEPT))),
+       'You showed Maya mostly Sports. Sports grew on them, but they still enjoyed all 4 topics they started with.');
+  });
+
+  test('reveal text: story: a topic shown mostly but not enjoyed is never a bubble; the loss is put on the watched posts', function () {
+    var skipped = { focusTopic: 'food', topTopic: 'food', topTopics: ['food'], focusGrew: false, bubble: false, lostTopics: ['movies'] };
+    eq(T().story(person(Object.assign({ name: 'Jordan' }, skipped))),
+       'You showed Jordan mostly Food, which they don\'t enjoy. The posts they did watch cost them interest in Movies.');
+    eq(T().story(person(Object.assign({ name: 'Jordan', gone: true, afkAt: 14 }, skipped))),
+       'You showed Jordan mostly Food, which they didn\'t enjoy. The posts they did watch cost them interest in Movies.');
+  });
+
+  test('reveal text: story: a mix says what you did (never "because you didn\'t show variety"), and a tie never names a winner', function () {
+    eq(T().story(person(Object.assign({}, MIX, KEPT))), 'You mixed it up for Maya, and they still enjoy all 4 topics they started with.');
+    eq(T().story(person(Object.assign({ lostTopics: ['comics'] }, MIX))),
+       'You mixed it up for Maya, but every watch still nudged their tastes: they lost interest in Comics.');
+    eq(T().story(person(Object.assign({ lostTopics: ['sports', 'comics'] }, MIX))),
+       'You mixed it up for Maya, but every watch still nudged their tastes: they lost interest in Sports and Comics.');
+    // Sports and Music tied for most shown: neither is named as what you showed
+    var tie = T().story(person(Object.assign({}, MIX, KEPT)));
+    ok(!/Sports|Music|mostly|only/.test(tie), tie);
+  });
+
+  test('reveal text: story: gained topics are added, and "bubble" is said only (and always) with a bubble', function () {
+    eq(T().story(person({ gainedTopics: ['food'] })),
+       'You showed Maya mostly Sports, so Maya is drifting into a Sports bubble and lost interest in Comics. They also came to enjoy Food.');
+    eq(T().story(person(Object.assign({ gainedTopics: ['movies', 'food'] }, MIX, KEPT))),
+       'You mixed it up for Maya, and they still enjoy all 4 topics they started with. They also came to enjoy Movies and Food.');
+    storyCases().forEach(function (p) {
+      var line = T().story(p);
+      eq(/bubble/i.test(line), !!p.bubble, 'says "bubble" exactly when buildReveal found one: ' + line);
+      ok(!/favou?rite/i.test(line), 'the start counts the "meh" topic too, so never "favorites": ' + line);
+      ok(!/variety|explor|exploit|stuck|trapped|fail/i.test(line), 'no lab words, no blame: ' + line);
+      ok(!/\d/.test(line.replace(/all \d topics|the 1 topic|just [12] posts?/g, '')), 'no counts the feed line already says: ' + line);
     });
   });
 
-  test('reveal text: a thin half is never a dead end (too few to compare, left early), and never a made-up 0', function () {
-    var line = function (v, over) { return T().varietyLine(person(Object.assign({ variety: v }, over))); };
-    eq(line(half(null, 1, 'unknown', mix(1, 1, ['music'], 1), mix(4, 3, ['sports'], 2))),
-       'Too few to compare: Maya watched just 1 post (Music) in the first half, then 3 different topics.');
-    eq(line(half(null, 0.5, 'unknown', NONE, mix(4, 2, ['sports'], 3))),
-       'Too few to compare: Maya watched nothing in the first half, then mostly Sports (3 of 4).');
-    eq(line(half(null, null, 'unknown', mix(1, 1, ['music'], 1), mix(1, 1, ['music'], 1))),
-       'Too few to compare: Maya watched just 1 post (Music) in the first half, then just 1 post (Music).',
-       'one post a half keeps the long form: "in both halves" would read as one post in all');
-    eq(line(half(null, null, 'unknown', NONE, NONE)), 'Too few to compare: Maya watched nothing in both halves.');
-    // left in the first half: say so, and say what they did watch
-    var early = { gone: true, afkAt: 14.2 };
-    eq(line(half(0, null, 'unknown', mix(3, 1, ['sports'], 3), NONE, true), early),
-       'Maya left at 0:14, too soon to compare halves. They watched only Sports.');
-    eq(line(half(null, null, 'unknown', mix(1, 1, ['music'], 1), NONE, true), early),
-       'Maya left at 0:14, too soon to compare halves. They watched just 1 post (Music).');
-    eq(line(half(null, null, 'unknown', NONE, NONE, true), { gone: true, afkAt: 9 }), 'Maya left at 0:09 without watching a single post.');
-    eq(line(half(null, null, 'unknown', NONE, NONE, false), { gone: true, afkAt: 12.4 }), 'Maya left at 0:12 without watching a single post.',
-       'everyone left, so the round ended at the last exit: still said plainly, not "nothing in both halves"');
-    // left in the second half: the halves are still compared as far as they go
-    ok(/^Too few to compare: Maya watched 4 different topics in the first half, then just 1 post \(Sports\)\.$/.test(
-       line(half(0.9, null, 'unknown', mix(5, 4, ['music'], 2), mix(1, 1, ['sports'], 1)), { gone: true, afkAt: 21 })));
-  });
-
-  test('reveal text: the headline says what happened to each person, in topics they\'d enjoy (never "favorites")', function () {
-    var hl = function (over) { return T().headline(person(over)); };
-    eq(hl({ enjoyedStart: 4, enjoyedEnd: 1 }), 'Maya started with 4 topics they\'d enjoy. By the end, only 1.');
-    eq(hl({ enjoyedStart: 4, enjoyedEnd: 0 }), 'Maya started with 4 topics they\'d enjoy. By the end, none.');
-    eq(hl({ enjoyedStart: 4, enjoyedEnd: 3, gone: true, afkAt: 20 }), 'Maya started with 4 topics they\'d enjoy. By the time they left, only 3.');
-    eq(hl({ enjoyedStart: 4, enjoyedEnd: 4 }), 'Maya still had 4 topics they\'d enjoy at the end, the same as at the start.');
-    eq(hl({ enjoyedStart: 4, enjoyedEnd: 4, gone: true, afkAt: 20 }), 'When Maya left, they still had 4 topics they\'d enjoy, the same as at the start.');
-    eq(hl({ enjoyedStart: 3, enjoyedEnd: 4 }), 'Maya started with 3 topics they\'d enjoy. By the end, 4.', 'more, said plainly');
-    eq(hl({ enjoyedStart: 1, enjoyedEnd: 1 }), 'Maya still had 1 topic they\'d enjoy at the end, the same as at the start.');
-    eq(hl({ total: 0, enjoyedStart: 4, enjoyedEnd: 4, gone: true, afkAt: 12 }), 'Maya never saw a post, so they still had the same 4 topics they\'d enjoy.');
-    [{}, { enjoyedEnd: 4, enjoyedStart: 4 }, { total: 0, enjoyedEnd: 4, enjoyedStart: 4 }].forEach(function (over) {
-      ok(!/favou?rite/i.test(hl(over)), 'the start counts the "meh" topic too, so never "favorites": ' + hl(over));
-    });
-  });
+  // Every branch of the story, with the longest name and the most topics each branch can name.
+  function storyCases() {
+    var j = { name: 'Jordan' }, three = ['comics', 'music', 'food'], four = ['sports', 'comics', 'music', 'food'];
+    var skipped = { focusTopic: 'movies', bubble: false, focusGrew: false };
+    return [
+      { total: 0, focusTopic: null, bubble: false, lostTopics: [] },
+      { total: 2, topCount: 1, focusTopic: null, bubble: false, lostTopics: [] },
+      { total: 2, topCount: 1, focusTopic: null, bubble: false, lostTopics: three, gone: true, afkAt: 13 },
+      { lostTopics: three, focusTopic: 'movies' }, { lostTopics: three, focusTopic: 'movies', gone: true, afkAt: 13, gainedTopics: ['sports'] },
+      Object.assign({ lostTopics: three }, skipped), Object.assign({ lostTopics: three, gone: true, afkAt: 13, gainedTopics: ['dance', 'sports'] }, skipped),
+      Object.assign({ focusGrew: true }, KEPT), Object.assign({ focusGrew: false, gone: true, afkAt: 13 }, KEPT),
+      Object.assign({}, MIX, KEPT), Object.assign({ lostTopics: four, gainedTopics: ['dance', 'movies'] }, MIX)
+    ].map(function (over) { return person(Object.assign({}, j, over)); });
+  }
 
   test('reveal text: the verdict only talks about a filter bubble when feeds were really narrow, and defines it first', function () {
     var ex = { name: 'Maya', topic: 'sports' };
@@ -1553,24 +1597,17 @@
       pool.push(T().bubbleLoop({ trend: v.trend, loopExample: { name: 'Jordan', topic: 'comics' } }), T().bubbleLoop({ trend: v.trend, loopExample: null }));
     });
     pool.push(T().bubbleDefinition);
-    // every variety branch, with the longest name and topic phrases
-    var thin = mix(1, 1, ['comics'], 1), most = mix(7, 3, ['comics'], 5), many = mix(6, 4, ['music'], 2);
-    [half(0.9, 0.3, 'dropped', many, most), half(0, 0, 'low', most, mix(6, 1, ['movies'], 6)), half(0.2, 0.9, 'rose', most, many),
-     half(0.6, 0.6, 'steady', many, many), half(null, 0.6, 'unknown', thin, most), half(null, null, 'unknown', NONE, NONE)]
-      .forEach(function (v) { pool.push(T().varietyLine(person({ name: 'Jordan', variety: v }))); });
-    [half(null, null, 'unknown', many, NONE, true), half(null, null, 'unknown', thin, NONE, true), half(null, null, 'unknown', NONE, NONE, true)]
-      .forEach(function (v) { pool.push(T().varietyLine(person({ name: 'Jordan', gone: true, afkAt: 13, variety: v }))); });
-    [person(), person({ total: 0, topTopic: null }), person({ total: 1, topCount: 1 }), person({ total: 5, topCount: 5, gone: true, afkAt: 12 }),
-     person({ enjoyedEnd: 4, enjoyedStart: 4 }), person({ enjoyedEnd: 4, enjoyedStart: 4, gone: true, afkAt: 12 }),
-     person({ enjoyedStart: 3, enjoyedEnd: 4 }), person({ total: 0, enjoyedStart: 4, enjoyedEnd: 4 }), person({ enjoyedEnd: 0 })]
-      .forEach(function (p) { pool.push(T().feedLine(p), T().feedLegend(p), T().headline(p), T().statusLine(p)); });
+    // every story branch, with the longest name and the most topics each can name
+    storyCases().forEach(function (p) { pool.push(T().story(p)); });
+    pool.push(T().lostLabel + ' ' + T().noneLost, T().gainedLabel);
+    [person(), person({ total: 0, topTopic: null }), person({ total: 1, topCount: 1 }), person({ total: 5, topCount: 5, gone: true, afkAt: 12 })]
+      .forEach(function (p) { pool.push(T().feedLine(p), T().feedLegend(p), T().statusLine(p)); });
     [0, 1, 2, 3, 4, 5, 6].forEach(function (n) { pool.push(T().winTitle(n, 6), T().winTease(n), T().closingTitle(n, 6)); });
     // the "tried" line, as it reads joined to the feed line on the screen, for every case
     [person({ total: 1, topCount: 1, topicsShown: 1 }), person({ topicsShown: 3 }), person({ topicsShown: 6 }),
      person({ topicsShown: 6, gone: true, afkAt: 20 }), person({ name: 'Jordan', topicsShown: 4, gone: true, afkAt: 7 })]
       .forEach(function (p) { pool.push(T().feedLine(p) + ' ' + T().triedLine(p)); });
     pool.push(T().exploreDefinition);
-    pool.push(T().varietyHint);
     pool.push(T().boardHint, T().boardLoading);
     ['folder', 'memory', 'failed'].forEach(function (x) { pool.push(T().boardNote(x)); });
     [{ where: 'folder', folder: 'Kai_Moreno' }, { where: 'pending' }, { where: 'failed' }, { where: 'none' }].forEach(function (x) { pool.push(T().savedLine(x)); });
