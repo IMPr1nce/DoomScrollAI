@@ -91,7 +91,12 @@ What to run after a change:
   event, topic, liked, attention_before, attention_after, fatigue_mult, tastes_json`. After them come
   `round_no, round_time_sec, detail, post_no, clock_time`, then `taste_<topic>` for each topic in topic order
   (`tastes_json` as plain numbers), then `grade` ("8th", or what the player typed; the same on every row of a
-  session). New columns go at the end only.
+  session), then `date_time, session_sec, wait_sec`. New columns go at the end only.
+- **The three time columns.** `date_time` is `timestamp_ms` as the laptop's date and time to the millisecond
+  (`2026-10-17 13:31:04.873`, a space rather than ISO's `T`, which Excel doesn't read as a date). `session_sec` is
+  wall-clock seconds since `logger.setPlayer()` (the name screen's Continue), or since the session's first row when
+  there was no name screen. `wait_sec`, on `push` rows only, is how long that person sat free before the post, on
+  their own clock (pauses and pop-ups don't count); `logger.watch()` tracks it per person, good to about one frame.
 - **`topic` and `post_no`** are filled on `push`, on `watch_end` (the post that ended) and on an `afk` caused by a
   skip; an idle `afk` has neither. A push and its watch_end share `post_no`, which restarts with each new person
   (each round, each tutorial "Try again").

@@ -971,8 +971,7 @@
        'session_id,timestamp_ms,phase,vp_id,event,topic,liked,attention_before,attention_after,fatigue_mult,tastes_json');
   });
 
-  test('logger: the grade (from the first screen) is the last column, on every row; cleaned to stay short', function () {
-    eq(DS.logger.COLUMNS[DS.logger.COLUMNS.length - 1], 'grade');
+  test('logger: the grade (from the first screen) is on every row; cleaned to stay short', function () {
     var L = freshLogger();
     try {
       L.setPlayer('Kai', 'Moreno', '8th');
@@ -1017,7 +1016,7 @@
 
   test('logger: the readable columns come after the agreed ones: post_no, clock_time, one taste per topic', function () {
     eq(DS.logger.COLUMNS.slice(11).join(','), 'round_no,round_time_sec,detail,post_no,clock_time,' +
-       DS.TOPIC_IDS.map(function (id) { return 'taste_' + id; }).join(',') + ',grade');
+       DS.TOPIC_IDS.map(function (id) { return 'taste_' + id; }).join(',') + ',grade,date_time,session_sec,wait_sec');
     var L = freshLogger();
     try {
       L.setContext({ phase: 'main', round: 1 });
@@ -1033,6 +1032,59 @@
       var tastes = JSON.parse(rows[0].tastes_json);
       DS.TOPIC_IDS.forEach(function (id) { eq(rows[0]['taste_' + id], tastes[id], 'taste_' + id + ' matches tastes_json'); });
       eq(rows[3].taste_sports, '', 'no tastes on a pause row');
+    } finally { restoreLogger(); }
+  });
+
+  test('logger: date_time is the laptop\'s date and time to the millisecond, in a form spreadsheets read as a date', function () {
+    var L = freshLogger();
+    try {
+      var stamps = [1700000000005, 1700000000050, 1700000000873], k = 0;
+      L.now = function () { return stamps[k]; };
+      L.setContext({ phase: 'main', round: 1 });
+      for (; k < stamps.length; k++) L.logGame('pause', k);
+      L.flushPending();
+      var rows = openLog(), two = function (n) { return (n < 10 ? '0' : '') + n; };
+      var d = new Date(stamps[0]);
+      eq(rows[0].date_time, d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()) + ' ' + rows[0].clock_time + '.005');
+      eq(rows[1].date_time.slice(-4), '.050', 'milliseconds keep three digits');
+      eq(rows[2].date_time.slice(-4), '.873');
+      ok(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}$/.test(rows[2].date_time), 'a space, not ISO\'s T: ' + rows[2].date_time);
+    } finally { restoreLogger(); }
+  });
+
+  test('logger: session_sec counts from the name screen (setPlayer), or from the first row without one; reset() starts again', function () {
+    var L = freshLogger(), clock = 1700000000000;
+    try {
+      L.now = function () { return clock; };
+      L.setPlayer('Kai', 'Moreno', '8th');
+      clock += 12500; L.setContext({ phase: 'main', round: 1 }); L.logGame('pause', 1);
+      clock += 3000; L.logGame('resume', 1);
+      L.flushPending();
+      eq(openLog().map(function (r) { return r.session_sec; }).join(','), '12.5,15.5', 'wall clock since the name screen');
+      L.reset();
+      clock += 60000; L.logGame('pause', 2);
+      clock += 1250; L.logGame('resume', 2);
+      L.setContext({ phase: 'reveal' }); L.flushPending();
+      eq(L.stored().map(function (r) { return r.session_sec; }).join(','), '0,1.25', 'no name screen: from the first row, of the new session');
+    } finally { restoreLogger(); }
+  });
+
+  test('logger: wait_sec is how long the person sat free before each push, on their own clock; blank on other rows', function () {
+    var L = freshLogger();
+    try {
+      L.setContext({ phase: 'main', round: 1 });
+      var vp = makeVP(); L.watch(vp);
+      run(vp, 1.5);
+      DS.rng.use(LIKE); vp.push('sports');                 // free since the start: 1.5 s
+      run(vp, C.POST_DURATION_SEC + 0.5);                  // the watch ends, then 0.5 s free
+      DS.rng.use(DISLIKE); vp.push('food');                // a skip leaves them free at once...
+      run(vp, 0.7);
+      DS.rng.use(LIKE); vp.push('music');                  // ...so this one waited 0.7 s
+      L.flushPending();
+      var rows = openLog();
+      var pushes = rows.filter(function (r) { return r.event === 'push'; });
+      eq(pushes.map(function (r) { return r.wait_sec; }).join(','), '1.5,0.5,0.7');
+      ok(rows.filter(function (r) { return r.event !== 'push'; }).every(function (r) { return r.wait_sec === ''; }), 'only push rows have it');
     } finally { restoreLogger(); }
   });
 

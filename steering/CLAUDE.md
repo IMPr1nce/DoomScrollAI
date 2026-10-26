@@ -65,7 +65,7 @@ Paths in backticks are relative to the project root.
   `logger.flush()`. Each session saves one file per part: the tutorial, then each round (`logger.files()`).
 - **The player's name only names the folder and CSV files** (`logger.folderName()`, `logger.fileName(part)`). Never put it
   in a row or a column: the rows are what a future server receives. The **gamer tag** is only in the leaderboard
-  file, never in the rows; the **grade** is the last column.
+  file, never in the rows; the **grade** comes right after the `taste_<topic>` columns (the time columns follow it).
 - **Saving is async, the tests are not.** The logger's and leaderboard's file functions may return a value or a
   promise (`when()`); the unit tests replace them with plain functions (`fakeFolder()`), and `tests/e2e.js` runs the
   real `server.py` on a temporary data folder. A save that finishes after Log out must touch only its own session
@@ -122,4 +122,7 @@ Paths in backticks are relative to the project root.
   bubble and lost interest in Comics."), with the bubble's definition under it; the variety panel and the headline are
   gone (variety stays on the big picture). One column of three panels, lost/gained chips beside the radars, which shrink
   to about 136px. "Bubble" needs a main topic still enjoyed; lost topics use the radar's printed percents.
+- 2026-10-25: three time columns for research at the end of every row: `date_time` (`2026-10-17 13:31:04.873`),
+  `session_sec` (seconds since the name screen) and `wait_sec` (on a push, how long that person sat free first)
+  ([tech.md](tech.md#data-and-logging)). The grade is no longer the last column.
 - Not built, by design: a shared or Flask server (one `fetch` in `logger.flush`), sound, accounts, a class-wide leaderboard.

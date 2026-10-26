@@ -619,7 +619,7 @@ async function main() {
       allRows = allRows.concat(rows);
       f.ok = lines[0] === csv.columns.join(',') && rows.length > 0 && !/Zebedee|Quimby|Zeb the Great/.test(f.text) &&
              /\r\n$/.test(f.text) && f.text.split('\r\n').every(function (l) { return l.indexOf('\n') === -1; }) &&
-             rows.every(function (r) { return r[0] === csv.session && r[r.length - 1] === '8th'; }) &&
+             rows.every(function (r) { return r[0] === csv.session && r[r.length - 4] === '8th'; }) &&
              (f.name.indexOf('tutorial') !== -1 ? rows.every(function (r) { return r[2] === 'tutorial1'; })
                                                 : rows.every(function (r) { return r[2] === 'main'; }));
     });
@@ -630,8 +630,17 @@ async function main() {
     check('CSV: round_start rows say which version was played ("radar-interests/2")',
           /round_start/.test(round1) && round1.split('\r\n').filter(function (l) { return /,round_start,/.test(l); }).every(function (l) { return /,radar-interests\/2,/.test(l); }),
           round1.split('\r\n').filter(function (l) { return /,round_start,/.test(l); }).slice(0, 2).join(' | '));
-    check('CSV: a watch_end row says which topic ended, and the readable columns are filled in (post_no, clock_time, taste_*, grade)',
-          /,watch_end,[a-z]+,,[\d.]+,[\d.]+,,"\{.*\}",\d+,[\d.]+,complete,\d+,\d\d:\d\d:\d\d(,[\d.]+){6},8th\r\n/.test(round1), round1.split('\r\n').filter(function (l) { return /watch_end/.test(l); })[0]);
+    check('CSV: a watch_end row says which topic ended, and the readable columns are filled in (post_no, clock_time, taste_*, grade, date_time, session_sec; no wait_sec)',
+          /,watch_end,[a-z]+,,[\d.]+,[\d.]+,,"\{.*\}",\d+,[\d.]+,complete,\d+,\d\d:\d\d:\d\d(,[\d.]+){6},8th,\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3},[\d.]+,\r\n/.test(round1), round1.split('\r\n').filter(function (l) { return /watch_end/.test(l); })[0]);
+    check('CSV: every push row has a wait_sec (seconds the person sat free), and session_sec never goes backwards',
+          csv.files.every(function (f) {
+            var rows = f.text.trim().split('\r\n').slice(1).map(function (l) { return l.split(','); });
+            var last = -1;
+            return rows.every(function (r) {
+              var ss = Number(r[r.length - 2]), ok = ss >= last && (r[4] !== 'push' || /^[\d.]+$/.test(r[r.length - 1]));
+              last = ss; return ok;
+            });
+          }), round1.split('\r\n').filter(function (l) { return /,push,/.test(l); })[0]);
     var boardRows = csv.board.trim().split('\r\n');
     check('leaderboard file: one row per finished round (gamer tag, points, round, version, date), and no real name',
           boardRows[0] === 'gamer_tag,points,round_no,version,played_at' && boardRows.length - 1 === bots.length &&
@@ -662,7 +671,7 @@ async function main() {
     var second = fs.readdirSync(path.join(DATA, 'Zebedee_Quimby')).sort(byRound);
     var twoText = second.indexOf('Zebedee_Quimby_round1 (2).csv') !== -1 ? readData('Zebedee_Quimby/Zebedee_Quimby_round1 (2).csv') : '';
     check('a second session of the same student: "Zebedee_Quimby_round1 (2).csv" beside the first, which is untouched',
-          again === 'title' && second.length === firstSession.length + 1 && twoText.split('\r\n').length > 2 && /,7th\r\n/.test(twoText) &&
+          again === 'title' && second.length === firstSession.length + 1 && twoText.split('\r\n').length > 2 && /,7th,\d{4}-[^,]*,[\d.]+,[\d.]*\r\n/.test(twoText) &&
           readData('Zebedee_Quimby/Zebedee_Quimby_round1.csv') === round1Before, JSON.stringify([again, second]));
     check('leaderboard file: the second session\'s round is added under its own gamer tag; the earlier rows stay',
           readData('leaderboard/leaderboard.csv').trim().split('\r\n').length - 1 === bots.length + 2 && /\r\nZeb Again,\d+,1,/.test(readData('leaderboard/leaderboard.csv')),
@@ -693,7 +702,7 @@ async function main() {
       "return { screen: document.body.dataset.screen, status: document.getElementById('server-status').textContent }; })()");
     var afterRetry = fs.existsSync(path.join(DATA, 'Zebedee_Quimby', 'Zebedee_Quimby_round2 (2).csv')) ? readData('Zebedee_Quimby/Zebedee_Quimby_round2 (2).csv') : '';
     check('saving program back: "Try again" saves the round played while it was down (Zebedee_Quimby_round2 (2).csv), then the name screen',
-          retried.screen === 'name' && retried.status === RUNNING && afterRetry.split('\r\n').length > 2 && /,7th\r\n/.test(afterRetry) &&
+          retried.screen === 'name' && retried.status === RUNNING && afterRetry.split('\r\n').length > 2 && /,7th,\d{4}-[^,]*,[\d.]+,[\d.]*\r\n/.test(afterRetry) &&
           readData('Zebedee_Quimby/Zebedee_Quimby_round2.csv') === round2Before && b.downloads.length === 0, JSON.stringify([retried, dataFiles().filter(function (f) { return /Zebedee/.test(f); })]));
 
     // ---- 5d. Not running when a student signs in: Continue says to start it and stays put; once it runs, Continue works.

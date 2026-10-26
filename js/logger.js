@@ -45,17 +45,25 @@
   //                   a line chart of taste_sports across a round shows the filter bubble forming.
   //   grade           the player's grade from the first screen: "8th", or what they typed. The same on every row
   //                   of a session, so a study can compare grades without knowing who anyone is.
+  //   date_time       timestamp_ms as a date and time on the laptop, to the millisecond: 2026-10-17 13:31:04.873.
+  //                   clock_time has no date, and files from different days get merged for a study. Spreadsheets
+  //                   read this form as a real date, so it sorts and subtracts.
+  //   session_sec     seconds since the player finished the name screen (wall clock: pauses, pop-ups and the
+  //                   results all count). Lines up a student's whole visit across their tutorial and round files.
+  //                   Not from the page load: a laptop can sit on the name screen for minutes before anyone comes.
+  //   wait_sec        push rows only: seconds of play this person sat free (not watching) before this post, i.e.
+  //                   how long the player took to come back to them. On the person's own clock, so a pause or a
+  //                   pop-up doesn't count. A study's measure of hesitation, and of neglect while busy elsewhere.
   // New columns go at the END only, so code that reads the first ones by position keeps working.
   var COLUMNS = [
     'session_id', 'timestamp_ms', 'phase', 'vp_id', 'event', 'topic', 'liked',
     'attention_before', 'attention_after', 'fatigue_mult', 'tastes_json',
     'round_no', 'round_time_sec', 'detail',
     'post_no', 'clock_time'
-  ].concat(DS.TOPIC_IDS.map(function (id) { return 'taste_' + id; }), ['grade']);
+  ].concat(DS.TOPIC_IDS.map(function (id) { return 'taste_' + id; }), ['grade', 'date_time', 'session_sec', 'wait_sec']);
 
   // Sortable and unique enough: local date + time + 3 random bytes, e.g. 20261004-153012-a3f9c1.
   function makeSessionId() {
-    function two(n) { return (n < 10 ? '0' : '') + n; }
     var d = new Date();
     var stamp = d.getFullYear() + two(d.getMonth() + 1) + two(d.getDate()) + '-' +
                 two(d.getHours()) + two(d.getMinutes()) + two(d.getSeconds());
@@ -76,7 +84,8 @@
   // save that finishes after the next player has started marks the OLD session's files, never the new one's.
   //   saved   file part -> how many of its rows were in its last save
   //   names   file part -> the name it is saved under in the folder (see folderFileName)
-  function newSession() { return { id: makeSessionId(), saved: {}, names: {} }; }
+  //   start   when session_sec counts from (see setPlayer); null until then
+  function newSession() { return { id: makeSessionId(), saved: {}, names: {}, start: null }; }
   var session = newSession();
   // A getter, not a plain value: play mode freezes the logger, and "Log out" still has to start a new id.
   Object.defineProperty(logger, 'sessionId', { enumerable: true, get: function () { return session.id; } });
@@ -101,11 +110,20 @@
     return JSON.stringify(t);
   }
 
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+
   // 15:28:44, in the laptop's own time zone (the teacher reads it next to the class schedule).
   function clockTime(ms) {
-    function two(n) { return (n < 10 ? '0' : '') + n; }
     var d = new Date(ms);
     return two(d.getHours()) + ':' + two(d.getMinutes()) + ':' + two(d.getSeconds());
+  }
+
+  // 2026-10-17 13:31:04.873, the laptop's time. A space, not ISO's "T", because Excel doesn't read the "T" form
+  // as a date.
+  function dateTime(ms) {
+    var d = new Date(ms), milli = d.getMilliseconds();
+    return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()) + ' ' + clockTime(ms) + '.' +
+           (milli < 100 ? '0' : '') + two(milli);
   }
 
   // One flat object per event. `f` uses the same field names a VP event has (see vp.js _emit).
@@ -131,12 +149,17 @@
     };
     DS.TOPIC_IDS.forEach(function (id) { rec['taste_' + id] = f.tastes ? round(f.tastes[id], 3) : ''; });
     rec.grade = player.grade;
+    rec.date_time = dateTime(now);
+    // Without a name screen (the tests, the dev helpers) the session counts from its first row instead.
+    if (session.start === null) session.start = now;
+    rec.session_sec = round((now - session.start) / 1000, 2);
+    rec.wait_sec = round(f.waitSec, 2);
     return rec;
   }
 
   // A VP tells us about pushes, the end of a watch, and leaving. (Its speech-bubble
   // 'message' events are just decoration, so they aren't data.)
-  function fromVPEvent(e) {
+  function fromVPEvent(e, waitSec) {
     var detail = '';
     if (e.event === 'push' || e.event === 'watch_end') detail = e.category || '';
     else if (e.event === 'afk') detail = e.reason || '';
@@ -144,15 +167,28 @@
     return makeRecord({
       event: e.event, vpId: e.vpId, t: e.t, topic: e.topic, postNo: e.postNo, liked: e.liked,
       attentionBefore: e.attentionBefore, attentionAfter: e.attentionAfter,
-      fatigueMult: e.fatigueMult, tastes: e.tastes, detail: detail
+      fatigueMult: e.fatigueMult, tastes: e.tastes, detail: detail, waitSec: waitSec
     });
   }
 
   // ------------------------------------------------------------------ Public: logging
   // Subscribe to a VP: from now on its pushes / watch ends / AFK are logged.
+  // freeSince = when this person last became free for a post, on their own clock (for wait_sec): their start,
+  // the end of a watch, or a skip (a skip leaves them free at once). The buttons lock while they watch
+  // (LIKED_LOCKS_BUTTONS), so every push comes while they are free. A watch_end's time can run up to one frame
+  // late (vp.tick moves the clock before ending the watch), so wait_sec can read up to a frame short: about
+  // 0.02 s normally, never more than MAX_FRAME_DT_SEC.
   logger.watch = function (vp) {
+    var freeSince = vp.clock;
     vp.onEvent(function (e) {
-      var rec = fromVPEvent(e);
+      var waitSec = null;
+      if (e.event === 'push') {
+        if (freeSince !== null) waitSec = Math.max(0, e.t - freeSince);
+        freeSince = e.liked ? null : e.t;
+      } else if (e.event === 'watch_end') {
+        freeSince = e.t;
+      }
+      var rec = fromVPEvent(e, waitSec);
       if (rec) pending.push(rec);
     });
   };
@@ -259,10 +295,12 @@
 
   // game.js calls this once the first screen is filled in. Both names are needed, or the files
   // keep their anonymous names.
+  // It also starts session_sec's clock: this is when the player's visit really begins.
   logger.setPlayer = function (first, last, grade) {
     player.first = logger.cleanName(first);
     player.last = logger.cleanName(last);
     player.grade = logger.cleanGrade(grade);
+    if (session.start === null) session.start = logger.now();
   };
 
   // The player's folder inside the data folder: Kai_Moreno, or doomscroll_<session_id> when there is no name
