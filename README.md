@@ -225,10 +225,13 @@ rules before collecting files with students' names.
 | `clock_time` | `timestamp_ms` as a time of day on the laptop, like `15:28:44` |
 | `taste_sports` … `taste_food` | `tastes_json` split into one number per topic, so a spreadsheet can sort or chart it. A line chart of one taste across a round shows the filter bubble forming. |
 | `grade` | the student's grade from the first screen: `8th`, or what they typed. The same on every row of a session. |
+| `date_time` | `timestamp_ms` as a date and time on the laptop, to the millisecond, like `2026-10-17 13:31:04.873`. Excel and Google Sheets read it as a real date, so it sorts and subtracts. |
+| `session_sec` | seconds since the student finished the name screen. Counts everything (pauses, pop-ups, the results), so it lines up their tutorial and round files into one visit. |
+| `wait_sec` | on `push` rows only: seconds this person sat free (not watching) before the post, i.e. how long the student took to come back to them. Pauses and pop-ups don't count. |
 
 The first 11 columns are the agreed set. The rest make the data usable: rounds, a pause-proof clock, the
-extra word, a post number to pair rows, a readable time, the tastes as plain numbers, and the grade. New
-columns only ever go at the end.
+extra word, a post number to pair rows, a readable time, the tastes as plain numbers, the grade, a full date
+and time, the time into the visit, and how long each person waited for a post. New columns only ever go at the end.
 
 The leaderboard file has its own columns: `gamer_tag`, `points` (everyone's attention when the round ended,
 added up; someone who left counts 0, so 0–200 with 2 people), `round_no` (the student's 1st, 2nd… round),
